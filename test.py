@@ -4,7 +4,7 @@
 # for dist in pip.get_installed_distributions():
 #     call("pip install --upgrade " + dist.project_name, shell=True)
 
-from ..src.model.backbone.SwinTransformer import SwinTransformer
+from src.model.backbone.SwinTransformer import SwinTransformer
 import torch
 
 model = SwinTransformer()
