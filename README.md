@@ -42,7 +42,7 @@
 
 `ash
 # 克隆项目
-git clone https://github.com/yourusername/DVisionix.git
+git clone https://github.com/LAZYzhaoyang/DVisionix.git
 cd DVisionix
 
 # 创建 conda 环境
