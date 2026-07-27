@@ -1,0 +1,36 @@
+# Config 驱动端到端 demo 的配置（继承分类默认配置）
+_base_: "../../dvisionix/config/defaults/classification.yaml"
+
+experiment_name: "demo_synthetic_cls"
+
+model:
+  name: "simple_cnn"
+  num_classes: 4
+  in_channels: 3
+
+data:
+  dataset: "synthetic"
+  image_size: 32
+  num_samples: 128
+  val_samples: 32
+
+training:
+  num_epochs: 2
+  batch_size: 16
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  device: "auto"
+  num_workers: 0
+  early_stopping:
+    enabled: true
+    monitor: "val_loss"
+    mode: "min"
+    patience: 3
+
+checkpoint:
+  save_dir: "./checkpoints/demo_synthetic"
+  monitor: "val_loss"
+  mode: "min"
+
+logging:
+  log_dir: "./logs/demo_synthetic"

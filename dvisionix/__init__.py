@@ -38,6 +38,8 @@ from . import models
 from . import training
 from . import metrics
 from . import utils
+from . import config
+from . import export
 
 __all__ = [
     "data",
@@ -45,5 +47,7 @@ __all__ = [
     "training",
     "metrics",
     "utils",
+    "config",
+    "export",
     "__version__",
 ]

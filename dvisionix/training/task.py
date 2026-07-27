@@ -171,77 +171,130 @@ class ClassificationTask(BaseTask):
 
 class DetectionTask(BaseTask):
     """
-    目标检测任务（占位实现，待完善）
-    
+    目标检测任务（单阶段网格检测器，真正可训练）
+
+    配合 dvisionix.models.GridDetectionModel 使用。模型输出原始张量
+    (B, 5 + num_classes, GH, GW)，本任务负责：
+    - 中心点目标分配：GT 框中心所在网格单元为正样本；
+    - objectness 损失：BCEWithLogits（全网格）；
+    - 框回归损失：仅正样本，预测归一化 [cx, cy, w, h] 的 L1；
+    - 分类损失：仅正样本，CrossEntropy。
+
     输入数据格式要求：
     - batch['image']: 图像张量 (B, C, H, W)
-    - batch['boxes']: 边界框列表 [(N1, 4), (N2, 4), ...]
-    - batch['labels']: 类别标签列表 [(N1,), (N2,), ...]
+    - batch['boxes']: List[Tensor(Ni, 4)]，坐标为像素 [x1, y1, x2, y2]
+    - batch['labels']: List[Tensor(Ni,)]，类别索引（0..num_classes-1）
     """
-    
+
     def __init__(
         self,
         num_classes: int,
-        learning_rate: float = 1e-4,
+        learning_rate: float = 1e-3,
         weight_decay: float = 1e-4,
+        obj_weight: float = 1.0,
+        box_weight: float = 5.0,
+        cls_weight: float = 1.0,
     ):
         self.num_classes = num_classes
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-    
-    def training_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
-        # TODO: 实现检测训练逻辑
-        # 注意：检测模型通常有自己的 loss 计算，输出就是 loss 字典
-        images = batch["image"].to(device)
-        targets = [
-            {
-                "boxes": batch["boxes"][i].to(device),
-                "labels": batch["labels"][i].to(device),
-            }
-            for i in range(len(images))
-        ]
-        
-        # 假设模型返回 loss 字典
-        loss_dict = model(images, targets)
-        
-        if isinstance(loss_dict, dict):
-            total_loss = sum(loss_dict.values())
-            result = {"loss": total_loss}
-            result.update({k: v.detach() for k, v in loss_dict.items()})
-            return result
+        self.obj_weight = obj_weight
+        self.box_weight = box_weight
+        self.cls_weight = cls_weight
+
+    def _compute_losses(self, preds, boxes_list, labels_list, image_hw, device):
+        """根据网格预测与 GT 计算损失和统计量。"""
+        B, C, GH, GW = preds.shape
+        img_h, img_w = image_hw
+
+        obj_logits = preds[:, 0, :, :]                    # (B, GH, GW)
+        box_pred = preds[:, 1:5, :, :]                    # (B, 4, GH, GW)
+        cls_logits = preds[:, 5:, :, :]                   # (B, num_classes, GH, GW)
+
+        obj_target = torch.zeros((B, GH, GW), device=device)
+        box_target = torch.zeros((B, 4, GH, GW), device=device)
+        cls_target = torch.full((B, GH, GW), -1, dtype=torch.long, device=device)
+
+        num_pos = 0
+        for b in range(B):
+            boxes = boxes_list[b].to(device).float()
+            labels = labels_list[b].to(device).long()
+            for k in range(boxes.shape[0]):
+                x1, y1, x2, y2 = boxes[k]
+                cx = (x1 + x2) / 2.0
+                cy = (y1 + y2) / 2.0
+                bw = (x2 - x1).clamp(min=1e-6)
+                bh = (y2 - y1).clamp(min=1e-6)
+                # 中心所在网格单元
+                gx = int((cx / img_w * GW).clamp(0, GW - 1).item())
+                gy = int((cy / img_h * GH).clamp(0, GH - 1).item())
+                obj_target[b, gy, gx] = 1.0
+                # 归一化框目标 [cx, cy, w, h] in [0,1]
+                box_target[b, 0, gy, gx] = cx / img_w
+                box_target[b, 1, gy, gx] = cy / img_h
+                box_target[b, 2, gy, gx] = bw / img_w
+                box_target[b, 3, gy, gx] = bh / img_h
+                cls_target[b, gy, gx] = labels[k]
+                num_pos += 1
+
+        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_logits, obj_target)
+
+        pos_mask = obj_target > 0.5
+        if pos_mask.sum() > 0:
+            # 框回归：对正样本单元的 sigmoid(box_pred) 与目标做 L1
+            box_pred_s = torch.sigmoid(box_pred)
+            pm = pos_mask.unsqueeze(1).expand_as(box_pred_s)
+            box_loss = nn.functional.l1_loss(box_pred_s[pm], box_target[pm])
+
+            # 分类：把 (B, C, GH, GW) 变换到 (N_pos, C)
+            cls_perm = cls_logits.permute(0, 2, 3, 1)      # (B, GH, GW, C)
+            cls_sel = cls_perm[pos_mask]                    # (N_pos, C)
+            tgt_sel = cls_target[pos_mask]                  # (N_pos,)
+            cls_loss = nn.functional.cross_entropy(cls_sel, tgt_sel)
+
+            with torch.no_grad():
+                cls_acc = (cls_sel.argmax(dim=1) == tgt_sel).float().mean()
         else:
-            return {"loss": loss_dict}
-    
-    def validation_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
-        # TODO: 实现检测验证逻辑（需要计算 mAP）
+            box_loss = torch.tensor(0.0, device=device)
+            cls_loss = torch.tensor(0.0, device=device)
+            cls_acc = torch.tensor(0.0, device=device)
+
+        total = (
+            self.obj_weight * obj_loss
+            + self.box_weight * box_loss
+            + self.cls_weight * cls_loss
+        )
+        return {
+            "loss": total,
+            "obj_loss": obj_loss.detach(),
+            "box_loss": box_loss.detach(),
+            "cls_loss": cls_loss.detach(),
+            "cls_acc": cls_acc.detach(),
+        }
+
+    def training_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
         images = batch["image"].to(device)
-        
+        preds = model(images)
+        image_hw = (images.shape[2], images.shape[3])
+        return self._compute_losses(preds, batch["boxes"], batch["labels"], image_hw, device)
+
+    def validation_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+        images = batch["image"].to(device)
         with torch.no_grad():
-            # 验证模式下模型通常返回预测框
-            outputs = model(images)
-        
-        # 暂时只返回占位值，需要结合 metrics 模块
-        return {"loss": torch.tensor(0.0, device=device)}
-    
+            preds = model(images)
+            image_hw = (images.shape[2], images.shape[3])
+            result = self._compute_losses(preds, batch["boxes"], batch["labels"], image_hw, device)
+        return result
+
     def configure_optimizers(self, model: nn.Module) -> Dict[str, Any]:
-        # 检测任务通常使用 SGD with momentum
-        optimizer = torch.optim.SGD(
+        optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=self.learning_rate,
-            momentum=0.9,
             weight_decay=self.weight_decay,
         )
-        
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(
-            optimizer,
-            milestones=[8, 11],
-            gamma=0.1,
-        )
-        
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": scheduler,
-        }
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
 
 
 class SegmentationTask(BaseTask):

@@ -1,0 +1,36 @@
+# 分割端到端 demo 配置（继承分割默认配置）
+_base_: "../../dvisionix/config/defaults/segmentation.yaml"
+
+experiment_name: "demo_synthetic_seg"
+
+model:
+  name: "simple_segmentation"
+  num_classes: 3
+  in_channels: 3
+
+data:
+  dataset: "synthetic"
+  image_size: 64
+  num_samples: 64
+  val_samples: 16
+
+training:
+  num_epochs: 2
+  batch_size: 8
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  device: "auto"
+  num_workers: 0
+  early_stopping:
+    enabled: true
+    monitor: "val_loss"
+    mode: "min"
+    patience: 3
+
+checkpoint:
+  save_dir: "./checkpoints/demo_synthetic_seg"
+  monitor: "val_loss"
+  mode: "min"
+
+logging:
+  log_dir: "./logs/demo_synthetic_seg"

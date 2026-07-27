@@ -1,0 +1,18 @@
+# 分割任务默认配置（继承 base.yaml）
+_base_: "base.yaml"
+
+task_type: "segmentation"
+
+model:
+  name: "simple_segmentation"
+  num_classes: 19
+  backbone: "resnet50"
+  pretrained: true
+
+loss:
+  name: "cross_entropy"
+
+data:
+  root: "./data"
+  dataset: "cityscapes"
+  image_size: 512

@@ -68,3 +68,7 @@ htmlcov/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# DVisionix generated artifacts
+.cache/
+exports/

@@ -1,0 +1,19 @@
+# 分类任务默认配置（继承 base.yaml）
+_base_: "base.yaml"
+
+task_type: "classification"
+
+model:
+  name: "simple_cnn"
+  num_classes: 10
+  pretrained: false
+  in_channels: 3
+
+loss:
+  name: "cross_entropy"
+  label_smoothing: 0.0
+
+data:
+  root: "./data"
+  dataset: "cifar10"
+  image_size: 32

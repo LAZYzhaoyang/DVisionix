@@ -25,6 +25,7 @@ from .callbacks import (
     LearningRateScheduler,
 )
 from . import losses
+from .evaluation import evaluate_detection
 
 __all__ = [
     "Trainer",
@@ -40,4 +41,5 @@ __all__ = [
     "EarlyStopping",
     "LearningRateScheduler",
     "losses",
+    "evaluate_detection",
 ]

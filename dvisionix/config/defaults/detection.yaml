@@ -1,0 +1,22 @@
+# 检测任务默认配置（继承 base.yaml）
+_base_: "base.yaml"
+
+task_type: "detection"
+
+model:
+  name: "simple_detection"
+  num_classes: 80
+  backbone: "resnet50"
+  pretrained: true
+
+loss:
+  name: "detection_loss"
+
+data:
+  root: "./data"
+  dataset: "coco"
+  image_size: 640
+
+training:
+  batch_size: 16
+  learning_rate: 0.01
