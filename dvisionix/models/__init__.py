@@ -9,10 +9,20 @@ from .base import (
     BaseModel,
     SimpleCNN,
     SimpleSegmentationModel,
-    SimpleDetectionModel,
     TASK_TYPES,
 )
-from .backbones import TimmBackbone, TimmClassifier, list_timm_models
+from .backbones import TimmBackbone, TimmClassifier, list_timm_models, SequentialBackbone
+from .layers import (
+    build_layer,
+    build_norm_layer,
+    build_activation_layer,
+    ConvNormAct,
+    MLP,
+    SEBlock,
+    DropPath,
+    create_timm_layer,
+    list_timm_layers,
+)
 from .detection import GridDetectionModel
 from .postprocess import nms, batched_nms, box_iou
 from .necks import FPN
@@ -23,11 +33,20 @@ __all__ = [
     "BaseModel",
     "SimpleCNN",
     "SimpleSegmentationModel",
-    "SimpleDetectionModel",
     "TASK_TYPES",
     "TimmBackbone",
     "TimmClassifier",
+    "SequentialBackbone",
     "list_timm_models",
+    "build_layer",
+    "build_norm_layer",
+    "build_activation_layer",
+    "ConvNormAct",
+    "MLP",
+    "SEBlock",
+    "DropPath",
+    "create_timm_layer",
+    "list_timm_layers",
     "GridDetectionModel",
     "nms",
     "batched_nms",
@@ -43,12 +62,11 @@ __all__ = [
 # 注册表集成（配置驱动构建）
 # =============================================================================
 from typing import Any, Dict
-from ..registry import MODELS, NECKS, HEADS
+from ..registry import MODELS, NECKS, HEADS, LAYERS
 
 _MODEL_ALIASES = {
     SimpleCNN: "simple_cnn",
     SimpleSegmentationModel: "simple_segmentation",
-    SimpleDetectionModel: "simple_detection",
     GridDetectionModel: "grid_detection",
     TimmClassifier: "timm_classifier",
 }
@@ -63,7 +81,7 @@ if GeneralizedModel.__name__ not in MODELS:
     MODELS.register(GeneralizedModel)
 if "generalized" not in MODELS:
     MODELS.register(GeneralizedModel, name="generalized")
-for _cls in (SimpleCNN, SimpleSegmentationModel, SimpleDetectionModel, GridDetectionModel, TimmClassifier):
+for _cls in (SimpleCNN, SimpleSegmentationModel, GridDetectionModel, TimmClassifier):
     if _cls.__name__ not in MODELS:
         MODELS.register(_cls)
 for _cls, _alias in _MODEL_ALIASES.items():
@@ -92,4 +110,4 @@ def build_model(cfg: Dict[str, Any]):
     return MODELS.build(dict(cfg))
 
 
-__all__ = __all__ + ["MODELS", "NECKS", "HEADS", "build_model", "build_neck", "build_head"]
+__all__ = __all__ + ["MODELS", "NECKS", "HEADS", "LAYERS", "build_model", "build_neck", "build_head"]

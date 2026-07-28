@@ -4,10 +4,10 @@ _base_: "base.yaml"
 task_type: "detection"
 
 model:
-  name: "simple_detection"
-  num_classes: 80
-  backbone: "resnet50"
-  pretrained: true
+  name: "grid_detection"
+  num_classes: 3
+  in_channels: 3
+  width: 64
 
 loss:
   name: "detection_loss"

@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 # 🔬 DVisionix
 
@@ -44,6 +44,7 @@ dvisionix/
 ├── config.py            # YAML 配置驱动，支持 --cfg-options 覆盖
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
+│   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath）
 │   ├── backbones/       # TimmBackbone 等
 │   ├── necks/           # FPN
 │   ├── heads/           # ClsHead / SegHead / DetHead
@@ -327,7 +328,7 @@ MIT License
 
 - **归一化行为**：`BaseDataset` 不再默认在内部执行 mean/std 归一化。若继续使用旧模式（`transforms=None`），会打 `DeprecationWarning`。推荐使用 `ClassificationTransforms/DetectionTransforms/SegmentationTransforms`，它们默认自带 ImageNet 归一化。
 - **Trainer 调度器**：`Trainer.fit` 内部调度器 step 与 `LearningRateScheduler` 回调互斥（自动避免双重 step）；显式二次 step 需要自行去除。
-- **模型命名**：新增 `models/necks`、`models/heads`、`models/detectors` 命名空间。`SimpleDetectionModel` 已标记为废弃，请用 `GeneralizedModel(backbone=..., neck=..., head=DetHead(...))`。
+- **模型命名**：新增 `models/necks`、`models/heads`、`models/detectors` 命名空间。`SimpleDetectionModel` 已移除，请用 `GeneralizedModel(backbone=..., neck=..., head=DetHead(...))` 或 `GridDetectionModel`。
 - **API 补齐**：`Trainer` 新增 `amp` / `accumulate_grad_batches` / `seed` / `resume_from` 参数；`ModelCheckpoint` / `EarlyStopping` 现在会随 checkpoint 保存 `state_dict`。
 
 **新能力：**

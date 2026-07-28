@@ -7,5 +7,6 @@
 """
 
 from .timm_backbone import TimmBackbone, TimmClassifier, list_timm_models
+from .sequential import SequentialBackbone
 
-__all__ = ["TimmBackbone", "TimmClassifier", "list_timm_models"]
+__all__ = ["TimmBackbone", "TimmClassifier", "list_timm_models", "SequentialBackbone"]

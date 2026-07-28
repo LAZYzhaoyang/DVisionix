@@ -118,6 +118,7 @@ def build_from_cfg(cfg: Dict[str, Any], registry: Registry, **default_kwargs: An
 # 全局注册表（各组件模块在导入时向其注册）
 MODELS = Registry("models")
 BACKBONES = Registry("backbones")
+LAYERS = Registry("layers")
 NECKS = Registry("necks")
 HEADS = Registry("heads")
 DATASETS = Registry("datasets")
@@ -131,6 +132,7 @@ __all__ = [
     "build_from_cfg",
     "MODELS",
     "BACKBONES",
+    "LAYERS",
     "NECKS",
     "HEADS",
     "DATASETS",

@@ -1,7 +1,7 @@
 # NOTE: v0.2.0 起本仓库已迁移到 pytest。请使用:
 #   pytest tests/
 # 该脚本仅作为历史保留，最新覆盖等价于 tests/test_data/ 与 tests/test_models/。
-﻿# D:\\ZhaoyangProject\\DVisionix\\verify_all_modules.py
+# D:\\ZhaoyangProject\\DVisionix\\verify_all_modules.py
 
 """
 验证所有模块是否能正常导入
@@ -63,7 +63,7 @@ all_passed &= test_import("DetectionMetrics", "dvisionix.metrics.detection")
 print("\n模型:")
 all_passed &= test_import("SimpleCNN", "dvisionix.models.base")
 all_passed &= test_import("SimpleSegmentationModel", "dvisionix.models.base")
-all_passed &= test_import("SimpleDetectionModel", "dvisionix.models.base")
+all_passed &= test_import("SequentialBackbone", "dvisionix.models.backbones")
 
 print("\n" + "=" * 60)
 if all_passed:
