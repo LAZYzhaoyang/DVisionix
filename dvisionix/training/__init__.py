@@ -43,3 +43,27 @@ __all__ = [
     "losses",
     "evaluate_detection",
 ]
+
+
+# =============================================================================
+# 注册表集成（配置驱动构建）
+# =============================================================================
+from typing import Any, Dict
+from ..registry import TASKS
+
+for _cls in (ClassificationTask, DetectionTask, SegmentationTask):
+    if _cls.__name__ not in TASKS:
+        TASKS.register(_cls)
+
+
+def build_task(cfg: Dict[str, Any]):
+    """从配置构建任务实例。
+
+    例如::
+
+        build_task({"type": "ClassificationTask", "num_classes": 10, "learning_rate": 1e-3})
+    """
+    return TASKS.build(dict(cfg))
+
+
+__all__ = __all__ + ["TASKS", "build_task"]

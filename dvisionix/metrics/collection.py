@@ -60,8 +60,13 @@ class MetricCollection:
         elif self.task_type == "segmentation":
             self.metrics.update(outputs, batch["mask"])
         elif self.task_type == "detection":
-            # 检测任务需要特殊处理
-            pass
+            self.metrics.update(
+                pred_boxes=outputs.get("pred_boxes", []),
+                pred_scores=outputs.get("pred_scores", []),
+                pred_labels=outputs.get("pred_labels", []),
+                target_boxes=batch.get("boxes", []),
+                target_labels=batch.get("labels", []),
+            )
     
     def compute(self) -> Dict[str, float]:
         """计算所有指标"""

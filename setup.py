@@ -1,22 +1,30 @@
 # D:\ZhaoyangProject\DVisionix\setup.py
 
-"""
-DVisionix 安装脚本
-"""
+"""DVisionix 安装脚本。"""
+
+import os
 
 from setuptools import setup, find_packages
 
+
+def _read_long_description() -> str:
+    if os.path.exists("README.md"):
+        with open("README.md", encoding="utf-8") as f:
+            return f.read()
+    return ""
+
+
 setup(
     name="dvisionix",
-    version="0.1.0",
+    version="0.2.0",
     author="DVisionix Team",
     description="A PyTorch-based deep learning training framework for computer vision tasks",
-    long_description=open("README.md", encoding="utf-8").read() if os.path.exists("README.md") else "",
+    long_description=_read_long_description(),
     long_description_content_type="text/markdown",
     packages=find_packages(),
     install_requires=[
-        "torch>=2.12.0",
-        "torchvision>=0.27.0",
+        "torch>=2.0,<3",
+        "torchvision>=0.15",
         "numpy>=1.21.0",
         "opencv-python>=4.5.0",
         "pyyaml>=6.0",
@@ -28,7 +36,7 @@ setup(
             "pytest>=7.0.0",
             "pytest-cov>=4.0.0",
             "black>=23.0.0",
-            "flake8>=6.0.0",
+            "ruff>=0.1.0",
             "mypy>=1.0.0",
         ],
         "full": [
@@ -36,6 +44,8 @@ setup(
             "albumentations>=1.3.0",
             "onnx>=1.13.0",
             "onnxruntime>=1.14.0",
+            "pycocotools>=2.0.6",
+            "torchmetrics>=1.0.0",
         ],
     },
     python_requires=">=3.8",

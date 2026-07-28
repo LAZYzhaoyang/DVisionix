@@ -1,3 +1,6 @@
+# NOTE: v0.2.0 起本仓库已迁移到 pytest。请使用:
+#   pytest tests/
+# 该脚本仅作为历史保留，最新覆盖等价于 tests/test_data/ 与 tests/test_models/。
 # D:\ZhaoyangProject\DVisionix\verify_data_module.py
 
 """

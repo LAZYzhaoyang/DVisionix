@@ -176,6 +176,75 @@ class Config:
             current = current[part]
         return True
 
+
+
+    # ---------------- CLI 覆盖 ----------------
+
+    def update_from_cli(self, options: List[str]) -> "Config":
+        """用命令行参数覆盖配置。
+
+        支持 ``a.b.c=value`` 形式，value 会尝试解析为 int/float/bool/None，否则保留字符串。
+        例如 ``["training.learning_rate=0.01", "data.image_size=128"]``。
+
+        Args:
+            options: ``key=value`` 字符串列表。
+
+        Returns:
+            self（便于链式调用）。
+        """
+        for item in options or []:
+            if "=" not in item:
+                raise ValueError(f"Invalid CLI override (missing '='): {item!r}")
+            key, value = item.split("=", 1)
+            key = key.strip()
+            value = _parse_cli_value(value.strip())
+            self._set_nested(key, value)
+        return self
+
+    def _set_nested(self, dotted_key: str, value: Any) -> None:
+        """按点号路径写入嵌套字典。"""
+        parts = dotted_key.split(".")
+        node = self._config
+        for part in parts[:-1]:
+            if part not in node or not isinstance(node[part], dict):
+                node[part] = {}
+            node = node[part]
+        node[parts[-1]] = value
+
     def __repr__(self) -> str:
         import json
         return f"Config({json.dumps(self._config, indent=2, ensure_ascii=False)})"
+
+
+
+def _parse_cli_value(value: str) -> Any:
+    """将 CLI 字符串值解析为 Python 类型。"""
+    low = value.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    if low in ("null", "none"):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
+def parse_cli_options(options: List[str]) -> Dict[str, Any]:
+    """将 ``a.b=v`` 列表解析为嵌套字典（供外部合并使用）。"""
+    result: Dict[str, Any] = {}
+    for item in options or []:
+        if "=" not in item:
+            raise ValueError(f"Invalid CLI override (missing '='): {item!r}")
+        key, value = item.split("=", 1)
+        parts = key.strip().split(".")
+        node = result
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = _parse_cli_value(value.strip())
+    return result

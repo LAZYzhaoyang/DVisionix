@@ -17,3 +17,22 @@ __all__ = [
     "DetectionMetrics",
     "MetricCollection",
 ]
+
+
+# =============================================================================
+# 注册表集成（配置驱动构建）
+# =============================================================================
+from typing import Any, Dict
+from ..registry import METRICS
+
+for _cls in (ClassificationMetrics, SegmentationMetrics, DetectionMetrics, MetricCollection):
+    if _cls.__name__ not in METRICS:
+        METRICS.register(_cls)
+
+
+def build_metric(cfg):
+    """从配置构建指标计算器。"""
+    return METRICS.build(dict(cfg))
+
+
+__all__ = __all__ + ["METRICS", "build_metric"]

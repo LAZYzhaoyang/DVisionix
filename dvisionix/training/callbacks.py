@@ -81,6 +81,17 @@ class Callback:
         """
         pass
 
+    # ------------------------------------------------------------------
+    # 状态持久化：默认无状态；有内部状态的子类应重写这两个方法
+    # ------------------------------------------------------------------
+    def state_dict(self) -> Dict[str, Any]:
+        """返回需要随 checkpoint 保存的内部状态（默认空）。"""
+        return {}
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """从 checkpoint 恢复内部状态（默认空实现）。"""
+        return None
+
 
 class CallbackList:
     """回调列表包装器，批量执行回调"""
@@ -111,6 +122,38 @@ class CallbackList:
     def on_batch_end(self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str) -> None:
         for callback in self.callbacks:
             callback.on_batch_end(trainer, batch_idx, logs, mode)
+
+    def state_dict(self) -> Dict[str, Any]:
+        """按 callback 类型收集状态；同类型多个时用列表存储。"""
+        result: Dict[str, Any] = {}
+        for cb in self.callbacks:
+            key = type(cb).__name__
+            state = cb.state_dict()
+            if not state:
+                continue
+            if key in result:
+                if not isinstance(result[key], list):
+                    result[key] = [result[key]]
+                result[key].append(state)
+            else:
+                result[key] = state
+        return result
+
+    def load_state_dict(self, states: Dict[str, Any]) -> None:
+        if not states:
+            return
+        buckets: Dict[str, list] = {}
+        for cb in self.callbacks:
+            buckets.setdefault(type(cb).__name__, []).append(cb)
+        for key, entries in states.items():
+            if key not in buckets:
+                continue
+            cbs = buckets[key]
+            if isinstance(entries, list):
+                for cb, entry in zip(cbs, entries):
+                    cb.load_state_dict(entry)
+            else:
+                cbs[0].load_state_dict(entries)
 
 
 # =============================================================================
@@ -217,6 +260,12 @@ class ModelCheckpoint(Callback):
         save_path = self.save_dir / filename
         torch.save(checkpoint, save_path)
 
+    def state_dict(self) -> Dict[str, Any]:
+        return {"best_value": self.best_value}
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        self.best_value = state.get("best_value", self.best_value)
+
 
 class TensorBoardLogger(Callback):
     """TensorBoard 日志记录"""
@@ -310,6 +359,18 @@ class EarlyStopping(Callback):
                 if self.restore_best_weights and self.best_weights is not None:
                     trainer.model.load_state_dict(self.best_weights)
                     print("Restored best model weights")
+
+    def state_dict(self) -> Dict[str, Any]:
+        return {
+            "best_value": self.best_value,
+            "wait": self.wait,
+            "stopped_epoch": self.stopped_epoch,
+        }
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        self.best_value = state.get("best_value", self.best_value)
+        self.wait = state.get("wait", self.wait)
+        self.stopped_epoch = state.get("stopped_epoch", self.stopped_epoch)
 
 
 class LearningRateScheduler(Callback):

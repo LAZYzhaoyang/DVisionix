@@ -16,9 +16,32 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from ..utils import get_device
+from ..utils import get_device, set_seed, get_logger
+
+_logger = get_logger('dvisionix.trainer')
 from .task import BaseTask
 from .callbacks import Callback, CallbackList, ProgressBar, ModelCheckpoint
+
+
+def _make_scaler(amp: bool, device: torch.device):
+    """创建 AMP GradScaler（仅 CUDA 启用）。"""
+    if not amp or device.type != "cuda":
+        return None
+    try:
+        return torch.amp.GradScaler("cuda")
+    except Exception:
+        try:
+            return torch.cuda.amp.GradScaler()
+        except Exception:
+            return None
+
+
+def _infer_batch_size(step_result, batch):
+    """推断批次大小，用于加权指标聚合。"""
+    try:
+        return int(batch["image"].shape[0])
+    except Exception:
+        return 1
 
 
 class Trainer:
@@ -58,6 +81,10 @@ class Trainer:
         max_epochs: int = 10,
         gradient_clip_val: Optional[float] = None,
         log_interval: int = 50,
+        amp: bool = False,
+        accumulate_grad_batches: int = 1,
+        seed: Optional[int] = None,
+        resume_from: Optional[str] = None,
     ):
         """
         初始化通用训练引擎
@@ -78,10 +105,16 @@ class Trainer:
         self.max_epochs = max_epochs
         self.gradient_clip_val = gradient_clip_val
         self.log_interval = log_interval
+        self.amp = amp
+        self.accumulate_grad_batches = max(1, int(accumulate_grad_batches))
+        self.seed = seed
+        self.resume_from = resume_from
         
         # 设备设置
         self.device = get_device(device)
-        print(f"Using device: {self.device}")
+        # 混合精度（仅在 CUDA 上启用）
+        self.scaler = _make_scaler(self.amp, self.device)
+        _logger.info(f"Using device: {self.device}, amp: {bool(self.scaler)}")
         
         # 回调系统
         default_callbacks = [ProgressBar(log_interval=log_interval)]
@@ -113,6 +146,8 @@ class Trainer:
         Returns:
             包含训练历史的字典
         """
+        if self.seed is not None:
+            set_seed(self.seed)
         self.model = model.to(self.device)
         
         # 配置优化器和学习率调度器
@@ -128,13 +163,17 @@ class Trainer:
             self.optimizer = opt_config
             self.scheduler = None
         
+        # 自动 resume（在优化器/调度器就绪后再加载状态）
+        if self.resume_from is not None:
+            self.load_checkpoint(self.resume_from, self.model)
+        
         # 回调: 训练开始
         self.callbacks.on_train_begin(self)
         
-        print(f"\nStart training for {self.max_epochs} epochs")
-        print(f"Train batches: {len(self.train_loader)}")
+        _logger.info(f"Start training for {self.max_epochs} epochs")
+        _logger.info(f"Train batches: {len(self.train_loader)}")
         if self.val_loader:
-            print(f"Val batches: {len(self.val_loader)}")
+            _logger.info(f"Val batches: {len(self.val_loader)}")
         
         # 主训练循环
         for epoch in range(self.current_epoch, self.max_epochs):
@@ -158,8 +197,8 @@ class Trainer:
             epoch_logs = {**{f"train_{k}": v for k, v in train_logs.items()},
                          **{f"val_{k}": v for k, v in val_logs.items()}}
             
-            # 学习率调度（epoch 级）
-            if self.scheduler is not None:
+            # 学习率调度（epoch 级）；若已用 LearningRateScheduler 回调则跳过，避免双重 step
+            if self.scheduler is not None and not self._has_lr_scheduler_callback():
                 if self.scheduler_monitor is not None:
                     # ReduceLROnPlateau 需要监控指标
                     metric = epoch_logs.get(self.scheduler_monitor)
@@ -175,7 +214,7 @@ class Trainer:
         # 回调: 训练结束
         self.callbacks.on_train_end(self)
         
-        print("\nTraining finished!")
+        _logger.info("Training finished!")
         
         return {
             "current_epoch": self.current_epoch,
@@ -201,32 +240,41 @@ class Trainer:
             loader = self.val_loader
             torch.set_grad_enabled(False)
         
-        # 累积指标
+        # 累积指标（按样本数加权）
         metric_sums: Dict[str, float] = {}
         metric_counts: Dict[str, int] = {}
+        self.optimizer.zero_grad()
         
         for batch_idx, batch in enumerate(loader):
             # 回调: batch 开始
             self.callbacks.on_batch_begin(self, batch_idx, mode)
             
             if mode == "train":
-                # 训练模式：前向 + 反向 + 优化
-                self.optimizer.zero_grad()
-                step_result = self.task.training_step(self.model, batch, self.device)
-                
-                # 反向传播
+                # 训练模式：AMP autocast + 梯度累积
+                with torch.autocast(device_type=self.device.type, enabled=bool(self.scaler)):
+                    step_result = self.task.training_step(self.model, batch, self.device)
                 loss = step_result["loss"]
+                if self.scaler is not None:
+                    loss = self.scaler.scale(loss / self.accumulate_grad_batches)
+                else:
+                    loss = loss / self.accumulate_grad_batches
                 loss.backward()
                 
-                # 梯度裁剪
-                if self.gradient_clip_val is not None:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(),
-                        self.gradient_clip_val,
-                    )
-                
-                self.optimizer.step()
-                self.global_step += 1
+                if (batch_idx + 1) % self.accumulate_grad_batches == 0:
+                    if self.gradient_clip_val is not None:
+                        if self.scaler is not None:
+                            self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(),
+                            self.gradient_clip_val,
+                        )
+                    if self.scaler is not None:
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        self.optimizer.step()
+                    self.optimizer.zero_grad()
+                    self.global_step += 1
             else:
                 # 验证模式：仅前向
                 step_result = self.task.validation_step(self.model, batch, self.device)
@@ -239,16 +287,16 @@ class Trainer:
                 else:
                     step_logs[k] = float(v)
             
-            # 累积指标
+            # 按批次大小加权累积
+            batch_size = _infer_batch_size(step_result, batch)
             for k, v in step_logs.items():
-                metric_sums[k] = metric_sums.get(k, 0.0) + v
-                metric_counts[k] = metric_counts.get(k, 0) + 1
+                metric_sums[k] = metric_sums.get(k, 0.0) + v * batch_size
+                metric_counts[k] = metric_counts.get(k, 0) + batch_size
             
-            # 回调: batch 结束
-            if batch_idx % self.log_interval == 0:
-                self.callbacks.on_batch_end(self, batch_idx, step_logs, mode)
+            # 回调: batch 结束（每步都触发，打印频率由回调自身控制）
+            self.callbacks.on_batch_end(self, batch_idx, step_logs, mode)
         
-        # 计算平均指标
+        # 计算加权平均指标
         avg_metrics = {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
         
         torch.set_grad_enabled(True)
@@ -317,6 +365,14 @@ class Trainer:
         
         return outputs
     
+    def _has_lr_scheduler_callback(self) -> bool:
+        """是否存在 LearningRateScheduler 回调（用于避免双重 step）。"""
+        from .callbacks import LearningRateScheduler
+        for cb in getattr(self.callbacks, "callbacks", []):
+            if isinstance(cb, LearningRateScheduler):
+                return True
+        return False
+
     def save_checkpoint(self, path: str) -> None:
         """
         手动保存检查点
@@ -330,13 +386,20 @@ class Trainer:
             "model_state_dict": self.model.state_dict() if self.model else None,
             "optimizer_state_dict": self.optimizer.state_dict() if self.optimizer else None,
         }
+        if self.scaler is not None:
+            checkpoint["scaler_state_dict"] = self.scaler.state_dict()
         
         if self.scheduler and hasattr(self.scheduler, "state_dict"):
             checkpoint["scheduler_state_dict"] = self.scheduler.state_dict()
         
+        # 回调状态（EarlyStopping 的 wait/best_value 等）
+        cb_state = self.callbacks.state_dict()
+        if cb_state:
+            checkpoint["callbacks_state_dict"] = cb_state
+        
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         torch.save(checkpoint, path)
-        print(f"Checkpoint saved to: {path}")
+        _logger.info(f"Checkpoint saved to: {path}")
     
     def load_checkpoint(self, path: str, model: nn.Module, strict: bool = True) -> None:
         """
@@ -347,7 +410,11 @@ class Trainer:
             model: 模型实例
             strict: 是否严格匹配参数
         """
-        checkpoint = torch.load(path, map_location=self.device)
+        # torch 2.6 起默认 weights_only=True，导致完整 checkpoint 无法反序列化
+        try:
+            checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        except TypeError:
+            checkpoint = torch.load(path, map_location=self.device)
         
         if self.model is None:
             self.model = model.to(self.device)
@@ -361,8 +428,14 @@ class Trainer:
         if checkpoint.get("scheduler_state_dict") and self.scheduler:
             self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         
+        if checkpoint.get("scaler_state_dict") and self.scaler is not None:
+            self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
+        
+        if checkpoint.get("callbacks_state_dict"):
+            self.callbacks.load_state_dict(checkpoint["callbacks_state_dict"])
+        
         self.current_epoch = checkpoint.get("epoch", 0) + 1
         self.global_step = checkpoint.get("global_step", 0)
         
-        print(f"Checkpoint loaded from: {path}")
-        print(f"Resuming from epoch {self.current_epoch}, step {self.global_step}")
+        _logger.info(f"Checkpoint loaded from: {path}")
+        _logger.info(f"Resuming from epoch {self.current_epoch}, step {self.global_step}")

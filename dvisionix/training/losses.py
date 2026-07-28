@@ -270,9 +270,12 @@ class DetectionLoss(nn.Module):
 
 class GIoULoss(nn.Module):
     """
-    Generalized IoU Loss
-    
-    比 L1/L2 损失更适合边界框回归，直接优化 IoU。
+    Generalized IoU Loss — 回归分支损失函数。
+
+    用于检测头（如 DetHead）的 ``forward`` 中的回归分支，
+    计算预测框与匹配到的正样本（anchor/prior）目标框之间的 GIoU。
+    注意：**正负样本匹配（assigner）** 由调用方（如 task 的 training_step）负责，
+    GIoULoss 仅接收已经匹配好的 ``(N, 4)`` 预测/目标框对。
     """
     
     def __init__(self, reduction: str = "mean"):
@@ -340,3 +343,25 @@ class GIoULoss(nn.Module):
         iou = intersection / union
         
         return iou, union
+
+
+# =============================================================================
+# 注册表集成（配置驱动构建）
+# =============================================================================
+from typing import Any, Dict
+from ..registry import LOSSES
+
+for _cls in (DiceLoss, FocalLoss, CombinedSegmentationLoss, GIoULoss, DetectionLoss):
+    if _cls.__name__ not in LOSSES:
+        LOSSES.register(_cls)
+
+
+def build_loss(cfg):
+    """从配置构建损失函数。
+
+    例如::
+
+        build_loss({"type": "DiceLoss"})
+        build_loss({"type": "FocalLoss", "alpha": 0.25})
+    """
+    return LOSSES.build(dict(cfg))

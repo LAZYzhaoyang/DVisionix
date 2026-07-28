@@ -22,7 +22,7 @@ from .postprocess import batched_nms
 class GridDetectionModel(BaseModel):
     """单阶段网格检测器。"""
 
-    def __init__(self, num_classes: int = 3, in_channels: int = 3, width: int = 64):
+    def __init__(self, num_classes: int = 3, in_channels: int = 3, width: int = 64, **kwargs):
         super().__init__()
         self.task_type = "detection"
         self.num_classes = num_classes

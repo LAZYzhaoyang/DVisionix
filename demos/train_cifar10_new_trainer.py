@@ -1,3 +1,6 @@
+# NOTE: v0.2.0 起推荐使用 config 驱动入口:
+#   python tools/train.py --config configs/<task>/demo_synthetic.yaml
+# 该脚本作为教学参考保留，功能上等价的现代用法请参考 tools/train.py + configs/。
 ﻿# D:\\ZhaoyangProject\\DVisionix\\demos\\train_cifar10_new_trainer.py
 
 """

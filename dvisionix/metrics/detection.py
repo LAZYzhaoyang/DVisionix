@@ -12,21 +12,35 @@ from typing import Dict, List, Tuple, Optional
 
 
 class DetectionMetrics:
-    """检测指标计算器（COCO-style）"""
-    
+    """检测指标计算器（COCO-style mAP）。
+
+    支持两种后端：
+    - 内置实现（默认）：纯 numpy 实现，无额外依赖。
+    - torchmetrics（可选）：设置 ``use_torchmetrics=True`` 后使用
+      ``torchmetrics.detection.mean_ap.MeanAveragePrecision``，
+      需要安装 ``pip install torchmetrics[detection]``。
+
+    .. note::
+       内置实现的 ``_compute_map_at_iou`` 会重复遍历中间结果，
+       仅用于快速验证；正式评测建议使用 torchmetrics 后端。
+    """
+
     def __init__(
         self,
         num_classes: int,
         iou_thresholds: Optional[List[float]] = None,
         recall_thresholds: Optional[List[float]] = None,
+        use_torchmetrics: bool = False,
     ):
         """
         Args:
             num_classes: 类别数量
             iou_thresholds: IoU 阈值列表，默认 [0.5, 0.55, ..., 0.95]
             recall_thresholds: Recall 阈值列表，默认 [0, 0.01, ..., 1.0]
+            use_torchmetrics: 是否使用 torchmetrics 后端（需安装）
         """
         self.num_classes = num_classes
+        self.use_torchmetrics = use_torchmetrics
         
         if iou_thresholds is None:
             self.iou_thresholds = np.linspace(0.5, 0.95, 10).tolist()
@@ -37,7 +51,21 @@ class DetectionMetrics:
             self.recall_thresholds = np.linspace(0, 1.0, 101).tolist()
         else:
             self.recall_thresholds = recall_thresholds
-        
+
+        self._torch_metric = None
+        if use_torchmetrics:
+            try:
+                from torchmetrics.detection import MeanAveragePrecision
+                self._torch_metric = MeanAveragePrecision(
+                    box_format="xyxy",
+                    iou_thresholds=self.iou_thresholds,
+                    rec_thresholds=self.recall_thresholds,
+                )
+            except ImportError:
+                import warnings
+                warnings.warn("torchmetrics[detection] not installed; falling back to built-in mAP")
+                self.use_torchmetrics = False
+
         self.reset()
     
     def reset(self) -> None:
@@ -69,6 +97,19 @@ class DetectionMetrics:
             target_boxes: 目标边界框列表，每个元素 (M, 4)
             target_labels: 目标类别列表，每个元素 (M,)
         """
+        if self.use_torchmetrics and self._torch_metric is not None:
+            from torch import stack as _stack
+            preds = [
+                dict(boxes=pb, scores=ps, labels=pl.long())
+                for pb, ps, pl in zip(pred_boxes, pred_scores, pred_labels)
+            ]
+            targets = [
+                dict(boxes=tb, labels=tl.long())
+                for tb, tl in zip(target_boxes, target_labels)
+            ]
+            self._torch_metric.update(preds, targets)
+            return
+
         batch_size = len(pred_boxes)
         
         for i in range(batch_size):
@@ -109,6 +150,14 @@ class DetectionMetrics:
         Returns:
             包含各指标的字典
         """
+        if self.use_torchmetrics and self._torch_metric is not None:
+            raw = self._torch_metric.compute()
+            return {
+                "mAP": float(raw["map"]),
+                "mAP_50": float(raw["map_50"]),
+                "mAP_75": float(raw["map_75"]),
+            }
+
         aps_per_class = []
         
         for c in range(self.num_classes):
@@ -226,8 +275,7 @@ class DetectionMetrics:
         return ap / len(self.recall_thresholds)
     
     def _compute_map_at_iou(self, iou_thresh: float) -> float:
-        """计算特定 IoU 阈值下的 mAP"""
-        # （简化实现，实际应该缓存中间结果）
+        """计算特定 IoU 阈值下的 mAP（简化实现，重复遍历中间结果，建议用 torchmetrics 后端）"""
         aps_per_class = []
         
         for c in range(self.num_classes):

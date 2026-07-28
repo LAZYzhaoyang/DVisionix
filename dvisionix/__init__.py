@@ -1,4 +1,4 @@
-﻿# D:\\ZhaoyangProject\\DVisionix\\dvisionix\\__init__.py
+# D:\\ZhaoyangProject\\DVisionix\\dvisionix\\__init__.py
 
 """
 DVisionix: 深度学习算法库
@@ -31,7 +31,7 @@ DVisionix: 深度学习算法库
     trainer.fit(model)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from . import data
 from . import models
@@ -50,4 +50,24 @@ __all__ = [
     "config",
     "export",
     "__version__",
+]
+
+
+# =============================================================================
+# 注册表与构建入口（配置驱动）
+# =============================================================================
+from .registry import (
+    Registry, build_from_cfg, MODELS, BACKBONES, NECKS, HEADS,
+    DATASETS, TRANSFORMS, TASKS, LOSSES, METRICS,
+)
+from .models import build_model
+from .training import build_task
+from .training.losses import build_loss
+from .metrics import build_metric
+from .data import build_dataset
+
+__all__ = __all__ + [
+    "Registry", "build_from_cfg", "MODELS", "BACKBONES", "NECKS", "HEADS",
+    "DATASETS", "TRANSFORMS", "TASKS", "LOSSES", "METRICS",
+    "build_model", "build_task", "build_loss", "build_metric", "build_dataset",
 ]

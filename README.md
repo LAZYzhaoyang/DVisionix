@@ -36,7 +36,43 @@
 
 ---
 
+### 🏗️ 架构概览（v0.2.0）
+
+```
+dvisionix/
+├── registry.py          # 全局注册表（MODELS / TASKS / LOSSES / METRICS / DATASETS）
+├── config.py            # YAML 配置驱动，支持 --cfg-options 覆盖
+├── models/
+│   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
+│   ├── backbones/       # TimmBackbone 等
+│   ├── necks/           # FPN
+│   ├── heads/           # ClsHead / SegHead / DetHead
+│   └── detectors/       # GeneralizedModel（backbone+neck+head 组合）
+├── training/
+│   ├── trainer.py       # AMP / 梯度累积 / seed / resume / 加权聚合
+│   ├── task.py          # BaseTask（training_step / validation_step / configure_optimizers）
+│   ├── callbacks.py     # ProgressBar / ModelCheckpoint / EarlyStopping / TensorBoard
+│   └── losses.py        # FocalLoss / DiceLoss / GIoULoss / DetectionLoss
+├── data/
+│   ├── base.py          # BaseDataset（transforms 归一化唯一权威）
+│   ├── factory.py       # DatasetFactory
+│   ├── transforms/      # 分类 / 检测 / 分割变换 + Albumentations 集成
+│   └── adapters/        # CIFAR / COCO / Cityscapes 适配器
+└── metrics/
+    ├── classification.py  # Accuracy / Precision / Recall / F1
+    ├── segmentation.py    # mIoU / Pixel Accuracy
+    ├── detection.py       # COCO mAP（内置实现 + torchmetrics 可选）
+    └── collection.py      # MetricCollection 多任务统一入口
+```
+
+- **配置驱动**：所有入口统一通过 `tools/train.py --config` 或 `Config` 编程 API。
+- **注册表**：`build_model` / `build_task` / `build_loss` / `build_metric` / `build_dataset` 从全局注册表按名称查找。
+- **归一化唯一权威**：transforms 内的 `Normalize` 类掌控归一化，`BaseDataset` 自动感知避免二次归一化。
+
+---
+
 ## 🚀 快速开始
+
 
 ### 安装
 
@@ -56,84 +92,36 @@ conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -y
 pip install opencv-python numpy pyyaml tensorboard matplotlib
 `
 
-### 3 分钟上手：CIFAR-10 分类
+### 3 分钟上手：Config 驱动训练
 
-`python
-import torch
-from torch.utils.data import DataLoader
+```bash
+# 使用合成数据快速验证分类 pipeline
+python tools/train.py --config configs/classification/demo_synthetic.yaml
 
-# 1. 导入 DVisionix
-from dvisionix.data import DatasetFactory
-from dvisionix.data.transforms import ClassificationTransforms
-from dvisionix.models import SimpleCNN
-from dvisionix.training import (
-    Trainer,
-    ClassificationTask,
-    ModelCheckpoint,
-    EarlyStopping,
-)
+# 覆盖单个参数
+python tools/train.py --config configs/classification/demo_synthetic.yaml \
+  --cfg-options training.num_epochs=5 training.learning_rate=0.01
 
-# 2. 创建数据集
-train_transforms = ClassificationTransforms(train=True, image_size=32)
-val_transforms = ClassificationTransforms(train=False, image_size=32)
+# 从检查点恢复训练
+python tools/train.py --config configs/classification/demo_synthetic.yaml \
+  --resume checkpoints/demo_synthetic/last.pt
+```
 
-train_dataset = DatasetFactory.create(
-    name="cifar10",
-    root="./data",
-    train=True,
-    transforms=train_transforms,
-    download=True,
-)
+**编程方式：**
 
-val_dataset = DatasetFactory.create(
-    name="cifar10",
-    root="./data",
-    train=False,
-    transforms=val_transforms,
-    download=True,
-)
+```python
+from dvisionix.config import Config
+from dvisionix.models import build_model
+from dvisionix.training import Trainer, build_task
 
-# 3. 创建数据加载器
-train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, num_workers=0)
-val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False, num_workers=0)
-
-# 4. 创建模型和任务
-model = SimpleCNN(num_classes=10)
-
-task = ClassificationTask(
-    num_classes=10,
-    learning_rate=1e-3,
-    weight_decay=1e-4,
-)
-
-# 5. 配置回调
-callbacks = [
-    ModelCheckpoint(
-        save_dir="./checkpoints/cifar10",
-        monitor="val_acc",
-        mode="max",
-        save_best_only=True,
-    ),
-    EarlyStopping(
-        monitor="val_acc",
-        mode="max",
-        patience=5,
-        restore_best_weights=True,
-    ),
-]
-
-# 6. 创建训练器并开始训练
-trainer = Trainer(
-    task=task,
-    train_loader=train_loader,
-    val_loader=val_loader,
-    callbacks=callbacks,
-    device="auto",
-    max_epochs=20,
-)
-
+cfg = Config.from_yaml("configs/classification/demo_synthetic.yaml")
+model = build_model(cfg.model.to_dict())
+task = build_task(cfg.task.to_dict() if "task" in cfg else {"type": "ClassificationTask", "num_classes": cfg.model.num_classes})
+trainer = Trainer(task=task, train_loader=train_loader, val_loader=val_loader,
+                  max_epochs=cfg.training.num_epochs, amp=True, seed=42)
 trainer.fit(model)
-`
+```
+
 
 ---
 
@@ -330,3 +318,22 @@ MIT License
 ## 📞 问题反馈
 
 如有问题或建议，请在 GitHub 提交 Issue。
+
+---
+
+## 🔀 从 0.1.x 迁移到 0.2.0
+
+**破坏性变更：**
+
+- **归一化行为**：`BaseDataset` 不再默认在内部执行 mean/std 归一化。若继续使用旧模式（`transforms=None`），会打 `DeprecationWarning`。推荐使用 `ClassificationTransforms/DetectionTransforms/SegmentationTransforms`，它们默认自带 ImageNet 归一化。
+- **Trainer 调度器**：`Trainer.fit` 内部调度器 step 与 `LearningRateScheduler` 回调互斥（自动避免双重 step）；显式二次 step 需要自行去除。
+- **模型命名**：新增 `models/necks`、`models/heads`、`models/detectors` 命名空间。`SimpleDetectionModel` 已标记为废弃，请用 `GeneralizedModel(backbone=..., neck=..., head=DetHead(...))`。
+- **API 补齐**：`Trainer` 新增 `amp` / `accumulate_grad_batches` / `seed` / `resume_from` 参数；`ModelCheckpoint` / `EarlyStopping` 现在会随 checkpoint 保存 `state_dict`。
+
+**新能力：**
+
+- **全局注册表**：`build_model`/`build_task`/`build_loss`/`build_metric`/`build_dataset` 按名称构建组件。
+- **配置驱动入口**：`python tools/train.py --config ... --cfg-options a.b=c --resume ckpt.pt`。
+- **完整 resume**：optimizer / scheduler / scaler / callbacks 状态一并存取。
+- **AMP + 梯度累积**：训练支持 CUDA 上的 autocast + GradScaler 及任意累积步数。
+- **检测指标**：`DetectionMetrics(use_torchmetrics=True)` 可直连 torchmetrics COCO 后端。

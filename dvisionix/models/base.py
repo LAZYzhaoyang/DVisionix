@@ -12,20 +12,42 @@ import torch.nn.functional as F
 from typing import Tuple, Optional, Dict, Any
 
 
+# 合法任务类型集合，用于校验 BaseModel.task_type
+TASK_TYPES = {"classification", "detection", "segmentation"}
+
+
 class BaseModel(nn.Module):
+    """所有模型的基类。
+
+    契约:
+        - ``forward`` 只返回 **原始预测**（logits / raw 张量），不包含 NMS / decode
+          等后处理；后处理统一放在 ``dvisionix.models.postprocess`` 或独立解码器中。
+        - ``task_type`` 应取 ``TASK_TYPES`` 之一。
+        - 可选实现 ``init_weights`` 做权重初始化，``from_config`` 支持配置化构建。
+
+    提供 freeze/unfreeze、参数统计、设备查询等通用能力。
     """
-    所有模型的基类
-    
-    提供统一的接口规范、输入输出检查、参数统计等功能。
-    """
-    
-    def __init__(self):
+
+    def __init__(self, task_type=None):
         super().__init__()
-        self.task_type: Optional[str] = None
-    
-    def forward(self, x: torch.Tensor, **kwargs) -> Any:
-        """前向传播，子类必须实现"""
+        if task_type is not None and task_type not in TASK_TYPES:
+            raise ValueError(
+                f"Invalid task_type {task_type!r}, expected one of {sorted(TASK_TYPES)}"
+            )
+        self.task_type = task_type
+
+    def forward(self, x, **kwargs):
+        """前向传播，子类必须实现，只返回原始预测。"""
         raise NotImplementedError
+
+    def init_weights(self):
+        """权重初始化钩子，子类可覆盖。默认不做额外处理。"""
+        return None
+
+    @classmethod
+    def from_config(cls, cfg):
+        """从配置字典构建模型。子类可覆盖以定制构建逻辑。"""
+        return cls(**dict(cfg))
     
     def count_parameters(self) -> int:
         """统计可训练参数数量"""
@@ -53,7 +75,7 @@ class SimpleCNN(BaseModel):
     适用于 CIFAR-10 等小尺寸图像的分类任务。
     """
     
-    def __init__(self, num_classes: int = 10, in_channels: int = 3):
+    def __init__(self, num_classes: int = 10, in_channels: int = 3, **kwargs):
         """
         Args:
             num_classes: 分类类别数
@@ -115,7 +137,7 @@ class SimpleSegmentationModel(BaseModel):
     基于全卷积网络，输出与输入相同尺寸的分割图。
     """
     
-    def __init__(self, num_classes: int = 21, in_channels: int = 3):
+    def __init__(self, num_classes: int = 21, in_channels: int = 3, **kwargs):
         """
         Args:
             num_classes: 分割类别数
@@ -188,6 +210,7 @@ class SimpleDetectionModel(BaseModel):
         num_classes: int = 80,
         in_channels: int = 3,
         num_anchors: int = 9,
+        **kwargs,
     ):
         """
         Args:
@@ -196,6 +219,13 @@ class SimpleDetectionModel(BaseModel):
             num_anchors: 每个位置的锚框数
         """
         super().__init__()
+        import warnings
+        warnings.warn(
+            "SimpleDetectionModel is dead code (no loss/decode/task) and will be removed in 0.3.0. Use GeneralizedModel or GridDetectionModel instead."
+            "Use GeneralizedModel or GridDetectionModel instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.task_type = "detection"
         self.num_classes = num_classes
         
