@@ -148,14 +148,14 @@ for epoch in range(NUM_EPOCHS):
                 f"Epoch [{epoch+1}/{NUM_EPOCHS}] "
                 f"Batch [{batch_idx+1}/{len(train_loader)}] "
                 f"Loss: {loss.item():.4f} "
-                f"Acc: {train_result['accuracy']:.2f}%"
+                f"Acc: {train_result['accuracy']*100:.2f}%"
             )
     
     # 训练 epoch 结束
     train_result = train_metrics.compute()
     visualizer.log_scalar("train/epoch_loss", loss.item(), epoch)
     visualizer.log_scalar("train/accuracy", train_result["accuracy"], epoch)
-    visualizer.log_scalar("train/top5_accuracy", train_result["top5_accuracy"], epoch)
+    visualizer.log_scalar("train/top5_accuracy", train_result["top5_acc"], epoch)
     
     # 验证
     model.eval()
@@ -183,7 +183,7 @@ for epoch in range(NUM_EPOCHS):
     
     print(f"\nEpoch [{epoch+1}/{NUM_EPOCHS}] 验证结果:")
     for name, value in val_result.items():
-        print(f"  {name}: {value:.2f}%")
+        print(f"  {name}: {value:.4f}")
     print()
 
 # 训练完成

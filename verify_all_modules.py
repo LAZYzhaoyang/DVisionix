@@ -55,9 +55,11 @@ all_passed &= test_import("Losses", "dvisionix.training.losses")
 
 # 指标模块
 print("\n指标模块:")
-all_passed &= test_import("ClassificationMetrics", "dvisionix.metrics.classification")
-all_passed &= test_import("SegmentationMetrics", "dvisionix.metrics.segmentation")
-all_passed &= test_import("DetectionMetrics", "dvisionix.metrics.detection")
+all_passed &= test_import("metrics.classification", "dvisionix.metrics.classification")
+all_passed &= test_import("metrics.segmentation", "dvisionix.metrics.segmentation")
+all_passed &= test_import("metrics.detection", "dvisionix.metrics.detection")
+all_passed &= test_import("metrics.collection", "dvisionix.metrics.collection")
+all_passed &= test_import("metrics.presets", "dvisionix.metrics.presets")
 
 # 模型
 print("\n模型:")

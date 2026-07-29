@@ -1,120 +1,115 @@
-﻿# D:\\ZhaoyangProject\\DVisionix\\dvisionix\\metrics\\segmentation.py
+# -*- coding: utf-8 -*-
+"""分割任务的原子指标。
 
+提供可自由组合的分割指标：MeanIoU / PixelAccuracy / DiceScore。
+三者都基于混淆矩阵累积，遵循 BaseMetric 的 update/compute/reset 接口。
 """
-分割任务指标
 
-计算 mIoU (mean Intersection over Union)、像素准确率等分割指标。
-"""
+from typing import Optional
 
-import torch
 import numpy as np
-from typing import Dict, Optional
+import torch
+
+from .base import BaseMetric
+from ..registry import METRICS
 
 
-class SegmentationMetrics:
-    """分割指标计算器"""
-    
+class _SegConfusionMetric(BaseMetric):
+    """基于混淆矩阵的分割指标基类。
+
+    Args:
+        num_classes: 类别数。
+        ignore_index: 忽略的标签值（如 255）。
+        per_class: 为 True 时 compute 返回每类值列表，否则返回均值标量。
+        name: 指标名称。
+    """
+
     def __init__(
         self,
         num_classes: int,
-        ignore_index: int = 255,
-        compute_per_class: bool = False,
+        ignore_index: Optional[int] = 255,
+        per_class: bool = False,
+        name: str = "metric",
     ):
-        """
-        Args:
-            num_classes: 类别数量
-            ignore_index: 忽略的类别标签
-            compute_per_class: 是否计算每类指标
-        """
         self.num_classes = num_classes
         self.ignore_index = ignore_index
-        self.compute_per_class = compute_per_class
-        
-        self.reset()
-    
+        self.per_class = per_class
+        super().__init__(name)
+
     def reset(self) -> None:
-        """重置统计"""
-        # 混淆矩阵: true_classes x pred_classes
-        self.confusion_matrix = np.zeros(
-            (self.num_classes, self.num_classes), dtype=np.int64
-        )
-    
+        self.confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int64)
+
     def update(self, logits: torch.Tensor, targets: torch.Tensor) -> None:
-        """
-        更新统计
-        
-        Args:
-            logits: 模型输出 (B, C, H, W)
-            targets: 目标标签 (B, H, W)
-        """
-        preds = logits.argmax(dim=1)
-        
-        # 转换为 numpy
-        preds_np = preds.cpu().numpy().flatten()
+        preds_np = logits.argmax(dim=1).cpu().numpy().flatten()
         targets_np = targets.cpu().numpy().flatten()
-        
-        # 忽略指定类别
+
         if self.ignore_index is not None:
-            mask = (targets_np != self.ignore_index)
-            preds_np = preds_np[mask]
-            targets_np = targets_np[mask]
-        
-        # 过滤无效类别
-        mask = (targets_np >= 0) & (targets_np < self.num_classes)
-        preds_np = preds_np[mask]
-        targets_np = targets_np[mask]
-        
-        # 更新混淆矩阵
+            keep = targets_np != self.ignore_index
+            preds_np, targets_np = preds_np[keep], targets_np[keep]
+
+        keep = (targets_np >= 0) & (targets_np < self.num_classes)
+        preds_np, targets_np = preds_np[keep], targets_np[keep]
+
         hist = np.bincount(
-            self.num_classes * targets_np + preds_np,
-            minlength=self.num_classes ** 2
+            self.num_classes * targets_np.astype(np.int64) + preds_np.astype(np.int64),
+            minlength=self.num_classes ** 2,
         ).reshape(self.num_classes, self.num_classes)
-        
         self.confusion_matrix += hist
-    
-    def compute(self) -> Dict[str, float]:
-        """
-        计算所有指标
-        
-        Returns:
-            包含各指标的字典
-        """
-        # 计算 IoU
-        intersection = np.diag(self.confusion_matrix)
-        union = (
-            self.confusion_matrix.sum(axis=1) +
-            self.confusion_matrix.sum(axis=0) -
-            intersection
-        )
-        
-        # 避免除以零
+
+
+@METRICS.register()
+@METRICS.register(name="mean_iou")
+class MeanIoU(_SegConfusionMetric):
+    """平均交并比（mIoU）。"""
+
+    def __init__(self, num_classes: int, ignore_index: Optional[int] = 255, per_class: bool = False, name: str = "mIoU"):
+        super().__init__(num_classes, ignore_index, per_class, name)
+
+    def compute(self):
+        cm = self.confusion_matrix
+        intersection = np.diag(cm).astype(np.float64)
+        union = cm.sum(axis=1) + cm.sum(axis=0) - intersection
         valid = union > 0
-        if not np.any(valid):
-            result = {
-                "mIoU": 0.0,
-                "pixel_accuracy": 0.0,
-            }
-            if self.compute_per_class:
-                result["iou_per_class"] = [0.0] * self.num_classes
-            return result
-        
-        iou_per_class = np.zeros(self.num_classes, dtype=np.float64)
-        iou_per_class[valid] = intersection[valid] / union[valid]
-        
-        # 平均 IoU
-        mean_iou = np.mean(iou_per_class[valid])
-        
-        # 像素准确率
-        total_pixels = self.confusion_matrix.sum()
-        correct_pixels = intersection.sum()
-        pixel_accuracy = correct_pixels / total_pixels if total_pixels > 0 else 0.0
-        
-        result = {
-            "mIoU": float(mean_iou),
-            "pixel_accuracy": float(pixel_accuracy),
-        }
-        
-        if self.compute_per_class:
-            result["iou_per_class"] = iou_per_class.tolist()
-        
-        return result
+        iou = np.zeros(self.num_classes, dtype=np.float64)
+        iou[valid] = intersection[valid] / union[valid]
+        if self.per_class:
+            return iou.tolist()
+        return float(iou[valid].mean()) if np.any(valid) else 0.0
+
+
+@METRICS.register()
+@METRICS.register(name="pixel_accuracy")
+class PixelAccuracy(_SegConfusionMetric):
+    """像素准确率。"""
+
+    def __init__(self, num_classes: int, ignore_index: Optional[int] = 255, name: str = "pixel_accuracy"):
+        super().__init__(num_classes, ignore_index, per_class=False, name=name)
+
+    def compute(self) -> float:
+        cm = self.confusion_matrix
+        total = cm.sum()
+        correct = np.diag(cm).sum()
+        return float(correct / total) if total > 0 else 0.0
+
+
+@METRICS.register()
+@METRICS.register(name="dice_score")
+class DiceScore(_SegConfusionMetric):
+    """Dice 系数（等价于 F1，逐类后取均值）。"""
+
+    def __init__(self, num_classes: int, ignore_index: Optional[int] = 255, per_class: bool = False, name: str = "dice"):
+        super().__init__(num_classes, ignore_index, per_class, name)
+
+    def compute(self):
+        cm = self.confusion_matrix
+        intersection = np.diag(cm).astype(np.float64)
+        denom = cm.sum(axis=1) + cm.sum(axis=0)
+        valid = denom > 0
+        dice = np.zeros(self.num_classes, dtype=np.float64)
+        dice[valid] = 2 * intersection[valid] / denom[valid]
+        if self.per_class:
+            return dice.tolist()
+        return float(dice[valid].mean()) if np.any(valid) else 0.0
+
+
+__all__ = ["MeanIoU", "PixelAccuracy", "DiceScore"]

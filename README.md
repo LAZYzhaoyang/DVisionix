@@ -63,7 +63,8 @@ dvisionix/
     ├── classification.py  # Accuracy / Precision / Recall / F1
     ├── segmentation.py    # mIoU / Pixel Accuracy
     ├── detection.py       # COCO mAP（内置实现 + torchmetrics 可选）
-    └── collection.py      # MetricCollection 多任务统一入口
+    ├── collection.py      # MetricCollection 组合容器（原子指标自由组合）
+    └── presets.py         # get_preset_metrics + 预设组合类
 ```
 
 - **配置驱动**：所有入口统一通过 `tools/train.py --config` 或 `Config` 编程 API。
@@ -170,7 +171,7 @@ models (BaseModel, CNN, Segmentation, Detection)
     ↓
 training (Trainer, Tasks, Callbacks, Losses)
     ↓
-metrics (ClassificationMetrics, SegmentationMetrics, DetectionMetrics)
+metrics (原子指标 + MetricCollection + 预设组合)
 `
 
 ---

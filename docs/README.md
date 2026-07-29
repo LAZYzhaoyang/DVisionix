@@ -7,6 +7,7 @@
 - [配置系统](config_system.md) - Config 加载、继承、合并、验证
 - [骨干网络（timm）](backbones.md) - TimmBackbone / TimmClassifier 用法
 - [自定义 Layer 与 Model](custom_models.md) - layers 模块、封装 timm 层、注册与配置驱动组装
+- [指标（Metrics）](metrics.md) - 原子指标、组合容器、预设与自定义
 - [日志系统](logging.md) - 结构化日志与按阶段记录指标
 - [模型导出（ONNX）](model_export.md) - ONNXExporter 导出与精度验证
 - [语义分割任务](segmentation.md) - 分割数据格式与端到端训练
