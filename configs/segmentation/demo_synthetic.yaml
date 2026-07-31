@@ -17,8 +17,10 @@ data:
 training:
   num_epochs: 2
   batch_size: 8
-  learning_rate: 0.001
-  weight_decay: 0.0001
+  optimizer:
+    type: adam
+    lr: 0.001
+    weight_decay: 0.0001
   device: "auto"
   num_workers: 0
   early_stopping:
@@ -28,9 +30,6 @@ training:
     patience: 3
 
 checkpoint:
-  save_dir: "./checkpoints/demo_synthetic_seg"
+  save_dir: "checkpoints"
   monitor: "val_loss"
   mode: "min"
-
-logging:
-  log_dir: "./logs/demo_synthetic_seg"

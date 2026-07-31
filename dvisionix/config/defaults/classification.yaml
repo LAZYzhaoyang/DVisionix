@@ -6,11 +6,10 @@ task_type: "classification"
 model:
   name: "simple_cnn"
   num_classes: 10
-  pretrained: false
   in_channels: 3
 
 loss:
-  name: "cross_entropy"
+  type: "cross_entropy"
   label_smoothing: 0.0
 
 data:

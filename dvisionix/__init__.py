@@ -1,4 +1,4 @@
-# D:\\ZhaoyangProject\\DVisionix\\dvisionix\\__init__.py
+# D:\ZhaoyangProject\DVisionix\dvisionix\__init__.py
 
 """
 DVisionix: 深度学习算法库
@@ -7,31 +7,21 @@ DVisionix: 深度学习算法库
 
 核心特性：
 - 统一的数据接口，支持所有任务
-- 通用的训练引擎，支持自定义任务逻辑
+- 通用的训练引擎，支持自定义任务逻辑（Task 组件）
 - 丰富的回调系统，支持灵活的训练控制
+- Loss 作为模型层组件（models.losses），可继承、可自由组合
 - 完整的指标计算，涵盖所有常见任务
+- 多卡训练（DDP）、工作目录隔离、自动断点续训
 
-快速开始：
-    from dvisionix.data import build_dataset
-    from dvisionix.models import SimpleCNN
-    from dvisionix.training import Trainer, ClassificationTask, ModelCheckpoint
+快速开始（配置驱动）：
+    python tools/train.py --config configs/classification/demo_synthetic.yaml
 
-    # 创建数据集
-    train_dataset = build_dataset({"type": "cifar10", "root": "./data", "train": True})
-
-    # 创建模型
-    model = SimpleCNN(num_classes=10)
-
-    # 定义任务和回调
-    task = ClassificationTask(num_classes=10)
-    callbacks = [ModelCheckpoint(save_dir="./checkpoints")]
-
-    # 创建训练器并开始训练
-    trainer = Trainer(task, train_loader, callbacks=callbacks)
-    trainer.fit(model)
+编程接口：
+    from dvisionix.models import build_model
+    from dvisionix.training import build_task, Trainer
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from . import data
 from . import models
@@ -61,8 +51,8 @@ from .registry import (
     DATASETS, TRANSFORMS, TASKS, LOSSES, METRICS,
 )
 from .models import build_model
+from .models.losses import build_loss
 from .training import build_task
-from .training.losses import build_loss
 from .metrics import build_metric
 from .data import build_dataset
 

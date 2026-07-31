@@ -9,7 +9,7 @@
 GridDetectionModel + DetectionTask + detection_collate + 回调 -> 训练 ->
 解码 + NMS + mAP 评估。
 
-使用内存中的合成数据（无需下载）。真实数据可用 DatasetFactory 加载 COCO/VOC，
+使用内存中的合成数据（无需下载）。真实数据可用 build_dataset 加载 COCO/VOC，
 或用 CustomDataset 提供 boxes/labels，再配合 detection_collate。
 """
 
@@ -31,7 +31,6 @@ from dvisionix.training import (
     evaluate_detection,
     ModelCheckpoint,
     EarlyStopping,
-    TensorBoardLogger,
 )
 from dvisionix.utils import get_logger
 
@@ -127,7 +126,6 @@ def main(config_path: str) -> None:
             monitor=cfg.checkpoint.get("monitor", "val_loss"),
             mode=cfg.checkpoint.get("mode", "min"),
         ),
-        TensorBoardLogger(log_dir=cfg.logging.get("log_dir", "./logs")),
     ]
     es = cfg.training.get("early_stopping", {})
     if es and es.get("enabled", False):

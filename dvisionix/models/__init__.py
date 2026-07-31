@@ -3,6 +3,7 @@
 模型模块
 
 提供模型基类和各种任务的示例模型，以及 backbone/neck/head 组件化架构。
+Loss 组件位于 ``models/losses``（模型层的一部分），统一通过 LOSSES 注册表构建。
 """
 
 from .base import (
@@ -28,6 +29,24 @@ from .postprocess import nms, batched_nms, box_iou
 from .necks import FPN
 from .heads import ClsHead, SegHead, DetHead
 from .detectors import GeneralizedModel
+from . import losses
+from .losses import (
+    BaseLoss,
+    LossComposer,
+    build_loss,
+    build_losses,
+    compute_loss,
+    CrossEntropy,
+    FocalLoss,
+    DiceLoss,
+    CombinedSegmentationLoss,
+    GridAssigner,
+    GridDetectionLoss,
+    ObjectnessLoss,
+    GIoULoss,
+    CIoULoss,
+    L1BoxLoss,
+)
 
 __all__ = [
     "BaseModel",
@@ -56,6 +75,22 @@ __all__ = [
     "SegHead",
     "DetHead",
     "GeneralizedModel",
+    # losses
+    "BaseLoss",
+    "LossComposer",
+    "build_loss",
+    "build_losses",
+    "compute_loss",
+    "CrossEntropy",
+    "FocalLoss",
+    "DiceLoss",
+    "CombinedSegmentationLoss",
+    "GridAssigner",
+    "GridDetectionLoss",
+    "ObjectnessLoss",
+    "GIoULoss",
+    "CIoULoss",
+    "L1BoxLoss",
 ]
 
 # =============================================================================

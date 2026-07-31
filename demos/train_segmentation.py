@@ -28,7 +28,6 @@ from dvisionix.training import (
     SegmentationTask,
     ModelCheckpoint,
     EarlyStopping,
-    TensorBoardLogger,
 )
 from dvisionix.utils import get_logger
 
@@ -107,7 +106,6 @@ def main(config_path: str) -> None:
             monitor=cfg.checkpoint.get("monitor", "val_loss"),
             mode=cfg.checkpoint.get("mode", "min"),
         ),
-        TensorBoardLogger(log_dir=cfg.logging.get("log_dir", "./logs")),
     ]
     es = cfg.training.get("early_stopping", {})
     if es and es.get("enabled", False):

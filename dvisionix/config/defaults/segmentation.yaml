@@ -6,11 +6,11 @@ task_type: "segmentation"
 model:
   name: "simple_segmentation"
   num_classes: 19
-  backbone: "resnet50"
-  pretrained: true
+  in_channels: 3
 
 loss:
-  name: "cross_entropy"
+  type: "cross_entropy"
+  ignore_index: 255
 
 data:
   root: "./data"

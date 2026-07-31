@@ -193,3 +193,142 @@ tools/
   - demos/ 六个脚本与 verify_*.py 顶部加入迁移提示，引导到 tools/train.py 与 pytest。
   - 端到端验证：tools/train.py 分类 demo 训练 + --resume 从 checkpoint 续训均通过。
   - 最终全量测试 68 passed（2 条 DeprecationWarning 为归一化过渡路径的预期提示）。
+
+---
+
+# 训练子系统重构（v0.3.0）
+
+> 目标：把"data/model/metrics 已重构、training 未达预期"的现状，升级为
+> **统一 Trainer + Task 组件 + 模型层 Loss + utils 日志 + 多卡/工作目录隔离/自动续训**。
+> 决策（用户确认）：Loss 放在 `dvisionix/models/losses/`（模型层，独立可组合组件，模型不内嵌 loss）；
+> 直接移除旧 API 不保留垫片；work_dir 默认在代码库外；文档只同步本文件，docs 仅保留使用说明。
+
+## 一、目标架构
+
+```
+dvisionix/
+├── models/losses/          # Loss 作为模型层组件（独立、可继承、可自由组合）
+│   ├── base.py             # BaseLoss + LossComposer + build_loss/build_losses + compute_loss
+│   ├── classification.py   # CrossEntropy(含 label_smoothing) / Focal
+│   ├── segmentation.py     # Dice / CombinedSegmentation
+│   └── detection/          # GridAssigner / GridDetectionLoss / Objectness / GIoU/CIoU/L1Box
+├── training/
+│   ├── trainer.py          # 统一 Trainer：Task 驱动、metrics 接入、DDP、梯度累积 flush、history
+│   ├── task.py             # BaseTask + 三大任务（optimizer/scheduler/loss/metrics 全配置化）
+│   ├── optimizers.py       # OPTIMIZERS 注册表 + build_optimizer（adam/adamw/sgd/rmsprop）
+│   ├── schedulers.py       # SCHEDULERS 注册表 + build_scheduler（cosine/plateau/step/multi_step/one_cycle）
+│   ├── callbacks.py        # ProgressBar / ModelCheckpoint / EarlyStopping（统一走 utils.logging）
+│   ├── workdir.py          # work_dir 解析、resume 三态、config dump
+│   ├── builder.py          # build_callbacks / build_trainer
+│   └── evaluation.py       # 检测评估（复用 metrics）
+├── utils/logging/          # 日志/可视化唯一权威（console+file+JSONL+TensorBoard）
+└── tools/train.py          # 配置驱动薄入口（--config/--cfg-options/--resume/--work-dir/--devices）
+```
+
+## 二、关键设计
+
+1. **统一 Trainer / Task 组件**：Trainer 是纯执行引擎；任务差异全部由 Task 承载
+   （分类/检测/分割/自定义），通过 `build_task(cfg)` 配置驱动。
+2. **Loss 与 training 解耦**：`training/losses.py` 已删除；Loss 是 `models/losses` 组件，
+   继承 `BaseLoss` 实现 `forward(preds, targets, **kwargs)`，`LossComposer` 加权组合，
+   模型保持纯前向不内嵌 loss；`training/losses` 旧路径不再存在（直接移除）。
+3. **配置闭环**：`training.optimizer/scheduler`、`loss`、`metrics`、`work_dir`、`resume`、
+   `strategy/devices` 全部生效（此前 optimizer/scheduler/loss 为死配置）。
+4. **验证指标接入训练循环**：`validation_step` 返回 `{"loss","preds","targets"}`，
+   Trainer 喂给 Task 持有的 MetricCollection，epoch 末 `on_validation_epoch_end()` 输出
+   accuracy/mAP/mIoU 等真实指标。
+5. **日志在 utils**：`utils/logging/`（TrainingLogger：console + file + JSONL + TensorBoard）；
+   全库去 print；旧 `TensorBoardLogger` 回调与 `utils/visualization.Visualizer` 已移除。
+6. **多卡**：`strategy=ddp` + `devices`，DDP 包装、DistributedSampler（drop_last=True 防死锁）、
+   rank0 专属保存/日志、验证指标 rank0 聚合（all_gather_object）；`test_ddp_smoke.py` 无卡自动跳过。
+7. **工作目录隔离**：默认 `~/dvisionix_runs/<experiment>/<ts>`（代码库外），
+   可经 CLI/配置/`DVISIONIX_WORK_DIR` 覆盖；合成数据缓存移入 work_dir；`runs/` 入 .gitignore。
+8. **自动续训**：`resume: false|auto|latest|<path>`；checkpoint 含
+   model/optimizer/scheduler/scaler/callbacks/rng/epoch/step；`config.resolved.yaml` dump 保证可复现。
+
+## 三、执行记录
+
+- [x] 阶段 A：Loss 模块独立
+  - 新建 `dvisionix/models/losses/`（BaseLoss/LossComposer/build_losses/compute_loss +
+    分类/分割/检测损失 + GridAssigner），全部注册 LOSSES。
+  - 删除 `dvisionix/training/losses.py`；`dvisionix/__init__` 改为从 `models.losses` 导出 build_loss。
+- [x] 阶段 B：Task 组件化与配置化
+  - 新增 optimizers.py / schedulers.py 注册表；BaseTask 支持 optimizer_cfg/scheduler_cfg/loss/metrics。
+  - 三大任务全部配置化；DetectionTask 改用 GridAssigner + GridDetectionLoss；
+    验证循环返回 preds/targets 并接入 MetricCollection。
+- [x] 阶段 C：统一 Trainer 增强
+  - 验证指标进 epoch 日志；梯度累积 epoch 末 flush；`torch.set_grad_enabled` 改上下文；
+    删除 train_logs/val_logs 死字段，fit 返回 history；删除 LearningRateScheduler 双轨逻辑。
+- [x] 阶段 D：日志/可视化统一到 utils
+  - 新建 `utils/logging/`（logger/tensorboard/training）；TrainingLogger（console+file+JSONL+TB）；
+    callbacks 全走 logger；移除 TensorBoardLogger 回调与 Visualizer。
+- [x] 阶段 E：多卡训练（DDP）
+  - Trainer 支持 strategy=ddp/devices；DistributedSampler（drop_last=True）、rank0 保存、指标聚合；
+    新增 test_ddp_smoke.py（无 GPU 自动 skip，多卡机器 torchrun 验证）。
+- [x] 阶段 F：工作目录隔离 + 自动续训
+  - workdir.py（默认 ~/dvisionix_runs/<exp>/<ts>，代码库外）；resume 三态 + 完整状态 + config dump。
+- [x] 阶段 G：端到端接线、迁移与收尾
+  - tools/train.py 重写（work_dir/resume/devices/strategy/loss 接线）；三个 demo 端到端跑通
+    （分类 acc、检测 mAP、分割 mIoU 均出现在验证日志）。
+  - 修复历史 bug：合成检测数据 boxes 应为 numpy；BaseDataset 支持 mask 路径加载。
+  - demos：删除 train_from_config.py（引用已删除的 TaskType）与 cifar10_demo.py（旧 Visualizer）；
+    修复 train_detection/segmentation 对 TensorBoardLogger 的引用。
+  - 版本号 0.3.0；全量测试 144 passed（含 1 个无卡自动跳过的 DDP 冒烟）。
+
+## 四、遗留事项（后续可选）
+
+- [ ] 多卡实机验证：`torchrun --nproc_per_node=2 tools/train.py --config ... --devices 0,1`
+      + `tests/test_training/test_ddp_smoke.py`。
+- [ ] CI 落地：GitHub Actions 跑 ruff/black/pytest --cov（ruff 当前环境未安装）。
+- [ ] 检测算法升级：GeneralizedModel 检测分支补 decode/评估；assigner 扩展（ATSS/FCOS 风格）。
+
+---
+
+# 结构/配置/导出优化（v0.3.1）
+
+> 三项收尾优化（用户确认全部按推荐方案）：training 目录重组、config schema 增强、export 重构。
+
+## 一、training 目录重组
+- 目标：目录表达"任务/回调是组件族"的架构语义，扩展点清晰（新增任务/回调 = 新增一个文件）。
+- 结果：
+  ```
+  training/
+    trainer.py            # 统一 Trainer
+    builder.py / workdir.py / evaluation.py
+    tasks/                # BaseTask + 分类/检测/分割 + build_task（主扩展点）
+    callbacks/            # CallbackList + ProgressBar/ModelCheckpoint/EarlyStopping（主扩展点）
+    optim/                # OPTIMIZERS / SCHEDULERS 注册表 + build_*
+  ```
+- 顶层 API 不变（`from dvisionix.training import Trainer, ClassificationTask, build_task, ...`）；
+  不保留转发垫片，仅同步 verify_all_modules.py 与内部导入。
+- 测试：training 相关 51 passed + 1 skipped。
+
+## 二、config 增强
+- 新增 `dvisionix/config/schema.py`：轻量 schema 校验（必填/类型/取值/未知键告警/别名提示），
+  无重依赖；`Config.validate_schema(task_type)` 入口接入 tools/train.py 并记录告警。
+- `_parse_cli_value` 支持 YAML 子集（`[0,1]` / `{...}`），`--cfg-options training.devices=[0,1]` 可用；
+  `dvisionix.config` 导出 `parse_cli_options`。
+- 死键清理：删除 `logging.tensorboard/log_dir`、`data.mean/std`、`model.pretrained/backbone`
+  （产物统一进 work_dir，归一化走 transforms 默认，保持单一事实来源）。
+- 双通道归一：`training.learning_rate/weight_decay` 降级为便捷别名（同时存在 optimizer.lr 时告警），
+  权威字段 `training.optimizer.lr/weight_decay`；默认配置与 demo 配置已迁移。
+- 测试：tests/test_config/test_schema.py（未知键告警/类型错误/别名/CLI list-dict）。
+
+## 三、export 重构
+- 实测发现的问题：多输入模型无法导出（TypeError）；dict 输出能导但输出名自动生成、verify 静默丢输出；
+  verify 仅单输入单输出；无任务感知；无测试覆盖。
+- 结果：`ONNXExporter` 支持 input_shapes / 自定义 dummy_inputs；输出自适应
+  （Tensor / tuple / list / dict 按键命名）；多输入多输出 verify；`backend='trace'|'dynamo'`
+  （dynamo 需 onnxscript，缺失给清晰提示）；normalize/metadata 写入 ONNX metadata_props。
+- 新增 tests/test_export/test_onnx_export.py（8 passed + 1 skipped）。
+- docs/model_export.md 更新：分类 / 检测（说明导出 raw preds）/ 自定义多输入 / dict 输出四类示例。
+
+## 四、验证
+- 全量测试：见下方最终结果。
+- README 架构树 / 项目结构章节同步更新。
+
+## 五、遗留事项
+- [ ] 多卡实机验证（torchrun + tests/test_training/test_ddp_smoke.py）。
+- [ ] CI 落地（ruff/black/pytest --cov；当前环境未装 ruff）。
+- [ ] export 的 dynamo 后端需在安装 onnxscript 的环境补跑 tests/test_export。
+- [ ] 检测算法升级：GeneralizedModel 检测分支补 decode/评估；assigner 扩展（ATSS/FCOS 风格）。

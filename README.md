@@ -22,7 +22,7 @@
 ### 📦 统一的数据接口
 - 所有任务（分类、检测、分割）使用相同的 BaseDataset 基类
 - 统一的字典格式输出
-- DatasetFactory 一键创建标准数据集
+- build_dataset 配置驱动构建数据集（注册即用）
 
 ### 📊 完整的指标支持
 - 分类：Accuracy, Precision, Recall, F1
@@ -36,27 +36,31 @@
 
 ---
 
-### 🏗️ 架构概览（v0.2.0）
+### 🏗️ 架构概览（v0.3.0）
 
 ```
 dvisionix/
-├── registry.py          # 全局注册表（MODELS / TASKS / LOSSES / METRICS / DATASETS）
-├── config.py            # YAML 配置驱动，支持 --cfg-options 覆盖
+├── registry.py          # 全局注册表（MODELS / TASKS / LOSSES / METRICS / DATASETS / ...）
+├── config/               # Config（YAML 继承 / CLI 覆盖 / schema 校验）
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath）
-│   ├── backbones/       # TimmBackbone 等
+│   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
 │   ├── necks/           # FPN
 │   ├── heads/           # ClsHead / SegHead / DetHead
-│   └── detectors/       # GeneralizedModel（backbone+neck+head 组合）
+│   ├── detectors/       # GeneralizedModel（backbone+neck+head 组合）
+│   └── losses/          # Loss 组件（BaseLoss 继承 + LossComposer 自由组合，接入任意 Task）
 ├── training/
-│   ├── trainer.py       # AMP / 梯度累积 / seed / resume / 加权聚合
-│   ├── task.py          # BaseTask（training_step / validation_step / configure_optimizers）
-│   ├── callbacks.py     # ProgressBar / ModelCheckpoint / EarlyStopping / TensorBoard
-│   └── losses.py        # FocalLoss / DiceLoss / GIoULoss / DetectionLoss
+│   ├── trainer.py       # 统一 Trainer（Task 驱动 / DDP / AMP / 梯度累积 / resume / work_dir）
+│   ├── task.py          # BaseTask + 分类/检测/分割任务（optimizer/loss/metrics 全配置化）
+│   ├── callbacks.py     # ProgressBar / ModelCheckpoint / EarlyStopping
+│   ├── optimizers.py    # OPTIMIZERS 注册表（adam/adamw/sgd/rmsprop）
+│   ├── schedulers.py    # SCHEDULERS 注册表（cosine/plateau/step/multi_step）
+│   ├── workdir.py       # 工作目录隔离 + resume 三态 + config dump
+│   └── builder.py       # build_callbacks / build_trainer
 ├── data/
 │   ├── sample.py         # Sample 协议 + ImageMode / ImageInfo / NormalizationSpec
-│   ├── base.py          # BaseDataset（Sample 驱动 + transforms 装一化扱一权）
+│   ├── base.py          # BaseDataset（Sample 驱动 + mask 路径加载）
 │   ├── collate.py       # detection_collate / segmentation_collate
 │   ├── presets.py       # 主流公开数据集工具箱（CIFAR/ImageNet/COCO/VOC/Cityscapes/ADE20K/ImageFolder）
 │   ├── datasets/
@@ -68,17 +72,22 @@ dvisionix/
 │       ├── labels.py      # LabelToTensor / BoxesToTensor / MaskToTensor
 │       ├── third_party.py # AlbumentationsWrapper（适配 albumentations / kornia / torchvision）
 │       └── builder.py     # build_transform / build_pipeline
-└── metrics/
-    ├── classification.py  # Accuracy / Precision / Recall / F1
-    ├── segmentation.py    # mIoU / Pixel Accuracy
-    ├── detection.py       # COCO mAP（内置实现 + torchmetrics 可选）
-    ├── collection.py      # MetricCollection 组合容器（原子指标自由组合）
-    └── presets.py         # get_preset_metrics + 预设组合类
+├── metrics/
+│   ├── classification.py  # Accuracy / Precision / Recall / F1
+│   ├── segmentation.py    # mIoU / Pixel Accuracy
+│   ├── detection.py       # COCO mAP（内置实现 + torchmetrics 可选）
+│   ├── collection.py      # MetricCollection 组合容器（原子指标自由组合）
+│   └── presets.py         # get_preset_metrics + 预设组合类
+└── utils/
+    └── logging/           # 日志/可视化（console + file + JSONL + TensorBoard）
 ```
 
 - **配置驱动**：所有入口统一通过 `tools/train.py --config` 或 `Config` 编程 API。
 - **注册表**：`build_model` / `build_task` / `build_loss` / `build_metric` / `build_dataset` 从全局注册表按名称查找。
 - **归一化唯一权威**：transforms 内的 `Normalize` 类掌控归一化，`BaseDataset` 自动感知避免二次归一化。
+- **Loss 在模型层**：dvisionix/models/losses（BaseLoss 继承 + LossComposer 自由组合，接入任意 Task）。
+- **日志/可视化**：统一在 utils/logging（TrainingLogger），支持 console / 文件 / JSONL / TensorBoard。
+- **工作目录与续训**：默认 ~/dvisionix_runs/&lt;exp&gt;/&lt;ts&gt;（代码库外），--resume auto 自动续训；支持 DDP 多卡。
 
 ---
 
@@ -174,11 +183,11 @@ trainer.fit(model)
 ### 模块依赖
 
 `
-data (BaseDataset, DatasetFactory, Transforms)
+data (BaseDataset, build_dataset, Transforms)
     ↓
-models (BaseModel, CNN, Segmentation, Detection)
+models (BaseModel, CNN, Segmentation, Detection, Losses)
     ↓
-training (Trainer, Tasks, Callbacks, Losses)
+training (Trainer, Tasks, Callbacks)
     ↓
 metrics (原子指标 + MetricCollection + 预设组合)
 `
@@ -259,37 +268,23 @@ trainer.fit(your_model)
 
 ## 📁 项目结构
 
-`
+```
 DVisionix/
 ├── dvisionix/                  # 核心库代码
-│   ├── __init__.py
-│   ├── data/                     # 数据模块
-│   │   ├── base.py              # BaseDataset, TaskType, DataFormat
-│   │   ├── factory.py           # DatasetFactory
-│   │   ├── adapters/           # 标准数据集适配器
-│   │   │   ├── classification.py
-│   │   │   ├── detection.py
-│   │   │   └── segmentation.py
-│   │   ├── datasets/            # 自定义数据集
-│   │   └── transforms/          # 数据变换
-│   ├── models/                   # 模型模块
-│   │   └── base.py
-│   ├── training/                 # 训练模块（核心架构）
-│   │   ├── trainer.py           # 通用 Trainer
-│   │   ├── task.py              # Task 系统
-│   │   ├── callbacks.py         # Callback 系统
-│   │   └── losses.py           # 损失函数
-│   ├── metrics/                  # 指标模块
-│   │   ├── classification.py
-│   │   ├── segmentation.py
-│   │   └── detection.py
-│   └── utils/                     # 工具函数
-├── docs/                       # 文档
-├── tests/                      # 测试
-├── demos/                      # 演示脚本
-├── CodePlan.md                  # 开发计划
-└── requirements.txt             # 依赖清单
-`
+│   ├── registry.py             # 全局注册表 + build_from_cfg
+│   ├── config/                 # Config（YAML 继承 / CLI 覆盖）
+│   ├── data/                   # BaseDataset / Sample 契约 / transforms / presets / collate
+│   ├── models/                 # BaseModel / backbones / necks / heads / detectors
+│   │   └── losses/             # Loss 组件（BaseLoss 继承 + LossComposer 组合）
+│   ├── training/               # Trainer / tasks / callbacks / optim / workdir
+│   ├── metrics/                # 原子指标 + MetricCollection 组合
+│   ├── utils/logging/          # 日志/可视化（console + file + JSONL + TensorBoard）
+│   └── export/                 # ONNX 导出
+├── tools/train.py              # 配置驱动训练入口
+├── configs/                    # 任务示例配置
+├── tests/                      # pytest 测试
+└── demos/                      # 演示脚本
+```
 
 ---
 

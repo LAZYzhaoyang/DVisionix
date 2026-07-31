@@ -23,12 +23,12 @@ conda run -n dvisionix python demos/train_from_config.py
 
 ```python
 from torch.utils.data import DataLoader
-from dvisionix.data import DatasetFactory
+from dvisionix.data import build_dataset
 from dvisionix.data.transforms import ClassificationTransforms
 from dvisionix.models import SimpleCNN
 from dvisionix.training import Trainer, ClassificationTask
 
-train_ds = DatasetFactory.create("cifar10", root="./data", train=True,
+train_ds = build_dataset({"type": "cifar10", "root": "./data", "train": True,
                                  transforms=ClassificationTransforms(train=True, image_size=32))
 train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)
 

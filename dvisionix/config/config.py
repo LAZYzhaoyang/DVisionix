@@ -176,6 +176,18 @@ class Config:
             current = current[part]
         return True
 
+    def validate_schema(self, task_type: Optional[str] = None) -> List[str]:
+        """按任务 schema 校验配置，返回未知键/别名告警列表；类型/取值错误抛 ValueError。
+
+        Args:
+            task_type: 'classification' / 'detection' / 'segmentation'（可选）。
+
+        Returns:
+            告警字符串列表（未知键、便捷别名提示等）。
+        """
+        from .schema import validate_schema
+        return validate_schema(self._config, task_type)
+
 
 
     # ---------------- CLI 覆盖 ----------------
@@ -218,12 +230,22 @@ class Config:
 
 
 def _parse_cli_value(value: str) -> Any:
-    """将 CLI 字符串值解析为 Python 类型。"""
+    """将 CLI 字符串值解析为 Python 类型。
+
+    支持 bool / null / int / float，以及 YAML 子集（``[0, 1]``、``{"a": 1}``）。
+    """
     low = value.lower()
     if low in ("true", "false"):
         return low == "true"
     if low in ("null", "none"):
         return None
+    if value.startswith(("[", "{")):
+        try:
+            parsed = yaml.safe_load(value)
+            if not isinstance(parsed, str):
+                return parsed
+        except yaml.YAMLError:
+            pass
     try:
         return int(value)
     except ValueError:

@@ -93,10 +93,27 @@ class BaseDataset(Dataset):
             return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         raise TypeError(f"Unsupported image type: {type(img)}")
 
+    def load_mask(self, sample: Dict[str, Any]) -> np.ndarray:
+        """读取 ``mask`` 字段为 numpy int64 (H, W)（支持路径 / ndarray / Tensor）。"""
+        mask = sample.get("mask")
+        if isinstance(mask, np.ndarray):
+            return mask
+        if isinstance(mask, torch.Tensor):
+            return mask.detach().cpu().numpy()
+        if isinstance(mask, str):
+            import cv2
+            arr = cv2.imread(mask, cv2.IMREAD_GRAYSCALE)
+            if arr is None:
+                raise FileNotFoundError(f"Failed to read mask: {mask}")
+            return arr
+        raise TypeError(f"Unsupported mask type: {type(mask)}")
+
     def __getitem__(self, index: int) -> Dict[str, Any]:
         raw = dict(self.samples[index])
         if "image" in raw and not isinstance(raw["image"], (np.ndarray, torch.Tensor)):
             raw["image"] = self.load_image(raw)
+        if "mask" in raw and isinstance(raw["mask"], str):
+            raw["mask"] = self.load_mask(raw)
         if not self.return_meta and "meta" in raw:
             raw.pop("meta", None)
         if self.transforms is not None:

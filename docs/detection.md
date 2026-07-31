@@ -89,7 +89,7 @@ print(metrics)   # {"mAP": ..., "mAP_50": ..., "mAP_75": ...}
 - 指标：训练/验证均输出 `obj_loss / box_loss / cls_loss / cls_acc`。
 
 ## 真实数据与进阶
-- 真实数据集：`DatasetFactory.create("coco"/"voc", ...)`（适配器接入中），
+- 真实数据集：`build_dataset({"type": "coco_detection", ...})`，
   或用 `CustomDataset` 提供你自己的标注。
 - 该检测器为教学级实现（单元格单框、无多尺度/anchor）。若在合成数据上追求高 mAP，
   可增大训练轮数使框回归充分收敛；生产级检测建议接入成熟框架，

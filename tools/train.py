@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
-"""配置驱动的统一训练入口。
+"""配置驱动的统一训练入口（v0.3.0）。
 
 用法::
 
     python tools/train.py --config configs/classification/demo_synthetic.yaml
     python tools/train.py --config xxx.yaml --cfg-options training.learning_rate=0.01
+    python tools/train.py --config xxx.yaml --resume auto            # 续最近一次任务
+    python tools/train.py --config xxx.yaml --work-dir /path/to/run  # 指定工作目录
+    torchrun --nproc_per_node=2 tools/train.py --config xxx.yaml --devices 0,1
 
 配置需包含 task_type / model / data / training 等字段，详见 CodePlan.md。
+训练产物（日志 / TensorBoard / 检查点 / 最终配置）全部落在 work_dir（默认在代码库外）。
 """
 
 import argparse
@@ -28,17 +32,23 @@ from dvisionix.data.transforms import (
 )
 from dvisionix.models import build_model
 from dvisionix.training import (
-    Trainer,
     build_task,
-    ModelCheckpoint,
-    EarlyStopping,
-    TensorBoardLogger,
+    build_trainer,
+    resolve_work_dir,
+    find_checkpoint,
+    dump_config,
 )
 from dvisionix.utils import get_logger, set_seed
 
+_TASK_TYPES = ("classification", "detection", "segmentation")
+_TASK_MAPPING = {
+    "classification": "ClassificationTask",
+    "detection": "DetectionTask",
+    "segmentation": "SegmentationTask",
+}
 
-def build_transforms(task_type, image_size, train, mean=None, std=None):
-    """根据任务类型构建默认变换。"""
+
+def build_transforms(task_type, image_size, train):
     if task_type == "classification":
         return ClassificationTransforms(train=train, image_size=image_size)
     if task_type == "detection":
@@ -48,11 +58,11 @@ def build_transforms(task_type, image_size, train, mean=None, std=None):
     raise ValueError(f"Unknown task_type: {task_type}")
 
 
-def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, transforms):
+def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, transforms, cache_dir=None):
     """生成内存合成数据集（便于无网络环境快速验证）。"""
     import cv2
 
-    tmp_dir = os.path.join(".cache", "synthetic", task_type)
+    tmp_dir = cache_dir or os.path.join(".cache", "synthetic", task_type)
     os.makedirs(tmp_dir, exist_ok=True)
     samples = []
     for i in range(num_samples):
@@ -68,8 +78,8 @@ def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, tra
             y2 = y1 + np.random.randint(10, image_size // 2)
             samples.append({
                 "image": path,
-                "boxes": [[float(x1), float(y1), float(x2), float(y2)]],
-                "labels": [i % num_classes],
+                "boxes": np.array([[float(x1), float(y1), float(x2), float(y2)]], dtype=np.float32),
+                "labels": np.array([i % num_classes], dtype=np.int64),
             })
         elif task_type == "segmentation":
             mask = (np.random.rand(image_size, image_size) * num_classes).astype(np.uint8)
@@ -79,8 +89,12 @@ def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, tra
     return CustomDataset(samples=samples, task_type=task_type, transforms=transforms)
 
 
-def build_data(cfg):
-    """根据配置构建 (train_loader, val_loader)。"""
+def build_data(cfg, work_dir=None):
+    """根据配置构建 (train_loader, val_loader)。
+
+    Args:
+        work_dir: 工作目录；合成数据缓存写到 work_dir/.cache/synthetic（隔离代码库）。
+    """
     task_type = cfg.task_type
     image_size = cfg.data.image_size
     num_classes = cfg.model.num_classes
@@ -93,8 +107,9 @@ def build_data(cfg):
     if dataset_name in ("custom", "synthetic") or data_cfg.get("synthetic", False):
         n_train = data_cfg.get("num_samples", 64)
         n_val = data_cfg.get("val_samples", 16)
-        train_ds = build_synthetic_dataset(task_type, n_train, num_classes, image_size, train_tf)
-        val_ds = build_synthetic_dataset(task_type, n_val, num_classes, image_size, val_tf)
+        cache_dir = os.path.join(work_dir, ".cache", "synthetic", task_type) if work_dir else None
+        train_ds = build_synthetic_dataset(task_type, n_train, num_classes, image_size, train_tf, cache_dir)
+        val_ds = build_synthetic_dataset(task_type, n_val, num_classes, image_size, val_tf, cache_dir)
     else:
         root = data_cfg.get("root", "./data")
         train_kwargs = dict(root=root, train=True, transforms=train_tf,
@@ -117,44 +132,42 @@ def build_data(cfg):
     return train_loader, val_loader
 
 
-def build_callbacks(cfg):
-    callbacks = []
-    ckpt = cfg.get("checkpoint", {})
-    callbacks.append(ModelCheckpoint(
-        save_dir=ckpt.get("save_dir", "./checkpoints"),
-        monitor=ckpt.get("monitor", "val_loss"),
-        mode=ckpt.get("mode", "min"),
-        save_best_only=ckpt.get("save_best_only", True),
-    ))
-    log_cfg = cfg.get("logging", {})
-    if log_cfg.get("tensorboard", True):
-        callbacks.append(TensorBoardLogger(log_dir=log_cfg.get("log_dir", "./logs")))
-    es = cfg.training.get("early_stopping", {})
-    if es and es.get("enabled", False):
-        callbacks.append(EarlyStopping(
-            monitor=es.get("monitor", "val_loss"),
-            mode=es.get("mode", "min"),
-            patience=es.get("patience", 5),
-        ))
-    return callbacks
+def build_task_cfg(cfg):
+    """从配置组装 Task 构建参数（optimizer/scheduler/loss/metrics 全部配置驱动）。"""
+    task_cfg = dict(cfg.get("task", {}) or {})
+    if "type" not in task_cfg:
+        task_cfg["type"] = _TASK_MAPPING[cfg.task_type]
+    task_cfg.setdefault("num_classes", cfg.model.num_classes)
+
+    training = cfg.get("training", {}) or {}
+    optimizer_cfg = dict(training.get("optimizer", {}) or {})
+    optimizer_cfg.setdefault("lr", training.get("learning_rate", 1e-3))
+    optimizer_cfg.setdefault("weight_decay", training.get("weight_decay", 1e-4))
+    task_cfg.setdefault("optimizer_cfg", optimizer_cfg)
+
+    scheduler_cfg = dict(training.get("scheduler", {}) or {})
+    task_cfg.setdefault("scheduler_cfg", scheduler_cfg)
+
+    loss = cfg.get("loss")
+    if loss is not None:
+        loss = loss.to_dict() if isinstance(loss, Config) else dict(loss)
+        if cfg.task_type == "detection" and "num_classes" not in loss:
+            loss["num_classes"] = cfg.model.num_classes
+        task_cfg.setdefault("loss", loss)
+
+    metrics = cfg.get("metrics")
+    if metrics is not None:
+        metrics = metrics.to_dict() if isinstance(metrics, Config) else dict(metrics)
+        task_cfg.setdefault("metrics", metrics)
+
+    return task_cfg
 
 
-def _default_task_cfg(cfg):
-    """若配置未显式给出 task 段，按 task_type 推断默认任务类型。"""
-    mapping = {
-        "classification": "ClassificationTask",
-        "detection": "DetectionTask",
-        "segmentation": "SegmentationTask",
-    }
-    type_name = mapping.get(cfg.task_type)
-    if type_name is None:
-        raise ValueError(f"Cannot infer task for task_type={cfg.task_type}")
-    return {
-        "type": type_name,
-        "num_classes": cfg.model.num_classes,
-        "learning_rate": cfg.training.get("learning_rate", 1e-3),
-        "weight_decay": cfg.training.get("weight_decay", 1e-4),
-    }
+def parse_devices(value):
+    """'0,1' -> [0, 1]。"""
+    if value is None:
+        return None
+    return [int(x) for x in str(value).split(",") if x.strip() != ""]
 
 
 def main():
@@ -163,42 +176,52 @@ def main():
     parser.add_argument("--cfg-options", nargs="*", default=[],
                         help="override config, e.g. training.learning_rate=0.01")
     parser.add_argument("--resume", default=None,
-                        help="path to checkpoint to resume from")
+                        help="resume mode: auto / latest / <checkpoint path>")
+    parser.add_argument("--work-dir", default=None, help="explicit work dir (default: ~/dvisionix_runs/<exp>/<ts>)")
+    parser.add_argument("--devices", default=None, help="devices for DDP, e.g. '0,1'")
+    parser.add_argument("--strategy", default=None, help="auto / ddp / none")
+    parser.add_argument("--force", action="store_true", help="force fresh run (ignore resume)")
     args = parser.parse_args()
 
     cfg = Config.from_yaml(args.config)
     cfg.update_from_cli(args.cfg_options)
     cfg.validate(["task_type", "model.num_classes", "training.num_epochs"])
+    schema_warnings = cfg.validate_schema(cfg.task_type)
+
+    resume = None if args.force else (args.resume or cfg.get("resume", False))
+    work_dir = resolve_work_dir(cfg, cli_work_dir=args.work_dir, resume=resume)
+    resume_path = find_checkpoint(work_dir, resume)
+    os.makedirs(work_dir, exist_ok=True)
+    dump_config(cfg, os.path.join(work_dir, "config.resolved.yaml"))
 
     seed = cfg.training.get("seed", 42)
     set_seed(seed)
-
-    logger = get_logger("dvisionix.train", level="info",
-                        log_dir=cfg.get("logging", {}).get("log_dir", "./logs"))
+    logger = get_logger("dvisionix.train", level="info", log_dir=os.path.join(work_dir, "logs"))
     logger.info(f"Config: {args.config}")
-    model_label = cfg.model.get("type") or cfg.model.get("name")
-    logger.info(f"Task: {cfg.task_type}, model: {model_label}")
+    logger.info(f"Task: {cfg.task_type}, model: {cfg.model.get('type') or cfg.model.get('name')}")
+    logger.info(f"Work dir: {work_dir}")
+    if resume_path:
+        logger.info(f"Resume from: {resume_path}")
+    for w in schema_warnings:
+        logger.warning(w)
 
-    train_loader, val_loader = build_data(cfg)
+    train_loader, val_loader = build_data(cfg, work_dir=work_dir)
     logger.info(f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
 
     model = build_model(cfg.model.to_dict())
     logger.info(f"Model params: {model.count_parameters():,}")
 
-    task = build_task(cfg.task.to_dict() if "task" in cfg else _default_task_cfg(cfg))
+    task = build_task(build_task_cfg(cfg))
 
-    trainer = Trainer(
-        task=task,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        callbacks=build_callbacks(cfg),
-        device=cfg.training.get("device", "auto"),
-        max_epochs=cfg.training.num_epochs,
-        gradient_clip_val=cfg.training.get("gradient_clip_val", None),
-        amp=cfg.training.get("amp", False),
-        accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
-        seed=seed,
-        resume_from=args.resume or cfg.training.get("resume_from"),
+    trainer = build_trainer(
+        cfg,
+        task,
+        train_loader,
+        val_loader,
+        work_dir=work_dir,
+        resume_from=resume_path,
+        devices=parse_devices(args.devices),
+        strategy=args.strategy,
     )
     trainer.fit(model)
 

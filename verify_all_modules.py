@@ -17,10 +17,10 @@ print("=" * 60)
 def test_import(name, module_path):
     try:
         __import__(module_path)
-        print(f"✓ {name}")
+        print(f"[OK] {name}")
         return True
     except Exception as e:
-        print(f"✗ {name}: {e}")
+        print(f"[FAIL] {name}: {e}")
         return False
 
 all_passed = True
@@ -50,9 +50,9 @@ all_passed &= test_import("BoxSyncResize", "dvisionix.data.transforms.geometric"
 # 训练模块
 print("\n训练模块:")
 all_passed &= test_import("Trainer", "dvisionix.training.trainer")
-all_passed &= test_import("BaseTask", "dvisionix.training.task")
-all_passed &= test_import("Callback", "dvisionix.training.callbacks")
-all_passed &= test_import("Losses", "dvisionix.training.losses")
+all_passed &= test_import("BaseTask", "dvisionix.training.tasks")
+all_passed &= test_import("Callback", "dvisionix.training.callbacks.base")
+all_passed &= test_import("Losses", "dvisionix.models.losses")
 
 # 指标模块
 print("\n指标模块:")
@@ -70,7 +70,7 @@ all_passed &= test_import("SequentialBackbone", "dvisionix.models.backbones")
 
 print("\n" + "=" * 60)
 if all_passed:
-    print("✓ 所有模块导入成功！")
+    print("[OK] 所有模块导入成功！")
 else:
-    print("✗ 部分模块导入失败！")
+    print("[FAIL] 部分模块导入失败！")
 print("=" * 60)
