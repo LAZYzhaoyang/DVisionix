@@ -55,10 +55,19 @@ dvisionix/
 │   ├── callbacks.py     # ProgressBar / ModelCheckpoint / EarlyStopping / TensorBoard
 │   └── losses.py        # FocalLoss / DiceLoss / GIoULoss / DetectionLoss
 ├── data/
-│   ├── base.py          # BaseDataset（transforms 归一化唯一权威）
-│   ├── factory.py       # DatasetFactory
-│   ├── transforms/      # 分类 / 检测 / 分割变换 + Albumentations 集成
-│   └── adapters/        # CIFAR / COCO / Cityscapes 适配器
+│   ├── sample.py         # Sample 协议 + ImageMode / ImageInfo / NormalizationSpec
+│   ├── base.py          # BaseDataset（Sample 驱动 + transforms 装一化扱一权）
+│   ├── collate.py       # detection_collate / segmentation_collate
+│   ├── presets.py       # 主流公开数据集工具箱（CIFAR/ImageNet/COCO/VOC/Cityscapes/ADE20K/ImageFolder）
+│   ├── datasets/
+│   │   └── custom.py        # CustomDataset（自定义模板范例）
+│   └── transforms/
+│       ├── base.py        # BaseTransform / TransformPipeline
+│       ├── image.py       # 原子：ImageResize / Flip / Crop / ColorJitter / Normalize / ToTensor
+│       ├── geometric.py   # 几何同步：BoxSyncResize / BoxSyncRandomHorizontalFlip / BoxSyncRandomCrop / BoxSyncPad
+│       ├── labels.py      # LabelToTensor / BoxesToTensor / MaskToTensor
+│       ├── third_party.py # AlbumentationsWrapper（适配 albumentations / kornia / torchvision）
+│       └── builder.py     # build_transform / build_pipeline
 └── metrics/
     ├── classification.py  # Accuracy / Precision / Recall / F1
     ├── segmentation.py    # mIoU / Pixel Accuracy

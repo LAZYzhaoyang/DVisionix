@@ -46,7 +46,7 @@ def build_synthetic_dataset(tmp_dir, num_samples, num_classes, image_size, trans
         path = os.path.join(tmp_dir, f"img_{i:04d}.png")
         if not os.path.exists(path):
             cv2.imwrite(path, img)
-        samples.append({"image_path": path, "label": i % num_classes})
+        samples.append({"image": path, "label": i % num_classes})
     return CustomDataset(
         task_type="classification",
         samples=samples,

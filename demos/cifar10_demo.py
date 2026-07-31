@@ -18,7 +18,7 @@ print("=" * 60)
 print("DVisionix CIFAR-10 增强版 Demo (TensorBoard + 多指标)")
 print("=" * 60)
 
-from dvisionix.data import DatasetFactory, ClassificationTransforms
+from dvisionix.data import build_dataset, ClassificationTransforms
 from dvisionix.models import SimpleCNN
 from dvisionix.training import Trainer
 from dvisionix.utils import Visualizer
@@ -42,7 +42,7 @@ NUM_CLASSES = 10
 train_transforms = ClassificationTransforms(train=True, image_size=32)
 val_transforms = ClassificationTransforms(train=False, image_size=32)
 
-train_dataset = DatasetFactory.create(
+train_dataset = build_dataset(
     name="cifar10",
     root="./data",
     train=True,
@@ -50,7 +50,7 @@ train_dataset = DatasetFactory.create(
     download=True,
 )
 
-val_dataset = DatasetFactory.create(
+val_dataset = build_dataset(
     name="cifar10",
     root="./data",
     train=False,

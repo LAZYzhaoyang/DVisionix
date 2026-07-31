@@ -36,15 +36,16 @@ all_passed &= test_import("dvisionix.utils", "dvisionix.utils")
 
 # 数据适配器
 print("\n数据适配器:")
-all_passed &= test_import("ClassificationDatasetAdapter", "dvisionix.data.adapters.classification")
-all_passed &= test_import("DetectionDatasetAdapter", "dvisionix.data.adapters.detection")
-all_passed &= test_import("SegmentationDatasetAdapter", "dvisionix.data.adapters.segmentation")
+all_passed &= test_import("BaseDataset", "dvisionix.data.base")
+all_passed &= test_import("CustomDataset", "dvisionix.data.datasets.custom")
+all_passed &= test_import("CIFAR10Dataset", "dvisionix.data.presets")
+all_passed &= test_import("CocoDetectionDataset", "dvisionix.data.presets")
 
 # 数据变换
 print("\n数据变换:")
-all_passed &= test_import("ClassificationTransforms", "dvisionix.data.transforms.classification")
-all_passed &= test_import("DetectionTransforms", "dvisionix.data.transforms.detection")
-all_passed &= test_import("SegmentationTransforms", "dvisionix.data.transforms.segmentation")
+all_passed &= test_import("BaseTransform", "dvisionix.data.transforms.base")
+all_passed &= test_import("ImageResize", "dvisionix.data.transforms.image")
+all_passed &= test_import("BoxSyncResize", "dvisionix.data.transforms.geometric")
 
 # 训练模块
 print("\n训练模块:")

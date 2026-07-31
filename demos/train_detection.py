@@ -65,7 +65,7 @@ def build_det_dataset(tmp_dir, num_samples, num_classes, image_size, max_boxes):
             labels.append(cls)
         path = os.path.join(tmp_dir, f"img_{i:04d}.png")
         cv2.imwrite(path, img)
-        samples.append({"image_path": path, "boxes": boxes, "labels": labels})
+        samples.append({"image": path, "boxes": boxes, "labels": labels})
 
     return CustomDataset(
         task_type="detection",

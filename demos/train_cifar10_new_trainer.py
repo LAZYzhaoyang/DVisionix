@@ -19,7 +19,7 @@ sys.path.insert(0, "D:\\ZhaoyangProject\\DVisionix")
 import torch
 from torch.utils.data import DataLoader
 
-from dvisionix.data import DatasetFactory
+from dvisionix.data import build_dataset
 from dvisionix.data.transforms import ClassificationTransforms
 from dvisionix.models import SimpleCNN
 from dvisionix.training import (
@@ -59,7 +59,7 @@ def main():
     val_transforms = ClassificationTransforms(train=False, image_size=32)
     
     # 使用工厂创建数据集
-    train_dataset = DatasetFactory.create(
+    train_dataset = build_dataset(
         name="cifar10",
         root=config["data_root"],
         train=True,
@@ -67,7 +67,7 @@ def main():
         download=True,
     )
     
-    val_dataset = DatasetFactory.create(
+    val_dataset = build_dataset(
         name="cifar10",
         root=config["data_root"],
         train=False,

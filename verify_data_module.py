@@ -1,111 +1,109 @@
-# NOTE: v0.2.0 起本仓库已迁移到 pytest。请使用:
-#   pytest tests/
-# 该脚本仅作为历史保留，最新覆盖等价于 tests/test_data/ 与 tests/test_models/。
-# D:\ZhaoyangProject\DVisionix\verify_data_module.py
+# -*- coding: utf-8 -*-
+"""Data module quick smoke test.
 
-"""
-验证数据模块是否正常工作
+Note: comprehensive coverage lives in ``tests/test_data/``. This script is just
+a one-shot sanity check that the new unified data layer (Sample contract,
+BaseDataset, atomic transforms, presets, build_dataset) can be imported and
+instantiated end-to-end.
 """
 
 import os
 import sys
 import tempfile
-import numpy as np
 
-# 添加项目路径
+import numpy as np
+import cv2
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-print("=" * 60)
-print("DVisionix 数据模块验证")
-print("=" * 60)
 
-# 1. 测试导入
-print("\n1. 测试模块导入...")
-try:
+def _section(title: str) -> None:
+    print()
+    print(title)
+
+
+def main() -> int:
+    print("=" * 60)
+    print("DVisionix data module smoke test")
+    print("=" * 60)
+
+    _section("1. Imports")
     from dvisionix.data import (
         BaseDataset,
-        TaskType,
-        DataFormat,
         CustomDataset,
-        DatasetFactory,
         ClassificationTransforms,
+        DetectionTransforms,
+        SegmentationTransforms,
+        Sample,
+        build_dataset,
     )
-    print("   ✅ 导入成功")
-except Exception as e:
-    print(f"   ❌ 导入失败: {e}")
-    sys.exit(1)
+    from dvisionix.registry import DATASETS, TRANSFORMS
+    print("   OK")
 
-# 2. 测试基础类型
-print("\n2. 测试基础类型...")
-try:
-    assert TaskType.CLASSIFICATION.value == "classification"
-    df = DataFormat(num_classes=10)
-    assert df.num_classes == 10
-    print("   ✅ 基础类型正常")
-except Exception as e:
-    print(f"   ❌ 基础类型错误: {e}")
+    _section("2. Registries")
+    expected_datasets = {"base_dataset", "custom", "cifar10", "cifar100",
+                         "imagenet", "imagefolder", "coco_detection",
+                         "voc_detection", "cityscapes", "voc_segmentation",
+                         "ade20k"}
+    missing = expected_datasets - set(DATASETS.keys())
+    assert not missing, f"Missing datasets: {missing}"
+    print(f"   OK  ({len(DATASETS)} datasets registered)")
 
-# 3. 测试自定义数据集
-print("\n3. 测试自定义数据集...")
-try:
-    import cv2
-    
+    expected_transforms = {"ImageResize", "BoxSyncResize", "ToTensor",
+                            "ImageNormalize", "ClassificationTransforms",
+                            "DetectionTransforms", "SegmentationTransforms",
+                            "classification_transforms", "detection_transforms",
+                            "segmentation_transforms", "albumentations"}
+    missing_t = expected_transforms - set(TRANSFORMS.keys())
+    assert not missing_t, f"Missing transforms: {missing_t}"
+    print(f"   OK  ({len(TRANSFORMS)} transforms registered)")
+
+    _section("3. CustomDataset (no transforms)")
     with tempfile.TemporaryDirectory() as tmpdir:
-        # 创建测试图像
-        for i in range(5):
+        for i in range(3):
             img = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
             cv2.imwrite(os.path.join(tmpdir, f"img_{i}.png"), img)
-        
-        samples = [
-            {"image_path": os.path.join(tmpdir, f"img_{i}.png"), "label": i % 2}
-            for i in range(5)
-        ]
-        
-        dataset = CustomDataset(
-            task_type="classification",
-            samples=samples,
-            num_classes=2,
-        )
-        
-        assert len(dataset) == 5
-        sample = dataset[0]
-        assert "image" in sample
-        assert "label" in sample
-        assert sample["image"].shape[0] == 3  # CHW 格式
-        
-        print(f"   ✅ 数据集大小: {len(dataset)}")
-        print(f"   ✅ 图像形状: {sample['image'].shape}")
-        print(f"   ✅ 标签: {sample['label'].item()}")
-except Exception as e:
-    print(f"   ❌ 自定义数据集错误: {e}")
-    import traceback
-    traceback.print_exc()
 
-# 4. 测试变换
-print("\n4. 测试数据变换...")
-try:
-    transforms = ClassificationTransforms(train=True, image_size=32)
-    
+        samples = [
+            {"image": os.path.join(tmpdir, f"img_{i}.png"), "label": i % 2}
+            for i in range(3)
+        ]
+        ds = CustomDataset(samples=samples, task_type="classification")
+        assert len(ds) == 3
+        s = ds[0]
+        assert isinstance(s, dict)
+        assert s["image"].shape == (64, 64, 3)  # numpy HWC, no transforms applied
+        assert int(s["label"]) == 0
+    print("   OK")
+
+    _section("4. CustomDataset + ClassificationTransforms")
     with tempfile.TemporaryDirectory() as tmpdir:
         img = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
         img_path = os.path.join(tmpdir, "test.png")
         cv2.imwrite(img_path, img)
-        
-        samples = [{"image_path": img_path, "label": 0}]
-        dataset = CustomDataset(
+        ds = CustomDataset(
+            samples=[{"image": img_path, "label": 0}],
             task_type="classification",
-            samples=samples,
-            num_classes=2,
-            transforms=transforms,
+            transforms=ClassificationTransforms(train=True, image_size=32),
         )
-        
-        sample = dataset[0]
-        assert sample["image"].shape[1] == 32
-        assert sample["image"].shape[2] == 32
-        print(f"   ✅ 变换后图像形状: {sample['image'].shape}")
-except Exception as e:
-    print(f"   ❌ 变换错误: {e}")
+        s = ds[0]
+        # image should now be a tensor (3, 32, 32)
+        assert hasattr(s["image"], "shape") and len(s["image"].shape) == 3
+        assert s["image"].shape == (3, 32, 32)
+    print("   OK")
 
-print("\n" + "=" * 60)
-print("✅ 数据模块验证完成！")
-print("=" * 60)
+    _section("5. build_dataset registry factory")
+    cfg = {"type": "custom", "samples": [{"image": "dummy.png", "label": 0}]}
+    ds = build_dataset(cfg)
+    assert isinstance(ds, BaseDataset)
+    print(f"   OK  -> {type(ds).__name__}")
+
+    print()
+    print("=" * 60)
+    print("Data module smoke test passed!")
+    print("=" * 60)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

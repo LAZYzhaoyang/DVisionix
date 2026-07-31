@@ -25,8 +25,9 @@ wheels/
 *.pth
 *.pkl
 
-# Data
-data/
+# Data (only ignore the top-level "data/" used for raw datasets / cache)
+/data/
+!/dvisionix/data/
 *.zip
 *.tar
 *.gz

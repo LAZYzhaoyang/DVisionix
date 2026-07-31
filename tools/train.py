@@ -20,7 +20,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from dvisionix.config import Config
-from dvisionix.data import DatasetFactory, CustomDataset, TaskType
+from dvisionix.data import build_dataset, CustomDataset
 from dvisionix.data.transforms import (
     ClassificationTransforms,
     DetectionTransforms,
@@ -61,13 +61,13 @@ def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, tra
         if not os.path.exists(path):
             cv2.imwrite(path, img)
         if task_type == "classification":
-            samples.append({"image_path": path, "label": i % num_classes})
+            samples.append({"image": path, "label": i % num_classes})
         elif task_type == "detection":
             x1, y1 = np.random.randint(0, image_size // 2, 2)
             x2 = x1 + np.random.randint(10, image_size // 2)
             y2 = y1 + np.random.randint(10, image_size // 2)
             samples.append({
-                "image_path": path,
+                "image": path,
                 "boxes": [[float(x1), float(y1), float(x2), float(y2)]],
                 "labels": [i % num_classes],
             })
@@ -75,13 +75,8 @@ def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, tra
             mask = (np.random.rand(image_size, image_size) * num_classes).astype(np.uint8)
             mask_path = os.path.join(tmp_dir, f"mask_{i:04d}.png")
             cv2.imwrite(mask_path, mask)
-            samples.append({"image_path": path, "mask_path": mask_path})
-    return CustomDataset(
-        task_type=task_type,
-        samples=samples,
-        num_classes=num_classes,
-        transforms=transforms,
-    )
+            samples.append({"image": path, "mask": mask_path})
+    return CustomDataset(samples=samples, task_type=task_type, transforms=transforms)
 
 
 def build_data(cfg):
@@ -102,15 +97,23 @@ def build_data(cfg):
         val_ds = build_synthetic_dataset(task_type, n_val, num_classes, image_size, val_tf)
     else:
         root = data_cfg.get("root", "./data")
-        train_ds = DatasetFactory.create(name=dataset_name, root=root, train=True,
-                                         transforms=train_tf, download=True)
-        val_ds = DatasetFactory.create(name=dataset_name, root=root, train=False,
-                                       transforms=val_tf, download=True)
+        train_kwargs = dict(root=root, train=True, transforms=train_tf,
+                            download=data_cfg.get("download", False))
+        val_kwargs = dict(root=root, train=False, transforms=val_tf,
+                          download=data_cfg.get("download", False))
+        for extra_key in ("year", "image_set", "split"):
+            if extra_key in data_cfg:
+                train_kwargs[extra_key] = data_cfg[extra_key]
+                val_kwargs[extra_key] = data_cfg[extra_key]
+        train_ds = build_dataset({"type": dataset_name, **train_kwargs})
+        val_ds = build_dataset({"type": dataset_name, **val_kwargs})
 
     batch_size = cfg.training.batch_size
     num_workers = cfg.training.get("num_workers", 0)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+                              collate_fn=getattr(train_ds, "collate_fn", None))
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+                            collate_fn=getattr(val_ds, "collate_fn", None))
     return train_loader, val_loader
 
 

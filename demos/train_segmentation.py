@@ -52,7 +52,7 @@ def build_seg_dataset(tmp_dir, num_samples, num_classes, image_size, transforms=
             cv2.imwrite(img_path, img)
         if not os.path.exists(mask_path):
             cv2.imwrite(mask_path, mask)
-        samples.append({"image_path": img_path, "mask_path": mask_path})
+        samples.append({"image": img_path, "mask_path": mask_path})
 
     return CustomDataset(
         task_type="segmentation",

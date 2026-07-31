@@ -12,12 +12,12 @@ DVisionix: 深度学习算法库
 - 完整的指标计算，涵盖所有常见任务
 
 快速开始：
-    from dvisionix.data import DatasetFactory
+    from dvisionix.data import build_dataset
     from dvisionix.models import SimpleCNN
     from dvisionix.training import Trainer, ClassificationTask, ModelCheckpoint
 
     # 创建数据集
-    train_dataset = DatasetFactory.create("cifar10", root="./data", train=True)
+    train_dataset = build_dataset({"type": "cifar10", "root": "./data", "train": True})
 
     # 创建模型
     model = SimpleCNN(num_classes=10)
