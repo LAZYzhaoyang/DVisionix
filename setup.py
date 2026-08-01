@@ -16,7 +16,7 @@ def _read_long_description() -> str:
 
 setup(
     name="dvisionix",
-    version="0.2.0",
+    version="0.3.0",
     author="DVisionix Team",
     description="A PyTorch-based deep learning training framework for computer vision tasks",
     long_description=_read_long_description(),
@@ -48,7 +48,7 @@ setup(
             "torchmetrics>=1.0.0",
         ],
     },
-    python_requires=">=3.8",
+    python_requires=">=3.10",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

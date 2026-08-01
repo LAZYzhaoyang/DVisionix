@@ -1,13 +1,13 @@
 # NOTE: v0.2.0 起推荐使用 config 驱动入口:
 #   python tools/train.py --config configs/<task>/demo_synthetic.yaml
 # 该脚本作为教学参考保留，功能上等价的现代用法请参考 tools/train.py + configs/。
-﻿# D:\\ZhaoyangProject\\DVisionix\\demos\\train_cifar10_new_trainer.py
+# D:\\ZhaoyangProject\\DVisionix\\demos\\train_cifar10_new_trainer.py
 
 """
 使用新的通用 Trainer 训练 CIFAR-10 分类任务
 
 演示：
-1. 使用 DatasetFactory 创建数据集
+1. 使用 build_dataset 创建数据集
 2. 使用 ClassificationTask 定义任务逻辑
 3. 使用通用 Trainer 进行训练
 4. 使用回调系统（检查点、早停）
@@ -118,12 +118,12 @@ def main():
     callbacks = [
         ModelCheckpoint(
             save_dir=config["save_dir"],
-            monitor="val_acc",
+            monitor="accuracy",
             mode="max",
             save_best_only=True,
         ),
         EarlyStopping(
-            monitor="val_acc",
+            monitor="accuracy",
             mode="max",
             patience=5,
             restore_best_weights=True,

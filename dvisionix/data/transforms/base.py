@@ -15,7 +15,6 @@
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from ..sample import Sample
-from ..sample import Sample
 from ...registry import TRANSFORMS
 
 

@@ -318,4 +318,3 @@ ds = DepthEstimationDataset("./data/depth", transforms=pipeline)
 
 - `pytest tests/test_data/` - 数据模块单元测试
 - `pytest tests/` - 全量测试
-- `python verify_data_module.py` - 一次性 smoke test

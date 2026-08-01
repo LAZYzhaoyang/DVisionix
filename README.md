@@ -120,11 +120,11 @@ python tools/train.py --config configs/classification/demo_synthetic.yaml
 
 # 覆盖单个参数
 python tools/train.py --config configs/classification/demo_synthetic.yaml \
-  --cfg-options training.num_epochs=5 training.learning_rate=0.01
+  --cfg-options training.num_epochs=5 training.optimizer.lr=0.01
 
-# 从检查点恢复训练
+# 自动续训最近一次任务（work_dir 内自动查找 last.pt）
 python tools/train.py --config configs/classification/demo_synthetic.yaml \
-  --resume checkpoints/demo_synthetic/last.pt
+  --resume auto
 ```
 
 **编程方式：**
@@ -149,12 +149,16 @@ trainer.fit(model)
 
 | 文档 | 说明 |
 |------|------|
-| [快速入门](docs/quick_start.md) | 安装和基础使用教程 |
-| [数据模块指南](docs/data_module.md) | 数据集、适配器、变换完整用法 |
-| [训练系统指南](docs/training_module.md) | Trainer、Task、Callback 系统详解 |
-| [自定义任务教程](docs/custom_task.md) | 如何实现自己的训练任务 |
-| [指标计算](docs/metrics.md) | 各任务指标计算详解 |
-| [API 参考](docs/api_reference.md) | 完整的 API 文档 |
+| [快速开始](docs/quick_start.md) | 安装、Config 驱动训练、编程式训练 |
+| [配置系统](docs/config_system.md) | Config 加载 / 继承 / CLI 覆盖 / schema 校验 |
+| [数据模块](docs/data.md) | Sample 协议、BaseDataset、transforms、数据集工具箱 |
+| [骨干网络（timm）](docs/backbones.md) | TimmBackbone / TimmClassifier |
+| [自定义 Layer 与 Model](docs/custom_models.md) | layers、注册与配置驱动组装 |
+| [指标（Metrics）](docs/metrics.md) | 原子指标、MetricCollection、预设组合 |
+| [日志系统](docs/logging.md) | TrainingLogger / JSONL / TensorBoard |
+| [模型导出（ONNX）](docs/model_export.md) | ONNXExporter 导出与精度验证 |
+| [目标检测](docs/detection.md) | 网格检测器、collate、mAP 评估 |
+| [语义分割](docs/segmentation.md) | 分割数据格式与端到端训练 |
 
 ---
 
@@ -327,19 +331,20 @@ MIT License
 
 ---
 
-## 🔀 从 0.1.x 迁移到 0.2.0
+## 📌 版本演进
 
-**破坏性变更：**
+### 0.2.0（组件化重构）
+- 引入全局注册表与配置驱动入口 `tools/train.py`；模型组件化（backbone/neck/head）；
+  `BaseDataset` 归一化交给 transforms（唯一权威）。
 
-- **归一化行为**：`BaseDataset` 不再默认在内部执行 mean/std 归一化。若继续使用旧模式（`transforms=None`），会打 `DeprecationWarning`。推荐使用 `ClassificationTransforms/DetectionTransforms/SegmentationTransforms`，它们默认自带 ImageNet 归一化。
-- **Trainer 调度器**：`Trainer.fit` 内部调度器 step 与 `LearningRateScheduler` 回调互斥（自动避免双重 step）；显式二次 step 需要自行去除。
-- **模型命名**：新增 `models/necks`、`models/heads`、`models/detectors` 命名空间。`SimpleDetectionModel` 已移除，请用 `GeneralizedModel(backbone=..., neck=..., head=DetHead(...))` 或 `GridDetectionModel`。
-- **API 补齐**：`Trainer` 新增 `amp` / `accumulate_grad_batches` / `seed` / `resume_from` 参数；`ModelCheckpoint` / `EarlyStopping` 现在会随 checkpoint 保存 `state_dict`。
+### 0.3.0（训练子系统重构）
+破坏性变更：
+- **Loss 迁移到模型层**：`dvisionix.models.losses`（`BaseLoss` 继承 + `LossComposer` 组合），删除 `dvisionix.training.losses`。
+- **Task 全面配置化**：optimizer / scheduler / loss / metrics 均由配置驱动；
+  `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
+- **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
 
-**新能力：**
-
-- **全局注册表**：`build_model`/`build_task`/`build_loss`/`build_metric`/`build_dataset` 按名称构建组件。
-- **配置驱动入口**：`python tools/train.py --config ... --cfg-options a.b=c --resume ckpt.pt`。
-- **完整 resume**：optimizer / scheduler / scaler / callbacks 状态一并存取。
-- **AMP + 梯度累积**：训练支持 CUDA 上的 autocast + GradScaler 及任意累积步数。
-- **检测指标**：`DetectionMetrics(use_torchmetrics=True)` 可直连 torchmetrics COCO 后端。
+### 0.3.1（结构 / 配置 / 导出优化）
+- `training/` 重组为 `tasks/` `callbacks/` `optim/` 子包（顶层 API 不变）；
+- Config 新增 schema 校验（未知键告警 / 类型校验），CLI 支持 list/dict；
+- `ONNXExporter` 支持多输入 / 多输出 / dict 输出 / `backend=trace|dynamo` / 归一化元数据。

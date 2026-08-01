@@ -1,6 +1,6 @@
 # 配置系统
 
-`dvisionix.config.Config` 提供统一的 YAML 配置管理，支持继承、深度合并、点号访问与验证。
+`dvisionix.config.Config` 提供统一的 YAML 配置管理，支持继承、深度合并、点号访问、CLI 覆盖与 schema 校验。
 
 ## 加载与访问
 
@@ -33,10 +33,22 @@ training:
   num_epochs: 2           # 仅覆盖该字段，其余保留
 ```
 
-## 合并 / 验证 / 保存
+## CLI 覆盖
+
+`tools/train.py --cfg-options a.b=v`，值支持 int / float / bool / null 与 YAML 子集（list / dict）：
+
+```bash
+python tools/train.py --config configs/classification/demo_synthetic.yaml \
+  --cfg-options training.num_epochs=5 training.optimizer.lr=0.01 training.devices=[0,1]
+```
+
+## 合并 / 验证 / schema 校验 / 保存
 
 ```python
-merged = cfg.merge({"training": {"lr": 0.01}}, override=True)
-cfg.validate(["task_type", "model.name", "training.num_epochs"])  # 缺字段抛 ValueError
+merged = cfg.merge({"training": {"optimizer": {"lr": 0.01}}}, override=True)
+cfg.validate(["task_type", "model.num_classes", "training.num_epochs"])  # 缺字段抛 ValueError
+warnings = cfg.validate_schema(cfg.task_type)  # 类型/取值校验 + 未知键/别名告警
+for w in warnings:
+    print(w)
 cfg.dump("configs/_generated/effective.yaml")
 ```

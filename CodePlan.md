@@ -332,3 +332,34 @@ dvisionix/
 - [ ] CI 落地（ruff/black/pytest --cov；当前环境未装 ruff）。
 - [ ] export 的 dynamo 后端需在安装 onnxscript 的环境补跑 tests/test_export。
 - [ ] 检测算法升级：GeneralizedModel 检测分支补 decode/评估；assigner 扩展（ATSS/FCOS 风格）。
+
+---
+
+# 收尾清理与文档同步（v0.3.2）
+
+## 一、脚本清理
+- 删除已失效/冗余脚本：
+  - `demos/train_detection.py`、`demos/train_segmentation.py`（配置键已迁移到 optimizer.lr 后失效，
+    且与 `tools/train.py` 重复；训练入口统一为 tools/train.py）。
+  - `verify_all_modules.py`、`verify_data_module.py`（已被 pytest 取代）。
+  - 空目录 `demos/{classification,detection,segmentation}`。
+- 保留并修复：`demos/train_cifar10_new_trainer.py`（build_dataset 改为 dict 调用、monitor 键 val_acc→accuracy、
+  移除 BOM 与 DatasetFactory 旧引用）；`demos/export_onnx_demo.py` 验证可用。
+- 清理仓库根残留产物：`checkpoints/ logs/ exports/ .cache/`（gitignored 运行时产物）。
+
+## 二、文档同步
+- 重写 `docs/README.md`（索引对齐现有文档与 demo）。
+- 重写 `docs/quick_start.md`（tools/train.py 入口、--resume auto、多卡、编程式示例修正）。
+- 重写 `docs/logging.md`（TrainingLogger / JSONL / TensorBoard，移除失效的 cfg.logging.log_dir 说明）。
+- 修正 `docs/detection.md` / `docs/segmentation.md`（Sample 字段、transforms、tools/train.py 入口、
+  配置化 optimizer/loss、移除失效 API 示例）。
+- 修正 `docs/data.md`（移除 verify_data_module 引用）、`docs/config_system.md`（补 schema 校验与 CLI 覆盖）。
+- 更新 `README.md`：文档索引表对齐真实文档；快速开始（optimizer.lr、--resume auto）；尾部迁移章节
+  替换为「版本演进」（0.2.0 / 0.3.0 / 0.3.1）。
+
+## 三、代码卫生
+- 修复 `data/transforms/base.py` 重复 import。
+
+## 四、验证
+- 全量测试 161 passed + 2 skipped（DDP/dynamo 环境跳过）。
+- `demos/export_onnx_demo.py` 端到端通过（导出 + onnxruntime verify，max_diff ~1e-8）。
