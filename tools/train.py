@@ -196,6 +196,45 @@ def parse_devices(value):
     return [int(x) for x in str(value).split(",") if x.strip() != ""]
 
 
+def export_best_onnx(cfg, work_dir: str, logger=None):
+    """把最优 checkpoint（work_dir/checkpoints/best.pt）导出为 ONNX（best-effort）。
+
+    仅当 ``training.export_best_onnx`` 为 true 时调用；模型不可 trace 时告警降级，
+    不影响训练主流程。
+    """
+    best_pt = os.path.join(work_dir, "checkpoints", "best.pt")
+    if not os.path.exists(best_pt):
+        if logger:
+            logger.warning(f"export_best_onnx 已开启但未找到 {best_pt}")
+        return None
+    try:
+        import torch
+
+        from dvisionix.export import ONNXExporter
+
+        model = build_model(cfg.model.to_dict())
+        state = torch.load(best_pt, map_location="cpu", weights_only=False)
+        if state.get("model_state_dict"):
+            model.load_state_dict(state["model_state_dict"])
+        in_channels = cfg.model.get("in_channels", 3)
+        image_size = cfg.data.get("image_size", 32)
+        exporter = ONNXExporter(
+            model,
+            input_shape=(in_channels, image_size, image_size),
+            device="cpu",
+            task_type=cfg.get("task_type"),
+        )
+        out_path = os.path.join(work_dir, "best.onnx")
+        exporter.export(out_path, dynamic_batch=True)
+        if logger:
+            logger.info(f"Best model exported to ONNX: {out_path}")
+        return out_path
+    except Exception as exc:  # pragma: no cover - 依赖具体模型可 trace 性
+        if logger:
+            logger.warning(f"导出 best.onnx 失败（已忽略）：{exc}")
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description="DVisionix config-driven training")
     parser.add_argument("--config", required=True, help="YAML config path")
@@ -264,6 +303,9 @@ def main():
         strategy=args.strategy,
     )
     trainer.fit(model)
+
+    if cfg.training.get("export_best_onnx", False):
+        export_best_onnx(cfg, work_dir, logger=logger)
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ from .workdir import (
     dump_config,
     find_checkpoint,
     find_latest_run,
+    hash_config,
     resolve_work_dir,
 )
 
@@ -74,6 +75,7 @@ __all__ = [
     "panoptic_decode",
     "default_work_root",
     "resolve_work_dir",
+    "hash_config",
     "find_latest_run",
     "find_checkpoint",
     "dump_config",

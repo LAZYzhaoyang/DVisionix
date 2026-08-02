@@ -18,6 +18,9 @@ training:
   amp: false
   accumulate_grad_batches: 1
   gradient_clip_val: null
+  compile: false            # 启用 torch.compile（DDP wrap 前编译，失败自动降级）
+  channels_last: false      # 模型转为 channels_last 内存格式（卷积网络友好）
+  export_best_onnx: false   # 训练结束后导出最优 checkpoint 为 ONNX（best.onnx）
   log_interval: 50
   early_stopping:
     enabled: true

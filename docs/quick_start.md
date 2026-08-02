@@ -103,6 +103,16 @@ cb = DistillCallback(
 # 任务内：loss = FeatureDistillLoss(normalize=True)(student_feats, trainer.teacher_features)
 ```
 
+### 性能开关与实验管理（v0.17-P3）
+```yaml
+training:
+  compile: true        # torch.compile（DDP wrap 前编译；不可用时自动降级）
+  channels_last: true  # 模型转 channels_last 内存格式（卷积网络友好）
+  export_best_onnx: true  # 训练结束后把 checkpoints/best.pt 导出为 work_dir/best.onnx
+```
+- 新 run 目录自动带配置哈希后缀：`<timestamp>-<hash8>`（`hash_config`，同配置可复现定位）；
+- 训练结束自动导出 `work_dir/best_metrics.csv`（按 checkpoint 监控指标选出的最优 epoch）。
+
 ## 相关文档
 - [配置系统](config_system.md)
 - [骨干网络（timm）](backbones.md)

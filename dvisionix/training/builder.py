@@ -72,6 +72,8 @@ def build_trainer(
         strategy=strategy or training.get("strategy", "auto"),
         devices=devices or training.get("devices"),
         find_unused_parameters=training.get("find_unused_parameters", False),
+        compile=training.get("compile", False),
+        channels_last=training.get("channels_last", False),
         logger=logger,
     )
 

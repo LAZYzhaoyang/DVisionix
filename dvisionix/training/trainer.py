@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 
 from ..utils import get_device, set_seed
 from ..utils.logging import TrainingLogger
-from .callbacks import Callback, CallbackList, ProgressBar
+from .callbacks import Callback, CallbackList, ModelCheckpoint, ProgressBar
 from .tasks import BaseTask
 
 
@@ -88,6 +88,8 @@ class Trainer:
         strategy: 'auto' / 'ddp' / 'none'。
         devices: DDP 使用的设备列表（如 [0, 1]；None 时使用 LOCAL_RANK）。
         find_unused_parameters: DDP 是否查找未使用参数。
+        compile: 是否启用 torch.compile（DDP wrap 前编译；失败自动降级并告警）。
+        channels_last: 是否将模型转为 channels_last 内存格式（卷积网络友好）。
         logger: 自定义 TrainingLogger（默认自动创建）。
     """
 
@@ -110,6 +112,8 @@ class Trainer:
         strategy: str = "auto",
         devices: Optional[List[int]] = None,
         find_unused_parameters: bool = False,
+        compile: bool = False,
+        channels_last: bool = False,
         logger: Optional[TrainingLogger] = None,
     ):
         self.task = task
@@ -125,6 +129,8 @@ class Trainer:
         self.seed = seed
         self.resume_from = resume_from
         self.find_unused_parameters = find_unused_parameters
+        self.compile = compile
+        self.channels_last = channels_last
 
         # 分布式状态
         self.strategy = strategy
@@ -234,6 +240,16 @@ class Trainer:
 
     def _wrap_model(self, model: nn.Module) -> nn.Module:
         model = model.to(self.device)
+        if self.channels_last:
+            try:
+                model = model.to(memory_format=torch.channels_last)
+            except Exception as exc:  # pragma: no cover
+                self.logger.warning(f"channels_last 转换失败，已忽略：{exc}")
+        if self.compile:
+            try:
+                model = torch.compile(model)
+            except Exception as exc:
+                self.logger.warning(f"torch.compile 不可用，已降级为普通模型：{exc}")
         if self.is_distributed:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
@@ -316,6 +332,7 @@ class Trainer:
 
         self.callbacks.on_train_end(self)
         self._write_history_csv()
+        self._write_best_metrics_csv()
         self.logger.info("Training finished!")
         if self._is_rank0():
             self.logger.log_event(
@@ -550,6 +567,54 @@ class Trainer:
         self.global_step = checkpoint.get("global_step", 0)
         self.logger.info(f"Checkpoint loaded from: {path}")
         self.logger.info(f"Resuming from epoch {self.current_epoch}, step {self.global_step}")
+
+    def _best_metrics(self) -> Optional[Dict[str, Any]]:
+        """从 history 中按 ModelCheckpoint 的 monitor/mode 选出最优 epoch。
+
+        Returns:
+            (epoch_index, epoch_logs, best_value) 或 None（无可用监控指标）。
+        """
+        monitor, mode = None, "min"
+        for cb in getattr(self.callbacks, "callbacks", None) or []:
+            if isinstance(cb, ModelCheckpoint):
+                monitor, mode = cb.monitor, cb.mode
+                break
+        if not monitor or not self.history:
+            return None
+        best = None  # (index, logs, value)
+        for idx, epoch in enumerate(self.history):
+            if monitor not in epoch:
+                continue
+            try:
+                val = float(epoch[monitor])
+            except (TypeError, ValueError):
+                continue
+            if best is None or (val < best[2] if mode == "min" else val > best[2]):
+                best = (idx, epoch, val)
+        return best
+
+    def _write_best_metrics_csv(self) -> None:
+        """导出最优 epoch 指标到 work_dir/best_metrics.csv（配合 ModelCheckpoint 的监控指标）。"""
+        if not self.work_dir or not self.history:
+            return
+        best = self._best_metrics()
+        if best is None:
+            return
+        idx, epoch_logs, _ = best
+        try:
+            import csv
+
+            keys = ["best_epoch"] + sorted({k for epoch in self.history for k in epoch.keys()})
+            path = os.path.join(self.work_dir, "best_metrics.csv")
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=keys)
+                writer.writeheader()
+                row = {k: epoch_logs.get(k, "") for k in keys if k != "best_epoch"}
+                row["best_epoch"] = idx
+                writer.writerow(row)
+            self.logger.info(f"Best metrics exported to: {path}")
+        except Exception as exc:  # pragma: no cover
+            self.logger.warning(f"Failed to export best_metrics.csv: {exc}")
 
     def _write_history_csv(self) -> None:
         """将训练 history 导出到 work_dir/history.csv（可选，无 work_dir 时跳过）。"""

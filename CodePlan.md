@@ -1045,3 +1045,34 @@ models/
 - 训练工程 P3：`torch.compile` / `channels_last`（Trainer + train.py 配置透传）、实验管理增强（work_dir 配置哈希、best_metrics.csv 导出、可选 best checkpoint ONNX 导出）。
 - DINO 可选增强：look-forward-twice（解码器各层中间 box + 主分支分层 box 损失）。
 
+
+---
+
+# 训练工程 P3（v0.17.0-P3）
+
+> 训练工程 P3：性能开关（torch.compile / channels_last）+ 实验管理增强。与 P2 拆分提交。
+
+## 一、性能开关
+- `Trainer` 新增 `compile` / `channels_last` 参数：
+  - `compile=True`：在 DDP wrap 前调用 `torch.compile(model)`（CPU/CUDA 均可），失败自动告警降级为普通模型；
+  - `channels_last=True`：`model.to(memory_format=torch.channels_last)`（卷积网络友好，失败忽略）。
+- `training/builder.py` 从配置透传 `training.compile` / `training.channels_last`；
+  默认配置 `dvisionix/config/defaults/base.yaml` 新增 `compile: false` / `channels_last: false` / `export_best_onnx: false`。
+
+## 二、实验管理增强
+- `training/workdir.py` 新增 `hash_config(cfg)`：解析后配置 sha1 前 8 位；新 run 目录格式
+  `<timestamp>-<hash8>`（同配置可复现定位、异配置避免目录冲突，`find_latest_run` 按 mtime 不受影响）。
+- `Trainer` 训练结束导出 `best_metrics.csv`：按 `ModelCheckpoint` 的 monitor/mode 从 history 选出最优 epoch
+  写入 work_dir（含 `best_epoch` 列）。
+- `tools/train.py` 新增 `export_best_onnx(cfg, work_dir)`：`training.export_best_onnx=true` 时训练结束把
+  `checkpoints/best.pt` 导出为 `work_dir/best.onnx`（复用 `dvisionix.export.ONNXExporter`，best-effort，
+  模型不可 trace 时告警降级不影响训练）。
+
+## 三、验证
+- 新增 `tests/test_training/test_v017_p3.py`（8 项）：hash_config 确定性、work_dir 哈希后缀、
+  channels_last 生效（conv 参数内存格式）、torch.compile 失败降级、builder 透传、best_metrics.csv 最优 epoch、
+  best.onnx 导出与缺失检查点降级。
+- 全量测试 282 passed + 2 skipped；ruff / black 全绿。
+
+## 四、下一步
+- DINO 可选增强：look-forward-twice（解码器各层中间 box + 主分支分层 box 损失），单独提交。

@@ -6,6 +6,7 @@
 - ``resume`` 三态：false（全新）/ auto|latest（续最近一次任务）/ 显式路径。
 """
 
+import hashlib
 import os
 from datetime import datetime
 from typing import Optional
@@ -47,7 +48,18 @@ def resolve_work_dir(
         return run_dir
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return os.path.join(base, experiment, timestamp)
+    # 配置哈希后缀：同配置可复现定位，异配置避免目录冲突（实验管理）
+    return os.path.join(base, experiment, f"{timestamp}-{hash_config(cfg)}")
+
+
+def hash_config(cfg) -> str:
+    """计算解析后配置的确定性哈希（sha1 前 8 位），用于实验目录标识。"""
+    if hasattr(cfg, "to_dict"):
+        data = cfg.to_dict()
+    else:
+        data = cfg
+    dumped = yaml.safe_dump(data, sort_keys=True, allow_unicode=True).encode("utf-8")
+    return hashlib.sha1(dumped).hexdigest()[:8]
 
 
 def find_latest_run(experiment_dir: str) -> Optional[str]:
@@ -107,6 +119,7 @@ def dump_config(cfg, path: str) -> None:
 __all__ = [
     "default_work_root",
     "resolve_work_dir",
+    "hash_config",
     "find_latest_run",
     "find_checkpoint",
     "dump_config",
