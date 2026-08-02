@@ -49,8 +49,8 @@ dvisionix/
 │   ├── necks/           # FPN / PANet
 │   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC/CircleLoss/SimCLR）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer(+V2)/MaskFormer(+2)/PSP/UPerNet/BiSeNet/SwinUNet）· 检测（Det/FCOS/RetinaNet/YOLO(v8/v10)/DETR/RT-DETR(+full)/DeformableDETR/CenterNet）
 │   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO(v8/v9/v10) / DETR / RT-DETR(+full) / DeformableDETR / CenterNet（decode 与模型同文件）
-│   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
-│   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
+│   ├── classifiers/     # 分类组合器子包（LinearClassifier）
+│   ├── segmenters/      # 分割组合器子包（SegmentationModel / SwinUNet）
 │   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
 │   └── losses/          # BaseLoss + LossComposer + 检测 assigner/损失（即插即用）
 ├── training/
@@ -334,6 +334,13 @@ MIT License
 ---
 
 ## 📌 版本演进
+
+### 0.15.0（组合器目录化 + 批次 2）
+- classifiers / segmenters 子包化（顶层 API 不变，调用规则新增 R7）；
+- `swinv2_backbone`（cosine attention + 连续相对位置偏置 + res-post-norm）；
+- `multi_scale_deformable_attention_v2`（分层参考点 + 尺度归一采样偏移）；
+- `segformer_v3_head`（SE 融合解码）；
+- 全量测试 265 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.14.0（中期批次 1：骨干/分割/检测扩展）
 - 骨干：`convnextv2_backbone`（GRN）、`efficientnet_lite_backbone`（MBConv+SE）、`mit_backbone`（SegFormer encoder）；

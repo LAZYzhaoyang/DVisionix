@@ -21,14 +21,16 @@ from .c3k2 import C3k2Block
 from .convnext import ConvNeXtBlock
 from .convnextv2 import ConvNeXtV2Block
 from .csp import CSPLayer
-from .deformable_attention import MultiScaleDeformableAttention
+from .deformable_attention import MultiScaleDeformableAttention, MultiScaleDeformableAttentionV2
 from .elan import EELANLayer, ELANLayer
 from .grn import GRN
 from .mbconv import MBConvBlock
 from .norm import LayerNorm2d
 from .patch_ops import PatchExpand, PatchMerging
 from .psa import PSABlock
+from .relative_position_bias import ContinuousRelativePositionBias
 from .reversible import ReversibleBlock
+from .swinv2 import SwinV2Block
 from .timm_layers import create_timm_layer, list_timm_layers
 from .transformer import DeformableDecoderLayer, DeformableEncoderLayer, MixFFN
 from .window_attention import WindowAttention, window_partition, window_reverse
@@ -79,6 +81,9 @@ __all__ = __all__ + [
     "PatchMerging",
     "PatchExpand",
     "GRN",
+    "ContinuousRelativePositionBias",
+    "SwinV2Block",
+    "MultiScaleDeformableAttentionV2",
     "ConvNeXtV2Block",
     "C3k2Block",
     "PSABlock",

@@ -1,27 +1,18 @@
 # -*- coding: utf-8 -*-
-"""分类组合模型：LinearClassifier（backbone + 分类头，配置驱动、即插即用）。"""
+"""LinearClassifier（backbone + 分类头，配置驱动、即插即用）。"""
 
 from typing import Any, Dict, Optional
 
 import torch
 
-from ..registry import BACKBONES, HEADS, MODELS
-from .base import BaseModel
+from ...registry import BACKBONES, HEADS, MODELS
+from ..base import BaseModel
 
 
 @MODELS.register()
 @MODELS.register(name="linear_classifier")
 class LinearClassifier(BaseModel):
-    """骨干 + 分类头组合模型（替代旧的 generalized 分类分支）。
-
-    配置示例::
-
-        model:
-          type: linear_classifier
-          backbone: {type: timm_backbone, name: resnet18, pretrained: false}
-          head: {type: arcface_head, num_classes: 10}   # 或省略 head 使用默认 cls_head
-          num_classes: 10
-    """
+    """骨干 + 分类头组合模型（替代旧的 generalized 分类分支）。"""
 
     def __init__(
         self,
@@ -37,7 +28,6 @@ class LinearClassifier(BaseModel):
             getattr(self.backbone, "num_features", 0)
             or getattr(self.backbone, "out_channels", [0])[-1]
         )
-
         if head is None:
             if num_classes is None:
                 raise ValueError("head 未提供时必须给出 num_classes")
@@ -50,7 +40,6 @@ class LinearClassifier(BaseModel):
             if "num_classes" not in head_cfg and num_classes is not None:
                 head_cfg["num_classes"] = num_classes
             self.head = HEADS.build(head_cfg)
-
         self.num_classes = getattr(self.head, "num_classes", num_classes)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:

@@ -25,8 +25,11 @@ from .backbones import (
     MiTBackbone,
     MobileNetV3Backbone,
     SequentialBackbone,
+    SwinBackbone,
+    SwinV2Backbone,
     TimmBackbone,
     TimmClassifier,
+    ViTBackbone,
     list_timm_models,
 )
 from .base import TASK_TYPES, BaseModel
@@ -128,6 +131,7 @@ __all__ = [
     "ConvNeXtV2Backbone",
     "EfficientNetLiteBackbone",
     "MiTBackbone",
+    "SwinV2Backbone",
     "list_timm_models",
     "build_layer",
     "build_norm_layer",

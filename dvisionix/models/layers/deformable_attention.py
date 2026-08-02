@@ -86,4 +86,61 @@ class MultiScaleDeformableAttention(nn.Module):
         return self.dropout(self.output_proj(out))
 
 
-__all__ = ["MultiScaleDeformableAttention"]
+@LAYERS.register()
+@LAYERS.register(name="multi_scale_deformable_attention_v2")
+class MultiScaleDeformableAttentionV2(MultiScaleDeformableAttention):
+    """多尺度可变形注意力 V2：在 compact 版基础上增强——分层参考点 + 按层尺度归一采样偏移。
+
+    - 分层参考点：每层参考点 = 基础参考点 + 每层可学习偏移（level_offset）。
+    - 尺度归一偏移：采样偏移按各层空间尺寸归一化（offset * 2 / (H_l, W_l)），跨层采样更均衡。
+    输出契约与 compact 版一致，可替换 DeformableDETR / RT-DETR 的注意力层。
+    """
+
+    def __init__(self, embed_dim, num_heads=8, num_levels=4, num_points=4, dropout=0.1):
+        super().__init__(embed_dim, num_heads, num_levels, num_points, dropout)
+        self.level_offset = nn.Parameter(torch.zeros(num_levels, 1, 1, 2))
+        nn.init.uniform_(self.level_offset, -0.02, 0.02)
+
+    def forward(self, query, value_list, reference_points):
+        B, N, C = query.shape
+        L = len(value_list)
+        assert L == self.num_levels
+
+        offset = self.sampling_offsets(query).reshape(B, N, self.num_heads, L, self.num_points, 2)
+        ref = reference_points.unsqueeze(2).unsqueeze(3).unsqueeze(4)  # (B, N, 1, 1, 1, 2)
+        # 分层参考点：基础参考点 + 每层可学习偏移
+        ref = ref + self.level_offset.view(1, 1, 1, L, 1, 2)
+        # 采样偏移按各层空间尺寸归一化（非原地，保持 autograd）
+        scales = torch.zeros(L, 2, device=query.device)
+        for lvl in range(L):
+            h_l, w_l = value_list[lvl].shape[-2:]
+            scales[lvl] = torch.tensor([2.0 / w_l, 2.0 / h_l], device=query.device)
+        offset = offset * scales.view(1, 1, 1, L, 1, 2)
+        sample_locations = ref + offset
+
+        weights = self.attention_weights(query).reshape(B, N, self.num_heads, L, self.num_points)
+        weights = weights.softmax(dim=3).softmax(dim=4)
+        values = [self.value_proj(v.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for v in value_list]
+
+        sampled_list = []
+        for lvl in range(L):
+            grid = sample_locations[:, :, :, lvl]  # (B, N, H, P, 2)
+            grid = grid.permute(0, 2, 1, 3, 4).reshape(B * self.num_heads, N, self.num_points, 2)
+            grid_s = grid * 2.0 - 1.0
+            vals = F.grid_sample(
+                values[lvl].repeat_interleave(self.num_heads, dim=0),
+                grid_s,
+                mode="bilinear",
+                padding_mode="zeros",
+                align_corners=False,
+            )
+            vals = vals.reshape(B, self.num_heads, C, N, self.num_points)
+            sampled_list.append(vals)
+        sampled = torch.stack(sampled_list, dim=4)  # (B, H, C, N, L, P)
+        w = weights.permute(0, 2, 1, 3, 4).unsqueeze(2)
+        out = (sampled * w).sum(dim=(4, 5))
+        out = out.mean(dim=1).permute(0, 2, 1)
+        return self.dropout(self.output_proj(out))
+
+
+__all__ = ["MultiScaleDeformableAttention", "MultiScaleDeformableAttentionV2"]

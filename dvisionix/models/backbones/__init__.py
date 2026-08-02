@@ -15,6 +15,7 @@ from .mit import MiTBackbone
 from .mobilenetv3 import MobileNetV3Backbone
 from .sequential import SequentialBackbone
 from .swin import SwinBackbone
+from .swinv2 import SwinV2Backbone
 from .timm_backbone import TimmBackbone, TimmClassifier, list_timm_models
 from .vit import ViTBackbone
 
@@ -32,4 +33,5 @@ __all__ = [
     "ConvNeXtV2Backbone",
     "EfficientNetLiteBackbone",
     "MiTBackbone",
+    "SwinV2Backbone",
 ]

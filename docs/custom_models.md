@@ -199,7 +199,8 @@ model = build_model({
 > 模型保留 `decode()` 薄桥接。
 >
 > **模块调用规则**：只允许上层 import 下层（layers/postprocess ← backbones/necks/heads/losses ← detectors 等组合器）；
-> 兄弟模块互不 import；共享实现一律下沉 layers/necks/postprocess。完整规则（R1-R6）见 CodePlan。
+> 兄弟模块互不 import；共享实现一律下沉 layers/necks/postprocess；组合器（classifiers/segmenters/detectors）均为子包、每类一个文件。
+> 完整规则（R1-R7）见 CodePlan。
 
 ### 2.5 用 layers 拼装自定义 backbone（SequentialBackbone）
 

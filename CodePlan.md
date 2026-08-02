@@ -922,6 +922,7 @@ models/
 - **R4 decode 策略**：模型专属解码与其 head/detector 同文件（如 fcos_decode）；多模型共享、契约一致的解码纯函数放 postprocess.py（如 maskformer_decode）；每个模型保留 decode() 实例方法做薄桥接。
 - **R5 组合器经 Registry 构建**：classifiers / segmenters / detectors 通过 BACKBONES/NECKS/HEADS 注册表构建下层组件，不直接 import 具体类。
 - **R6 新增组件流程**：新算子 -> layers/ 或 necks/ -> 新 head/backbone 只引用下层 -> 每头一文件 -> 注册即用。
+- **R7 组合器子包**：组合器（classifiers / segmenters / detectors）均为子包、每类一个文件；新增组合模型在对应子包新建文件并导出。
 
 
 ---
@@ -952,3 +953,31 @@ models/
 ## 五、后续（批次 2 / 3，待确认）
 - 批次 2（v0.15.0）：B3 SwinV2、D2 多尺度可变形完整版、（可选 S3 分割头增强）。
 - 批次 3：D3 DINO 变体（大工作量，单独排期）。
+
+
+---
+
+# 组合器目录化 + 中期批次 2（v0.15.0）
+
+> 用户确认：classifiers/segmenters 子包化（顶层 API 不变）；批次 2 全部包含（B3 SwinV2、D2 可变形 V2、S3 SegFormerV3）。
+
+## 一、组合器目录化
+- `models/classifiers.py` -> `models/classifiers/`（__init__.py + linear.py：LinearClassifier）
+- `models/segmenters.py` -> `models/segmenters/`（__init__.py + base.py：SegmentationModel + swin_unet.py：SwinUNet）
+- 顶层 API 不变（`dvisionix.models.LinearClassifier / SegmentationModel / SwinUNet` 从子包 re-export）。
+- 调用规则 R6 补充：**组合器（classifiers/segmenters/detectors）均为子包，每类一个文件**。
+
+## 二、批次 2
+- B3 `SwinV2Backbone`（swinv2_backbone）：cosine attention + log-spaced 连续相对位置偏置 + res-post-norm；
+  新增 `layers/ContinuousRelativePositionBias`、`layers/SwinV2Block`。
+- D2 `MultiScaleDeformableAttentionV2`（multi_scale_deformable_attention_v2）：分层参考点 + 按层尺度归一采样偏移，旧版保留。
+- S3 `SegFormerV3Head`（segformer_v3_head）：overlap embed + MixFFN + SE 通道注意力融合解码。
+
+## 三、验证
+- 新增 `tests/test_models/test_v015_batch2.py`（5 项）：SwinV2 层与骨干（分类+检测）、可变形 V2（含梯度）、
+  SegFormerV3、组合器子包可构建。
+- 全量测试 265 passed + 2 skipped；ruff / black 全绿。
+
+## 四、后续
+- 批次 3：D3 DINO 变体（大工作量，单独排期）。
+- 长期（默认推迟）：多卡验证、torchmetrics 迁移。

@@ -11,6 +11,7 @@ from .psp import PSPHead
 from .seg import SegHead
 from .segformer import SegFormerHead
 from .segformer_v2 import SegFormerV2Head
+from .segformer_v3 import SegFormerV3Head
 from .swin_unet import SwinUNetDecoder
 from .unet import UNetDecoder
 from .upernet import UPerNetHead
@@ -26,6 +27,7 @@ __all__ = [
     "UNetDecoder",
     "SegFormerHead",
     "SegFormerV2Head",
+    "SegFormerV3Head",
     "SwinUNetDecoder",
     "MaskFormerHead",
     "Mask2FormerHead",

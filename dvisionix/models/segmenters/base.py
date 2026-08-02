@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""分割组合模型：SegmentationModel（backbone + neck(可选) + 分割头）。"""
+"""SegmentationModel（backbone + neck(可选) + 分割头）。"""
 
 from typing import Any, Dict, Optional
 
 import torch
 import torch.nn.functional as F
 
-from ..registry import BACKBONES, HEADS, MODELS, NECKS
-from .base import BaseModel
+from ...registry import BACKBONES, HEADS, MODELS, NECKS
+from ..base import BaseModel
 
 # 多尺度头由 head 类属性 input_style="multi_scale" 自声明（装配器统一读取，无需硬编码名单）。
 
@@ -15,18 +15,7 @@ from .base import BaseModel
 @MODELS.register()
 @MODELS.register(name="segmentation_model")
 class SegmentationModel(BaseModel):
-    """骨干 + 分割头组合模型（可选 neck）。
-
-    配置示例::
-
-        model:
-          type: segmentation_model
-          num_classes: 21
-          backbone: {type: timm_backbone, name: resnet18, features_only: true, out_indices: [1,2,3,4]}
-          head: {type: deeplabv3_head, num_classes: 21}
-
-    分割头支持：seg_head（1x1）/ fcn_head / deeplabv3_head / unet_decoder（需多尺度特征）。
-    """
+    """骨干 + 分割头组合模型（可选 neck）。"""
 
     def __init__(
         self,
@@ -120,37 +109,4 @@ class SegmentationModel(BaseModel):
         return out
 
 
-@MODELS.register()
-@MODELS.register(name="swin_unet")
-class SwinUNet(BaseModel):
-    """Swin-UNet 完整装配：SwinBackbone（多尺度 encoder）+ SwinUNetDecoder（PatchExpand + 跳连）。"""
-
-    def __init__(
-        self,
-        backbone: Dict[str, Any],
-        num_classes: int,
-        decoder: Optional[Dict[str, Any]] = None,
-        d_model: int = 64,
-        upsample: bool = True,
-        **kwargs,
-    ):
-        super().__init__(task_type="segmentation")
-        bb_cfg = dict(backbone)
-        bb_cfg.setdefault("features_only", True)
-        self.backbone = BACKBONES.build(bb_cfg)
-        dec_cfg = dict(decoder) if decoder else {"type": "swin_unet_decoder"}
-        dec_cfg.setdefault("in_channels_list", list(self.backbone.out_channels))
-        dec_cfg.setdefault("num_classes", num_classes)
-        dec_cfg.setdefault("d_model", d_model)
-        self.decoder = HEADS.build(dec_cfg)
-        self.num_classes = getattr(self.decoder, "num_classes", num_classes)
-        self.upsample = upsample
-
-    def forward(self, x: torch.Tensor, **kwargs):
-        out = self.decoder(self.backbone(x))
-        if self.upsample and out.shape[-2:] != x.shape[-2:]:
-            out = F.interpolate(out, size=x.shape[-2:], mode="bilinear", align_corners=False)
-        return out
-
-
-__all__ = ["SegmentationModel", "SwinUNet"]
+__all__ = ["SegmentationModel"]
