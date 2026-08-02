@@ -19,6 +19,7 @@ from .losses import (
     RetinaNetLoss,
     SigmoidFocalLoss,
     YOLOLoss,
+    YOLOv9Loss,
 )
 
 __all__ = [
@@ -39,4 +40,5 @@ __all__ = [
     "DETRLoss",
     "OneToOneYOLOLoss",
     "CenterNetLoss",
+    "YOLOv9Loss",
 ]

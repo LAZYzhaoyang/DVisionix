@@ -34,6 +34,7 @@ from .detection import (
     SigmoidFocalLoss,
     TaskAlignedAssigner,
     YOLOLoss,
+    YOLOv9Loss,
 )
 from .segmentation import CombinedSegmentationLoss, DiceLoss, MaskFormerLoss
 
@@ -69,4 +70,5 @@ __all__ = [
     "YOLOLoss",
     "OneToOneYOLOLoss",
     "CenterNetLoss",
+    "YOLOv9Loss",
 ]

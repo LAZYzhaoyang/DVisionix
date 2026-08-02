@@ -751,6 +751,45 @@ class CenterNetLoss(BaseLoss):
         }
 
 
+@LOSSES.register()
+@LOSSES.register(name="yolo_v9_detection")
+class YOLOv9Loss(BaseLoss):
+    """YOLOv9-lite 损失：主头 YOLOLoss + PGI 辅助头损失（aux_weight 加权，仅训练）。"""
+
+    def __init__(
+        self,
+        num_classes: int,
+        strides=(8, 16, 32),
+        aux_strides=(4, 8),
+        aux_weight: float = 0.25,
+        topk: int = 13,
+        weight: float = 1.0,
+    ):
+        super().__init__(weight)
+        self.main = YOLOLoss(num_classes=num_classes, strides=strides, topk=topk)
+        self.aux = YOLOLoss(num_classes=num_classes, strides=aux_strides, topk=topk)
+        self.aux_weight = float(aux_weight)
+
+    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        main_out = self.main(
+            {"cls": preds["cls"], "reg": preds["reg"]},
+            batch,
+            image_hw=image_hw,
+            device=device,
+        )
+        if preds.get("aux_cls") is not None:
+            aux_out = self.aux(
+                {"cls": preds["aux_cls"], "reg": preds["aux_reg"]},
+                batch,
+                image_hw=image_hw,
+                device=device,
+            )
+            main_out["loss"] = main_out["loss"] + self.aux_weight * aux_out["loss"]
+            main_out["aux_cls_loss"] = aux_out["cls_loss"]
+            main_out["aux_reg_loss"] = aux_out["reg_loss"]
+        return main_out
+
+
 __all__ = [
     "ObjectnessLoss",
     "GridDetectionLoss",
@@ -761,4 +800,5 @@ __all__ = [
     "DETRLoss",
     "OneToOneYOLOLoss",
     "CenterNetLoss",
+    "YOLOv9Loss",
 ]

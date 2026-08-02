@@ -45,10 +45,10 @@ dvisionix/
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath / CSP / ELAN / E-ELAN / 可变形注意力）
-│   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone / ConvNeXt / CSPDarknet / MobileNetV3
+│   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone / ConvNeXt / CSPDarknet / MobileNetV3 / ViT / Swin
 │   ├── necks/           # FPN / PANet
 │   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC/CircleLoss/SimCLR）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer(+V2)/MaskFormer(+2)/PSP/UPerNet/BiSeNet/SwinUNet）· 检测（Det/FCOS/RetinaNet/YOLO(v8/v10)/DETR/RT-DETR(+full)/DeformableDETR/CenterNet）
-│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO(v8/v10) / DETR / RT-DETR(+full) / DeformableDETR / CenterNet（decode 与模型同文件）
+│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO(v8/v9/v10) / DETR / RT-DETR(+full) / DeformableDETR / CenterNet（decode 与模型同文件）
 │   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
 │   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
 │   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
@@ -334,6 +334,13 @@ MIT License
 ---
 
 ## 📌 版本演进
+
+### 0.12.0（Transformer 骨干 / YOLOv9-lite）
+- 骨干：`vit_backbone`（patch embed + Transformer encoder，正弦位置编码支持任意尺寸）、
+  `swin_backbone`（window/shifted-window 注意力 + PatchMerging，stride 4/8/16/32）；
+- YOLOv9-lite：`ReversibleBlock`（可逆 + 逆变换）+ `yolo_v9`（PGI 辅助头，仅训练）+ `yolo_v9_detection` 损失 + 配置示例；
+- 多卡实验与 torchmetrics 迁移详细计划已**永久写入 CodePlan**（默认推迟，仅按明确指示实施）；
+- 全量测试 250 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.11.0（骨干库 / SimCLR / 分割增强）
 - 内置骨干：`convnext_backbone` / `cspdarknet_backbone` / `mobilenetv3_backbone`（通用 `FeatureBackboneBase`，

@@ -1,11 +1,11 @@
-# YOLOv5 风格端到端 demo 配置（ELAN 骨干 + PANet + YOLOHead）
+# YOLOv9-lite（PGI 辅助损失 + 可逆块）端到端 demo 配置
 _base_: "../../dvisionix/config/defaults/detection.yaml"
 
 experiment_name: "demo_yolov9_synthetic"
 
 model:
   _delete_: true
-  type: "yolo"
+  type: "yolo_v9"
   num_classes: 3
   backbone:
     type: "sequential_backbone"
@@ -15,11 +15,11 @@ model:
       - {type: conv_norm_act, in_channels: 16, out_channels: 32, stride: 2}
       - [
           {type: conv_norm_act, in_channels: 32, out_channels: 64, stride: 2},
-          {type: elan_layer, in_channels: 64, out_channels: 64, num_blocks: 2},
+          {type: eelan_layer, in_channels: 64, out_channels: 64, num_blocks: 2},
         ]
       - [
           {type: conv_norm_act, in_channels: 64, out_channels: 128, stride: 2},
-          {type: elan_layer, in_channels: 128, out_channels: 128, num_blocks: 2},
+          {type: reversible_block, channels: 128, num_layers: 2},
         ]
   neck:
     type: "panet"
@@ -28,12 +28,18 @@ model:
     type: "yolo_head"
     num_classes: 3
     strides: [4, 8, 16, 32]
+  aux_head:
+    type: "yolo_head"
+    num_classes: 3
+    strides: [4]
+  aux_stage_index: 1
 
 loss:
   _delete_: true
-  type: "yolo_detection"
+  type: "yolo_v9_detection"
   strides: [4, 8, 16, 32]
-  topk: 13
+  aux_strides: [4]
+  aux_weight: 0.25
 
 data:
   dataset: "synthetic"

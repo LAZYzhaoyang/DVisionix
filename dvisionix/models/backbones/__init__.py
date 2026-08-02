@@ -11,7 +11,9 @@ from .cspdarknet import CSPDarknetBackbone
 from .feature import FeatureBackboneBase
 from .mobilenetv3 import MobileNetV3Backbone
 from .sequential import SequentialBackbone
+from .swin import SwinBackbone
 from .timm_backbone import TimmBackbone, TimmClassifier, list_timm_models
+from .vit import ViTBackbone
 
 __all__ = [
     "TimmBackbone",
@@ -22,4 +24,6 @@ __all__ = [
     "ConvNeXtBackbone",
     "CSPDarknetBackbone",
     "MobileNetV3Backbone",
+    "ViTBackbone",
+    "SwinBackbone",
 ]

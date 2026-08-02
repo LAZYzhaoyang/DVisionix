@@ -16,6 +16,7 @@ DVisionix 提供**组件化检测器**（backbone → neck → head 即插即用
 | `DeformableDETRDetector` | transformer 端到端（compact） | `DeformableDETRHead`（多尺度可变形注意力）+ `DETRLoss` | `deformable_detr` |
 | `NMSFreeYOLODetector` | anchor-free（NMS-free） | `NMSFreeYOLOHead` + `OneToOneYOLOLoss`（免 NMS 解码） | `yolo_v10` |
 | `CenterNetDetector` | 关键点检测 | `CenterNetHead`（热图+宽高+偏移）+ `CenterNetLoss` | `centernet` |
+| `YOLOv9Detector` | anchor-free（PGI） | `ReversibleBlock` 骨干 + `YOLOHead` 主/辅头 + `YOLOv9Loss` | `yolo_v9` |
 
 所有检测器由 `SingleStageDetector` 脚手架统一装配：backbone（自动 `features_only=True`）→ neck（可选 FPN / PANet）→ head。
 YOLO 系列骨干可用 `csp_layer` / `elan_layer` / `eelan_layer` 拼装（见 `configs/detection/yolov5_synthetic.yaml` / `yolov7_synthetic.yaml` / `yolov9_synthetic.yaml` / `yolov10_synthetic.yaml`）。
@@ -112,7 +113,7 @@ keep = batched_nms(boxes, scores, labels, iou_threshold=0.5)  # 多类（类间�
 
 ## 组合性说明
 
-- **backbone**：`timm_backbone`（任意 timm 模型）、`sequential_backbone`（自拼层）或内置骨干 `convnext_backbone` / `cspdarknet_backbone` / `mobilenetv3_backbone`。
+- **backbone**：`timm_backbone`（任意 timm 模型）、`sequential_backbone`（自拼层）或内置骨干 `convnext_backbone` / `cspdarknet_backbone` / `mobilenetv3_backbone` / `vit_backbone` / `swin_backbone`。
 - **neck**：`fpn` / `panet`（可选）；DETR 单尺度头可用可不用 neck；RT-DETR 亦可接 neck（按 neck 输出通道自动对齐）。
 - **head**：`fcos_head` / `retinanet_head` / `yolo_head` / `detr_head` / `rtdetr_head` 均与任意 backbone / neck 组合；
   多尺度头（`input_style="multi_scale"` 自声明）自动注入 `in_channels_list`，单尺度头注入 `in_channels`，无需手动对齐通道数。

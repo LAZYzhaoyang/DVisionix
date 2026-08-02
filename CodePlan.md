@@ -760,3 +760,88 @@ models/
 ## 六、验证
 - 新增 `tests/test_models/test_v011_d14.py`（8 项）：三个内置骨干分类+检测组合、SegFormerV2 / SwinUNet、SimCLRTransforms 双视角、SimCLRTask 训练下降、simclr 配置加载。
 - 全量测试 244 passed + 2 skipped；ruff / black 全绿。
+
+
+---
+
+# Transformer 骨干 / YOLOv9-lite（v0.12.0）
+
+> 用户确认：实施 ViT/Swin 等 Transformer 骨干与 YOLOv9-lite；多卡实验与 torchmetrics 迁移
+> 永久列入 CodePlan（含详细步骤与原理），默认推迟，仅当用户明确要求时实施。
+
+## 一、Transformer 骨干
+- `ViTBackbone`（vit_backbone）：patch embed（4x4 stride4）+ Transformer encoder（正弦位置编码，支持任意输入尺寸）
+  + LayerNorm + 网格特征（单尺度，配合 FPN/单尺度头即插即用）。
+- `SwinBackbone`（swin_backbone）：patch embed（4x4 stride4）+ 4 个 stage（PatchMerging + SwinBlock：
+  window/shifted-window 注意力，自适应窗口 + 补零，compact 近似无严格 attention mask），stride 4/8/16/32。
+
+## 二、YOLOv9-lite（PGI）
+- `ReversibleBlock`（reversible_block，注册 LAYERS）：输入拆半，y1=x1+F(x2)、y2=x2+G(y1)，提供 `inverse` 可逆重建（验证误差 ~1e-6）。
+- `YOLOv9Detector`（yolo_v9）：E-ELAN/可逆骨干 + neck + 主 YOLOHead + 浅层 PGI 辅助头（仅训练输出 aux_cls/aux_reg，推理不参与）。
+- `YOLOv9Loss`（yolo_v9_detection）：主 YOLOLoss + aux_weight * 辅助 YOLOLoss（输出 aux_cls_loss / aux_reg_loss）。
+- 配置示例：`configs/detection/yolov9_synthetic.yaml`。
+
+## 三、验证
+- 新增 `tests/test_models/test_v012_transformers_yolov9.py`（6 项）：ViT/Swin 分类+检测组合、ViT 任意尺寸、可逆块逆变换、
+  yolo_v9 训练/推理前向与损失下降、yolov9 配置加载。
+- 全量测试 250 passed + 2 skipped；ruff / black 全绿。
+
+---
+
+# 永久计划（默认推迟）：多卡实机验证 与 指标 torchmetrics 迁移
+
+> 以下两项为**长期计划**：默认不实施，除非用户明确指示。已含详细实现步骤与原理，供排期参考。
+
+## P1：多卡实机验证（DDP）
+
+### 现状
+- DDP 路径已隔离实现：`Trainer(strategy="ddp", devices=[...])`；无 CUDA 时 `strategy="ddp"` 明确报错、`"auto"` 降级 `none`。
+- `DistributedSampler(drop_last=True)`、rank0 专属保存/日志、验证指标 rank0 `all_gather_object` 聚合已实现。
+- `tests/test_training/test_ddp_smoke.py` 无卡自动 skip。
+
+### 目标
+在真实多卡（GPU）机器上验证并修复 DDP 训练 / 评估的正确性与性能。
+
+### 原理
+- DDP：每进程持有完整模型副本，forward/backward 后梯度通过 `allreduce` 平均（Ring-AllReduce），保证各 rank 参数一致。
+- `DistributedSampler(drop_last=True)`：打散数据并按 world_size 切分；drop_last 保证各 rank batch 数一致，避免 allreduce 死锁。
+- 验证聚合：各 rank 的 preds/targets 用 `all_gather_object` 收集到 rank0，由任务统一 update_metrics，保证 mAP/PQ 等在全局数据上计算。
+
+### 实现步骤
+1. 环境：多卡机器（>=2 GPU）安装 torch 的 CUDA 版；`torchrun --nproc_per_node=N tools/train.py --config ... --devices 0,1,...`。
+2. 冒烟：`torchrun --nproc_per_node=2 -m pytest tests/test_training/test_ddp_smoke.py -q`。
+3. 端到端：分类/检测/分割/MaskFormer 各跑 1-2 epoch，核对：loss 曲线与单卡一致性（lr 按 world_size 缩放策略）、
+   history.csv 与日志仅 rank0 输出、checkpoint 仅 rank0 保存、验证指标与单卡（相同 seed）数值一致。
+4. 已知风险点：BatchNorm 在 DDP 下使用 SyncBN（`torch.nn.SyncBatchNorm.convert_sync_batchnorm`）才严格等价；
+   采样类算子（PartialFCHead 随机采样）各 rank 需同 seed；EMA 影子权重仅在 rank0 维护后广播。
+5. 验收：上述核对通过且无死锁；将验证步骤写入 docs（多卡验证清单）。
+
+## P2：分类 / 分割指标迁移 torchmetrics 可选后端
+
+### 现状
+- 检测 mAP 已支持 `use_torchmetrics=True` 可选后端（`DetectionMetrics`，未安装自动回退内置）。
+- 分类（Accuracy/Precision/Recall/F1/TopK）与分割（mIoU/PixelAccuracy/DiceScore）仅内置实现。
+
+### 目标
+把检测指标的可选后端模式扩展到分类/分割指标：`use_torchmetrics=True` 时委托 torchmetrics 实现，保持
+`update/compute/reset` 累积接口不变；未安装时警告 + 回退内置。
+
+### 原理
+- torchmetrics 提供经过大规模验证的原子指标（Accuracy / Precision / Recall / F1Score / JaccardIndex 等），
+  边界处理（空类别、per-class 聚合、多标签）更完整。
+- 双后端模式：内部持有可选 `_torch_metric`；`update` 喂原始张量给 torchmetrics（其内部累积状态），
+  `compute` 返回与内置一致的标量/dict；`reset` 重建实例。
+
+### 实现步骤
+1. `metrics/classification.py`：各指标增加 `use_torchmetrics=False` 参数；True 时导入
+   `torchmetrics.{Accuracy,Precision,Recall,F1Score}`（TopK 用 `torchmetrics.classification.MulticlassAccuracy(top_k=k)`）；
+   `__init__` 中 try/except，导入失败打印警告并 `use_torchmetrics=False`。
+2. `metrics/segmentation.py`：`MeanIoU -> torchmetrics.JaccardIndex(task="multiclass")`、
+   `PixelAccuracy -> torchmetrics.Accuracy(task="multiclass")`、`DiceScore -> torchmetrics.Dice`。
+3. `metrics/presets.py` / `get_preset_metrics`：透传 `use_torchmetrics`；`ClassificationMetrics/SegmentationMetrics` 加参数。
+4. 依赖：torchmetrics 列入 `extras_require`（可选），不强制安装。
+5. 测试：`tests/test_metrics` 新增"双后端数值等价"用例（相同数据内置 vs torchmetrics 结果一致；
+   torchmetrics 缺失时自动回退路径）。安装 torchmetrics 的环境下跑通，CI 保持无 torchmetrics 可过。
+6. 验收：分类/分割指标 `use_torchmetrics=True` 与内置数值一致；缺失依赖回退正常；README 说明可选依赖。
+
+> 状态：**永久推迟**。触发条件：用户明确要求实施（如"实施指标迁移" / "实施多卡验证"）。

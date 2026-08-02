@@ -19,6 +19,7 @@ from .retinanet import RetinaNetDetector, retinanet_decode
 from .rtdetr import RTDETRDetector
 from .rtdetr_full import RTDETRFullDetector
 from .yolo import YOLODetector, yolo_decode
+from .yolov9 import YOLOv9Detector
 
 __all__ = [
     "SingleStageDetector",
@@ -38,4 +39,5 @@ __all__ = [
     "DeformableDETRDetector",
     "CenterNetDetector",
     "NMSFreeYOLODetector",
+    "YOLOv9Detector",
 ]

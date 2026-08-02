@@ -21,6 +21,7 @@ from .csp import CSPLayer
 from .deformable_attention import MultiScaleDeformableAttention
 from .elan import EELANLayer, ELANLayer
 from .mbconv import MBConvBlock
+from .reversible import ReversibleBlock
 from .timm_layers import create_timm_layer, list_timm_layers
 
 
@@ -50,6 +51,7 @@ __all__ = [
     "MultiScaleDeformableAttention",
     "ConvNeXtBlock",
     "MBConvBlock",
+    "ReversibleBlock",
     "create_timm_layer",
     "list_timm_layers",
 ]
