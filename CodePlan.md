@@ -1017,3 +1017,31 @@ models/
 - 训练工程 P2：超参搜索工具 `tools/hparam_search.py`、蒸馏扩展（FeatureDistillLoss）。
 - 训练工程 P3：torch.compile / channels_last、实验管理增强。
 - DINO 可选增强：look-forward-twice、对比去噪细调。
+
+---
+
+# 训练工程 P2（v0.17.0-P2）
+
+> 用户确认：训练工程 P2 + P3 全部包含 + DINO 可选增强（look-forward-twice），拆分提交。版本统一 v0.17.0。
+> 本阶段为 P2：超参搜索工具 + 特征蒸馏。P3 与 DINO-LFT 后续单独提交。
+
+## 一、超参搜索工具（tools/hparam_search.py）
+- 参数网格定义：YAML `{点路径: [候选值,...]}`，缺省笛卡尔积全组合，`--num-trials` 走随机采样（`--seed` 控制）。
+- 每个 trial 用独立子进程调用 `tools/train.py --cfg-options <k=v>... --work-dir runs/search/trial_NNN`，实验间完全隔离。
+- `--cfg-options` 生成**列表形式**参数（每个 `k=v` 独立成参，与 train.py 的 `nargs="*"` 语义一致，列表/字典值自动 YAML 化）。
+- 汇总：读取各 trial `history.csv` 的监控指标（`--monitor` / `--mode`），输出 `search_results.csv`。
+- 示例配置：`configs/classification/hparam_search.yaml`。
+
+## 二、特征蒸馏（FeatureDistillLoss + DistillCallback 扩展）
+- `models/losses/classification.py` 新增 `FeatureDistillLoss`（注册名 `feature_distill`）：MSE + 可选 L2 归一化，支持单张量/多层特征列表。
+- `training/callbacks/distill.py` 的 `DistillCallback` 新增 `feature_extractor` 参数：`on_batch_begin` 在 teacher 前向后计算中间特征并缓存到 `trainer.teacher_features`，`on_epoch_end` 清空；与 `teacher_logits` 并存。
+- 用法示例：`DistillCallback(teacher=..., temperature=4.0, feature_extractor=lambda m, x: [m.encoder(x)])`，任务内用 `trainer.teacher_features` 计算 `FeatureDistillLoss`。
+
+## 三、验证
+- 新增 `tests/test_training/test_v017_p2.py`（3 项）：FeatureDistillLoss（单张量/相同张量=0/多层列表）、DistillCallback feature_extractor 注入、hparam_search 辅助函数（组合/格式化/随机采样/--cfg-options 列表化）。
+- 全量测试 271 passed + 2 skipped（P2 增量后仍全绿）；ruff / black 全绿。
+
+## 四、下一步
+- 训练工程 P3：`torch.compile` / `channels_last`（Trainer + train.py 配置透传）、实验管理增强（work_dir 配置哈希、best_metrics.csv 导出、可选 best checkpoint ONNX 导出）。
+- DINO 可选增强：look-forward-twice（解码器各层中间 box + 主分支分层 box 损失）。
+

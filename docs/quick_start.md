@@ -65,6 +65,44 @@ trainer.fit(model)
 - 线性评估（自监督表征质量）：`model.pretrained_backbone` 加载预训练权重后冻结 encoder + L2 归一化线性头
   （见 `configs/classification/linear_eval.yaml`）
 
+## 训练工程增强（v0.17.0）
+
+### 超参搜索（tools/hparam_search.py）
+参数网格用 YAML 描述（点路径 -> 候选值），逐 trial 独立进程跑 `tools/train.py`，实验完全隔离：
+
+```yaml
+# configs/classification/hparam_search.yaml
+training.optimizer.lr: [0.0001, 0.001, 0.003]
+training.optimizer.weight_decay: [0.0001, 0.001]
+training.scheduler.type: [cosine, step]
+```
+
+```bash
+# 笛卡尔积全组合
+python tools/hparam_search.py --config configs/classification/demo_synthetic.yaml \
+  --param-spec configs/classification/hparam_search.yaml --monitor val_accuracy --mode max
+
+# 随机采样 8 组
+python tools/hparam_search.py --config configs/classification/demo_synthetic.yaml \
+  --param-spec configs/classification/hparam_search.yaml --num-trials 8 --seed 0
+```
+
+每个 trial 落在 `runs/search/trial_NNN/`，汇总结果写入 `runs/search/search_results.csv`（含监控指标与 work_dir）。
+
+### 特征蒸馏（FeatureDistillLoss）
+```python
+from dvisionix.models.losses import FeatureDistillLoss
+from dvisionix.training import DistillCallback
+
+# teacher 中间特征（如 encoder 输出列表）挂在 trainer 上：
+cb = DistillCallback(
+    teacher=teacher_model,
+    temperature=4.0,
+    feature_extractor=lambda m, x: [m.encoder(x)],
+)
+# 任务内：loss = FeatureDistillLoss(normalize=True)(student_feats, trainer.teacher_features)
+```
+
 ## 相关文档
 - [配置系统](config_system.md)
 - [骨干网络（timm）](backbones.md)

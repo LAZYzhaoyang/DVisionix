@@ -335,6 +335,12 @@ MIT License
 
 ## 📌 版本演进
 
+### 0.17.0（训练工程 P2：超参搜索 / 特征蒸馏）
+- 超参搜索工具 `tools/hparam_search.py`：YAML 参数网格（点路径 -> 候选值）笛卡尔积或随机采样，
+  逐 trial 独立子进程跑 `train.py` 并汇总 `search_results.csv`（示例 `configs/classification/hparam_search.yaml`）；
+- 特征蒸馏：`FeatureDistillLoss`（`feature_distill`，MSE + 可选 L2 归一化，支持多层特征）+ `DistillCallback` 新增 `feature_extractor`；
+- 新增 P2 测试 3 项，全量 271 passed + 2 skipped；ruff / black 全绿。
+
 ### 0.16.0（DINO-lite / 线性评估 / 训练工程 P1）
 - 检测：`dinodetr`（hybrid query selection + query denoising 对比正负样本 + box refinement）；
 - 自监督闭环：`LinearEvalTask`（冻结 encoder + L2 归一化线性头）+ `load_backbone` + `pretrained_backbone` 配置；

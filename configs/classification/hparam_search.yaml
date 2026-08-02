@@ -1,0 +1,12 @@
+﻿# 超参搜索参数网格示例（配合 tools/hparam_search.py 使用）。
+# 格式：{点路径: [候选值, ...]}；缺省时对全部候选值做笛卡尔积，
+# 或通过 --num-trials 指定随机采样次数（--seed 控制随机种子）。
+# 每个点路径都会通过 --cfg-options 覆盖到 base 配置，语义与 train.py 的 CLI 覆盖一致。
+
+training.optimizer.lr: [0.0001, 0.001, 0.003]
+training.optimizer.weight_decay: [0.0001, 0.001]
+training.scheduler.type: [cosine, step]
+
+# 也可搜索结构化参数（列表/字典写法与 Config CLI 覆盖保持一致）：
+# model.backbone.depths: [[1, 1, 1], [2, 2, 2]]
+# data.image_size: [32, 64]

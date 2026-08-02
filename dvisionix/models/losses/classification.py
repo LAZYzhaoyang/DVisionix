@@ -160,6 +160,32 @@ __all__ = [
 
 
 @LOSSES.register()
+@LOSSES.register(name="feature_distill")
+class FeatureDistillLoss(BaseLoss):
+    """特征蒸馏损失：student / teacher 中间特征对齐（MSE，可选 L2 归一化）。
+
+    支持单特征张量或多层特征列表（列表逐层求和）。配合 DistillCallback 的
+    ``feature_extractor``（teacher 特征缓存）与自定义 Task 使用。
+    """
+
+    def __init__(self, weight: float = 1.0, normalize: bool = True, reduction: str = "mean"):
+        super().__init__(weight)
+        self.normalize = bool(normalize)
+        self.reduction = reduction
+
+    def _one(self, s: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        if self.normalize:
+            s = F.normalize(s.flatten(1), dim=1)
+            t = F.normalize(t.flatten(1), dim=1)
+        return F.mse_loss(s, t, reduction=self.reduction)
+
+    def forward(self, student_feats, teacher_feats, **kwargs) -> torch.Tensor:
+        if isinstance(student_feats, (list, tuple)):
+            return sum(self._one(s, t) for s, t in zip(student_feats, teacher_feats))
+        return self._one(student_feats, teacher_feats)
+
+
+@LOSSES.register()
 @LOSSES.register(name="distillation")
 class DistillationLoss(BaseLoss):
     """知识蒸馏损失：CE(硬标签) + alpha * KL(学生, 教师 soft targets)。

@@ -13,6 +13,7 @@ from .classification import (
     CircleLoss,
     CrossEntropy,
     DistillationLoss,
+    FeatureDistillLoss,
     FocalLoss,
     InfoNCELoss,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "FocalLoss",
     "BinaryCrossEntropy",
     "DistillationLoss",
+    "FeatureDistillLoss",
     "CircleLoss",
     "InfoNCELoss",
     "DiceLoss",
