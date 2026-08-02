@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-检测后处理：NMS（非极大值抑制）
+模型无关后处理原语
 
-提供纯 PyTorch 实现的单类与多类 NMS，避免依赖 torchvision.ops。
+- NMS / IoU：纯 PyTorch 实现，避免依赖 torchvision.ops。
+- 共享契约解码器：多个 head 输出契约一致时共用的解码函数（如 maskformer_decode）。
+模型专属解码逻辑与其 head/detector 同文件（见各 detectors/*.py 与 heads/*）。
 """
 
 import torch
@@ -57,6 +59,38 @@ def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float = 0.5) -
         remain = (ious <= iou_threshold).nonzero(as_tuple=False).squeeze(1)
         order = order[remain + 1]
     return torch.tensor(keep, dtype=torch.long, device=boxes.device)
+
+
+def maskformer_decode(
+    preds,
+    image_hw,
+    score_threshold: float = 0.3,
+    mask_threshold: float = 0.5,
+    max_detections: int = 100,
+):
+    """共享契约解码器：MaskFormer / Mask2Former 的 full 模式 -> (masks, scores, labels)。
+
+    输入 preds：{"pred_logits": (B,Q,C+1), "pred_masks": (B,Q,H,W)}；
+    返回每张图 (K, H, W) bool mask / (K,) scores / (K,) labels。
+    属于模型无关的后处理原语（多个 head 契约一致时共享）。
+    """
+    logits, masks = preds["pred_logits"], preds["pred_masks"]
+    masks = masks.sigmoid()
+    probs = torch.softmax(logits, dim=-1)[..., :-1]
+    scores, labels = probs.max(dim=-1)
+    masks_list, scores_list, labels_list = [], [], []
+    for b in range(scores.shape[0]):
+        keep = scores[b] >= score_threshold
+        m = masks[b][keep] > mask_threshold
+        s = scores[b][keep]
+        lb = labels[b][keep]
+        if m.shape[0] > max_detections:
+            _, idx = s.topk(max_detections)
+            m, s, lb = m[idx], s[idx], lb[idx]
+        masks_list.append(m)
+        scores_list.append(s)
+        labels_list.append(lb)
+    return masks_list, scores_list, labels_list
 
 
 def batched_nms(

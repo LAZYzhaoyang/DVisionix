@@ -30,16 +30,19 @@ class CSPLayer(nn.Module):
         hidden_ratio: float = 0.5,
         expansion: float = 0.5,
         shortcut: bool = True,
+        act: str = "relu",
     ):
         super().__init__()
         hidden = max(1, int(out_channels * hidden_ratio))
-        self.main_conv = ConvNormAct(in_channels, hidden, 1)
-        self.short_conv = ConvNormAct(in_channels, hidden, 1)
+        self.main_conv = ConvNormAct(in_channels, hidden, 1, act=act)
+        self.short_conv = ConvNormAct(in_channels, hidden, 1, act=act)
         blocks = []
         for _ in range(num_blocks):
-            blocks.append(_Bottleneck(hidden, hidden, expansion=expansion, shortcut=shortcut))
+            blocks.append(
+                _Bottleneck(hidden, hidden, expansion=expansion, shortcut=shortcut, act=act)
+            )
         self.blocks = nn.Sequential(*blocks)
-        self.out_conv = ConvNormAct(hidden * 2, out_channels, 1)
+        self.out_conv = ConvNormAct(hidden * 2, out_channels, 1, act=act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y1 = self.blocks(self.main_conv(x))
@@ -51,12 +54,17 @@ class _Bottleneck(nn.Module):
     """轻量瓶颈：1x1 降维 -> 3x3 升维（可选残差）。"""
 
     def __init__(
-        self, in_channels: int, out_channels: int, expansion: float = 0.5, shortcut: bool = True
+        self,
+        in_channels: int,
+        out_channels: int,
+        expansion: float = 0.5,
+        shortcut: bool = True,
+        act: str = "relu",
     ):
         super().__init__()
         hidden = max(1, int(out_channels * expansion))
-        self.conv1 = ConvNormAct(in_channels, hidden, 1)
-        self.conv2 = ConvNormAct(hidden, out_channels, 3, stride=1)
+        self.conv1 = ConvNormAct(in_channels, hidden, 1, act=act)
+        self.conv2 = ConvNormAct(hidden, out_channels, 3, stride=1, act=act)
         self.shortcut = shortcut and in_channels == out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

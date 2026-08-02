@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
-"""Anchor 工具：AnchorGenerator（RetinaNet 风格）+ bbox delta 编解码。"""
+﻿# -*- coding: utf-8 -*-
+"""Anchor 工具（通用几何工具，detectors 与 losses 平级共用）。"""
 
 import math
 from typing import List, Tuple
@@ -8,14 +8,7 @@ import torch
 
 
 class AnchorGenerator:
-    """逐层网格 anchor 生成器（xyxy 绝对坐标）。
-
-    Args:
-        strides: 各层步长（对应 FPN 输出层）。
-        base_sizes: 各层基础边长。
-        ratios: 宽高比。
-        scales: 多尺度因子。
-    """
+    """逐层网格 anchor 生成器（xyxy 绝对坐标）。"""
 
     def __init__(
         self,
@@ -44,11 +37,7 @@ class AnchorGenerator:
         return len(self.ratios) * len(self.scales)
 
     def grid_anchors(self, feature_maps: List[torch.Tensor]) -> List[torch.Tensor]:
-        """由特征图形状生成各层 anchors。
-
-        Returns:
-            每层 (H*W*A, 4) xyxy 绝对坐标。
-        """
+        """由特征图形状生成各层 anchors（每层 (H*W*A, 4)）。"""
         assert len(feature_maps) == len(self.strides)
         outs = []
         for feat, stride, base in zip(feature_maps, self.strides, self.base_anchors):

@@ -194,8 +194,12 @@ model = build_model({
 > （已内置：`UNetDecoder` / `SegFormerHead` / `MaskFormerHead` / `RTDETRHead`），装配器据此自动注入，
 > 新增多尺度头只需声明该属性即可，无需改装配器。
 
-> 自定义检测器 / 分割头时，专属 decode（预测 → boxes/scores/labels 或 masks）建议写在模型/head 同文件中
-> （如 `detectors/fcos.py` 的 `fcos_decode`），`postprocess.py` 只保留共享原语 `nms / batched_nms / box_iou`。
+> 自定义检测器 / 分割头时，专属 decode（预测 → boxes/scores/labels 或 masks）写在模型/head 同文件中
+> （如 `detectors/fcos.py` 的 `fcos_decode`）；多个模型契约一致时，共享解码纯函数放 `postprocess.py`（如 `maskformer_decode`），
+> 模型保留 `decode()` 薄桥接。
+>
+> **模块调用规则**：只允许上层 import 下层（layers/postprocess ← backbones/necks/heads/losses ← detectors 等组合器）；
+> 兄弟模块互不 import；共享实现一律下沉 layers/necks/postprocess。完整规则（R1-R6）见 CodePlan。
 
 ### 2.5 用 layers 拼装自定义 backbone（SequentialBackbone）
 

@@ -44,7 +44,6 @@ from .segmentation import (
     SwinUNetDecoder,
     UNetDecoder,
     UPerNetHead,
-    maskformer_decode,
 )
 
 __all__ = [
@@ -72,7 +71,6 @@ __all__ = [
     "SwinUNetDecoder",
     "MaskFormerHead",
     "Mask2FormerHead",
-    "maskformer_decode",
     "DetHead",
     "FCOSHead",
     "RetinaNetHead",

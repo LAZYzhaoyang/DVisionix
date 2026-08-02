@@ -6,7 +6,11 @@ import torch.nn as nn
 
 from ....registry import HEADS
 from ...base import BaseModel
-from ...layers import MultiScaleDeformableAttention, PositionEmbeddingSine
+from ...layers import (
+    DeformableDecoderLayer,
+    DeformableEncoderLayer,
+    PositionEmbeddingSine,
+)
 
 
 @HEADS.register()
@@ -47,13 +51,13 @@ class DeformableDETRHead(BaseModel):
 
         self.encoder_layers = nn.ModuleList(
             [
-                _DeformableEncoderLayer(d_model, num_heads, self.num_levels, num_points, dropout)
+                DeformableEncoderLayer(d_model, num_heads, self.num_levels, num_points, dropout)
                 for _ in range(num_encoder_layers)
             ]
         )
         self.decoder_layers = nn.ModuleList(
             [
-                _DeformableDecoderLayer(d_model, num_heads, self.num_levels, num_points, dropout)
+                DeformableDecoderLayer(d_model, num_heads, self.num_levels, num_points, dropout)
                 for _ in range(num_decoder_layers)
             ]
         )
@@ -102,58 +106,6 @@ class DeformableDETRHead(BaseModel):
         logits = self.class_embed(tgt)
         boxes = self.bbox_embed(tgt).sigmoid()
         return {"logits": logits, "boxes": boxes}
-
-
-class _DeformableEncoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, num_levels, num_points, dropout):
-        super().__init__()
-        self.self_attn = MultiScaleDeformableAttention(
-            d_model,
-            num_heads=num_heads,
-            num_levels=num_levels,
-            num_points=num_points,
-            dropout=dropout,
-        )
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.ffn = nn.Sequential(
-            nn.Linear(d_model, d_model * 4), nn.ReLU(inplace=True), nn.Linear(d_model * 4, d_model)
-        )
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, proj, ref):
-        x = x + self.dropout(self.self_attn(self.norm1(x), proj, ref))
-        x = x + self.dropout(self.ffn(self.norm2(x)))
-        return x
-
-
-class _DeformableDecoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, num_levels, num_points, dropout):
-        super().__init__()
-        self.self_attn = nn.MultiheadAttention(
-            d_model, num_heads, dropout=dropout, batch_first=True
-        )
-        self.cross_attn = MultiScaleDeformableAttention(
-            d_model,
-            num_heads=num_heads,
-            num_levels=num_levels,
-            num_points=num_points,
-            dropout=dropout,
-        )
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
-        self.ffn = nn.Sequential(
-            nn.Linear(d_model, d_model * 4), nn.ReLU(inplace=True), nn.Linear(d_model * 4, d_model)
-        )
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, tgt, query, proj, ref_q):
-        q = self.norm1(tgt + query)
-        tgt = tgt + self.dropout(self.self_attn(q, q, q)[0])
-        tgt = tgt + self.dropout(self.cross_attn(self.norm2(tgt + query), proj, ref_q))
-        tgt = tgt + self.dropout(self.ffn(self.norm3(tgt)))
-        return tgt
 
 
 __all__ = ["DeformableDETRHead"]

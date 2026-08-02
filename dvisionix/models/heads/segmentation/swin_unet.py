@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from ....registry import HEADS
 from ...base import BaseModel
+from ...layers import PatchExpand
 
 
 @HEADS.register()
@@ -26,7 +27,7 @@ class SwinUNetDecoder(BaseModel):
         levels = len(in_channels_list)
 
         self.align = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels_list])
-        self.expands = nn.ModuleList([_PatchExpand(d_model) for _ in range(levels - 1)])
+        self.expands = nn.ModuleList([PatchExpand(d_model) for _ in range(levels - 1)])
         self.merge = nn.ModuleList([nn.Conv2d(d_model // 2, d_model, 1) for _ in range(levels - 1)])
         self.out_conv = nn.Conv2d(d_model, num_classes, 1)
 
@@ -43,24 +44,6 @@ class SwinUNetDecoder(BaseModel):
                 skip = F.interpolate(skip, size=x.shape[-2:], mode="bilinear", align_corners=False)
             x = x + skip
         return self.out_conv(x)
-
-
-class _PatchExpand(nn.Module):
-    """Swin-UNet PatchExpand：LayerNorm -> Linear(2x) -> PixelShuffle(2)（通道减半、空间翻倍）。"""
-
-    def __init__(self, dim: int):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-        self.expand = nn.Linear(dim, 2 * dim)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
-        x = self.norm(x)
-        x = self.expand(x)  # (B, H, W, 2C)
-        x = x.permute(0, 3, 1, 2)  # (B, 2C, H, W)
-        x = F.pixel_shuffle(x, 2)  # (B, C//2, 2H, 2W)
-        return x
 
 
 __all__ = ["SwinUNetDecoder"]

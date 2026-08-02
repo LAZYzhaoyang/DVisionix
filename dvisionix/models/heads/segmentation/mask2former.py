@@ -3,11 +3,10 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from ....registry import HEADS
+from ....registry import HEADS, NECKS
 from ...base import BaseModel
-from .maskformer import maskformer_decode
+from ...postprocess import maskformer_decode
 
 
 @HEADS.register()
@@ -36,6 +35,7 @@ class Mask2FormerHead(BaseModel):
         dim_feedforward: int = 1024,
         dropout: float = 0.1,
         output_mode: str = "full",
+        pixel_decoder: dict = None,
         **kwargs,
     ):
         super().__init__(task_type="segmentation")
@@ -45,7 +45,11 @@ class Mask2FormerHead(BaseModel):
         self.num_queries = num_queries
         self.output_mode = output_mode
 
-        self.pixel_decoder = _PixelDecoder(in_channels_list, d_model)
+        # 像素解码器：默认 necks.pixel_decoder（与 FPN/PANet 同级），可配置覆盖
+        pd_cfg = dict(pixel_decoder) if pixel_decoder else {"type": "pixel_decoder"}
+        pd_cfg.setdefault("in_channels", list(in_channels_list))
+        pd_cfg.setdefault("d_model", d_model)
+        self.pixel_decoder = NECKS.build(pd_cfg)
         self.query_embed = nn.Embedding(num_queries, d_model)
         self.level_query_embed = nn.Embedding(num_decoder_layers, d_model)
         self.decoder_layers = nn.ModuleList(
@@ -99,25 +103,6 @@ class Mask2FormerHead(BaseModel):
             mask_threshold=mask_threshold,
             max_detections=max_detections,
         )
-
-
-class _PixelDecoder(nn.Module):
-    """轻量 FPN 像素解码器：多尺度特征自顶向下融合到统一通道。"""
-
-    def __init__(self, in_channels_list, d_model):
-        super().__init__()
-        self.lateral = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels_list])
-        self.fpn = nn.ModuleList(
-            [nn.Conv2d(d_model, d_model, 3, padding=1) for _ in range(len(in_channels_list))]
-        )
-
-    def forward(self, feats):
-        laterals = [conv(f) for conv, f in zip(self.lateral, feats)]
-        for i in range(len(laterals) - 2, -1, -1):
-            laterals[i] = laterals[i] + F.interpolate(
-                laterals[i + 1], size=laterals[i].shape[-2:], mode="bilinear", align_corners=False
-            )
-        return [conv(f) for conv, f in zip(self.fpn, laterals)]
 
 
 class _MaskAttentionDecoderLayer(nn.Module):

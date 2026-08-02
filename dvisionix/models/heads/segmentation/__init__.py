@@ -6,7 +6,7 @@ from .deeplabv3 import DeepLabV3Head
 from .deeplabv3plus import DeepLabV3PlusHead
 from .fcn import FCNHead
 from .mask2former import Mask2FormerHead
-from .maskformer import MaskFormerHead, maskformer_decode
+from .maskformer import MaskFormerHead
 from .psp import PSPHead
 from .seg import SegHead
 from .segformer import SegFormerHead
@@ -29,5 +29,4 @@ __all__ = [
     "SwinUNetDecoder",
     "MaskFormerHead",
     "Mask2FormerHead",
-    "maskformer_decode",
 ]

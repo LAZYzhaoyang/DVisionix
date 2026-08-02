@@ -64,7 +64,6 @@ from .heads import (
     SphereFaceHead,
     UNetDecoder,
     YOLOHead,
-    maskformer_decode,
 )
 from .layers import (
     MLP,
@@ -107,7 +106,7 @@ from .losses import (
     compute_loss,
 )
 from .necks import FPN, PANet
-from .postprocess import batched_nms, box_iou, nms
+from .postprocess import batched_nms, box_iou, maskformer_decode, nms
 from .segmenters import SegmentationModel
 from .toy import GridDetectionModel, SimpleCNN, SimpleSegmentationModel
 

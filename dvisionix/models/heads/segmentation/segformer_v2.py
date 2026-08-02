@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from ....registry import HEADS
 from ...base import BaseModel
+from ...layers import LayerNorm2d, MixFFN
 
 
 @HEADS.register()
@@ -40,11 +41,11 @@ class SegFormerV2Head(BaseModel):
             self.overlap.append(
                 nn.Sequential(
                     nn.Conv2d(c, d_model, kernel_size=4, stride=2, padding=1),
-                    _LayerNorm2d(d_model),
+                    LayerNorm2d(d_model),
                     nn.Conv2d(d_model, d_model, kernel_size=3, padding=1),
                 )
             )
-            self.blocks.append(nn.ModuleList([_MixFFN(d_model) for _ in range(num_blocks)]))
+            self.blocks.append(nn.ModuleList([MixFFN(d_model) for _ in range(num_blocks)]))
         self.decode = nn.Sequential(
             nn.Conv2d(d_model * levels, d_model, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(d_model),
@@ -68,45 +69,6 @@ class SegFormerV2Head(BaseModel):
             dim=1,
         )
         return self.decode(fused)
-
-
-class _MixFFN(nn.Module):
-    """MixFFN（SegFormer）：LN -> 3x3 深度卷积 -> MLP 扩展/收缩 -> 残差。"""
-
-    def __init__(self, dim: int, expand: int = 4):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)
-        self.mlp1 = nn.Linear(dim, dim * expand)
-        self.act = nn.GELU()
-        self.mlp2 = nn.Linear(dim * expand, dim)
-
-    def forward(self, x):
-        residual = x
-        x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
-        x = self.norm(x)
-        x = x.permute(0, 3, 1, 2)
-        x = self.dwconv(x)
-        x = x.permute(0, 2, 3, 1)
-        x = self.mlp1(x)
-        x = self.act(x)
-        x = self.mlp2(x)
-        x = x.permute(0, 3, 1, 2)
-        return residual + x
-
-
-class _LayerNorm2d(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-        self.bias = nn.Parameter(torch.zeros(dim))
-
-    def forward(self, x):
-        mean = x.mean(dim=1, keepdim=True)
-        var = x.var(dim=1, keepdim=True, unbiased=False)
-        x = (x - mean) / torch.sqrt(var + self.eps)
-        return self.weight.view(1, -1, 1, 1) * x + self.bias.view(1, -1, 1, 1)
 
 
 __all__ = ["SegFormerV2Head"]

@@ -8,7 +8,7 @@
 - yolo：YOLODetector（YOLOv8 风格，anchor-free）。
 """
 
-from .anchors import AnchorGenerator, bbox2delta, delta2bbox
+from ..layers.anchors import AnchorGenerator, bbox2delta, delta2bbox
 from .base import SingleStageDetector, detr_decode
 from .centernet import CenterNetDetector
 from .deformable_detr import DeformableDETRDetector

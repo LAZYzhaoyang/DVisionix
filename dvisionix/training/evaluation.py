@@ -70,7 +70,7 @@ def evaluate_mask_ap(
     使用 dvisionix.metrics.MaskAveragePrecision。
     """
     from ..metrics import MaskAveragePrecision
-    from ..models.heads.segmentation.maskformer import maskformer_decode
+    from ..models.postprocess import maskformer_decode
 
     model.eval()
     metric = MaskAveragePrecision(num_classes=num_classes)

@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 
 from ....registry import LOSSES
-from ...detectors.anchors import AnchorGenerator, bbox2delta
+from ...layers.anchors import AnchorGenerator, bbox2delta
 from ...postprocess import box_iou
 from ..base import BaseLoss
 from .assigner import ATSSAssigner, FCOSAssigner, GridAssigner, MaxIoUAssigner, TaskAlignedAssigner

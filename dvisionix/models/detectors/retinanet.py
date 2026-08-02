@@ -17,8 +17,8 @@ from typing import Any, Dict, Optional
 import torch
 
 from ...registry import MODELS
+from ..layers.anchors import AnchorGenerator, delta2bbox
 from ..postprocess import batched_nms
-from .anchors import AnchorGenerator, delta2bbox
 from .base import SingleStageDetector
 
 

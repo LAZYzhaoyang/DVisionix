@@ -3,5 +3,6 @@
 
 from .fpn import FPN
 from .panet import PANet
+from .pixel_decoder import PixelDecoder
 
-__all__ = ["FPN", "PANet"]
+__all__ = ["FPN", "PANet", "PixelDecoder"]

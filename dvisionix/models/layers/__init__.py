@@ -13,6 +13,7 @@
 from typing import Any, Dict
 
 from ...registry import LAYERS
+from .anchors import AnchorGenerator, bbox2delta, delta2bbox
 from .attention import PositionEmbeddingSine
 from .basic import MLP, ConvNormAct, DropPath, SEBlock
 from .builder import build_activation_layer, build_norm_layer
@@ -21,8 +22,12 @@ from .csp import CSPLayer
 from .deformable_attention import MultiScaleDeformableAttention
 from .elan import EELANLayer, ELANLayer
 from .mbconv import MBConvBlock
+from .norm import LayerNorm2d
+from .patch_ops import PatchExpand, PatchMerging
 from .reversible import ReversibleBlock
 from .timm_layers import create_timm_layer, list_timm_layers
+from .transformer import DeformableDecoderLayer, DeformableEncoderLayer, MixFFN
+from .window_attention import WindowAttention, window_partition, window_reverse
 
 
 def build_layer(cfg: Dict[str, Any]):
@@ -55,4 +60,18 @@ __all__ = [
     "create_timm_layer",
     "list_timm_layers",
 ]
-__all__ = __all__ + ["PositionEmbeddingSine"]
+__all__ = __all__ + [
+    "PositionEmbeddingSine",
+    "AnchorGenerator",
+    "bbox2delta",
+    "delta2bbox",
+    "LayerNorm2d",
+    "DeformableEncoderLayer",
+    "DeformableDecoderLayer",
+    "MixFFN",
+    "WindowAttention",
+    "window_partition",
+    "window_reverse",
+    "PatchMerging",
+    "PatchExpand",
+]

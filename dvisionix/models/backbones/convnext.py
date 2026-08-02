@@ -3,11 +3,10 @@
 
 from typing import List, Optional, Sequence
 
-import torch
 import torch.nn as nn
 
 from ...registry import BACKBONES
-from ..layers import ConvNeXtBlock
+from ..layers import ConvNeXtBlock, LayerNorm2d
 from .feature import FeatureBackboneBase
 
 
@@ -37,13 +36,13 @@ class ConvNeXtBackbone(FeatureBackboneBase):
                 layers.append(
                     nn.Sequential(
                         nn.Conv2d(in_channels, dim, kernel_size=4, stride=4, padding=1),
-                        _LayerNorm2d(dim, eps=1e-6),
+                        LayerNorm2d(dim, eps=1e-6),
                     )
                 )
             else:
                 layers.append(
                     nn.Sequential(
-                        _LayerNorm2d(prev, eps=1e-6),
+                        LayerNorm2d(prev, eps=1e-6),
                         nn.Conv2d(prev, dim, kernel_size=2, stride=2),
                     )
                 )
@@ -58,22 +57,6 @@ class ConvNeXtBackbone(FeatureBackboneBase):
 
 
 __all__ = ["ConvNeXtBackbone"]
-
-
-class _LayerNorm2d(nn.Module):
-    """逐通道 LayerNorm（channels_first，(B, C, H, W) 上对每个通道做 LN）。"""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
-        self.bias = nn.Parameter(torch.zeros(dim))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        mean = x.mean(dim=1, keepdim=True)
-        var = x.var(dim=1, keepdim=True, unbiased=False)
-        x = (x - mean) / torch.sqrt(var + self.eps)
-        return self.weight.view(1, -1, 1, 1) * x + self.bias.view(1, -1, 1, 1)
 
 
 __all__ = ["ConvNeXtBackbone"]

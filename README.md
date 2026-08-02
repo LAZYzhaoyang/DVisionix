@@ -335,6 +335,12 @@ MIT License
 
 ## 📌 版本演进
 
+### 0.13.0（model 模块分层与 layers 统一重构）
+- 共用子模块下沉：`LayerNorm2d` / `DeformableEncoder(Decoder)Layer` / `MixFFN` / `WindowAttention` / `PatchMerging` / `PatchExpand` 统一到 layers；
+- `anchors` 下沉到 layers（消除 losses→detectors 反向依赖）；`PixelDecoder` 入 necks 与 FPN 同级；共享解码器 `maskformer_decode` 入 postprocess；
+- 确立并写入 CodePlan「model 模块调用规则 R1-R6」（分层调用图 + 各层职责表，单向依赖 + 同级隔离）；
+- 全量测试 250 passed + 2 skipped；ruff / black 全绿。
+
 ### 0.12.0（Transformer 骨干 / YOLOv9-lite）
 - 骨干：`vit_backbone`（patch embed + Transformer encoder，正弦位置编码支持任意尺寸）、
   `swin_backbone`（window/shifted-window 注意力 + PatchMerging，stride 4/8/16/32）；

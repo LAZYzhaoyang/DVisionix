@@ -845,3 +845,80 @@ models/
 6. 验收：分类/分割指标 `use_torchmetrics=True` 与内置数值一致；缺失依赖回退正常；README 说明可选依赖。
 
 > 状态：**永久推迟**。触发条件：用户明确要求实施（如"实施指标迁移" / "实施多卡验证"）。
+
+
+---
+
+# model 模块分层与 layers 统一重构（v0.13.0）
+
+> 用户确认：按推荐方案实施（共享解码器进 postprocess + 模型薄桥接；PixelDecoder 入 necks 与 FPN 同级）；
+> 阶段 1（下沉共用子模块）+ 阶段 2（调用方适配 + 验证）+ 调用规则入 CodePlan。
+> 默认工作流：每次代码更新后同步 README / CodePlan / 使用文档（不再重复说明）。
+
+## 一、layers / necks / postprocess 统一下沉
+- `layers/norm.py`：`LayerNorm2d`（统一 convnext / swin / segformer_v2 的三处重复）。
+- `layers/transformer.py`：`DeformableEncoderLayer` / `DeformableDecoderLayer` / `MixFFN`（统一 deformable_detr / rtdetr_full / segformer_v2 的重复）。
+- `layers/window_attention.py`：`WindowAttention` + `window_partition/reverse`；`layers/patch_ops.py`：`PatchMerging` / `PatchExpand`。
+- `layers/anchors.py`：`AnchorGenerator` + `bbox2delta/delta2bbox` 从 detectors 下沉（消除 losses -> detectors 反向依赖；detectors 与 losses 平级共用）。
+- `CSPLayer` 增加 `act` 参数（删除 cspdarknet 本地 `_CSP`）；swin 改用统一 `DropPath`。
+- `postprocess.py` 增加共享契约解码器 `maskformer_decode`（MaskFormer / Mask2Former 契约一致共用）；两 head 保留薄 `decode()` 桥接。
+- `necks/pixel_decoder.py`：`PixelDecoder` 与 FPN/PANet 同级；`Mask2FormerHead` 经 `pixel_decoder` 配置（Registry）注入。
+
+## 二、调用规则（后续开发必须遵守）
+见下节「model 模块调用规则（R1-R6）」。
+
+## 三、验证
+- 全量测试 250 passed + 2 skipped；ruff / black 全绿。
+
+---
+
+# model 模块调用规则（R1-R6）
+
+> 本规则为模型子模块开发的**强制约束**，新增/修改模型代码时必须遵守。
+
+## 分层调用图（依赖方向 = import 方向，自上而下）
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ 组合层：detectors/ · classifiers.py · segmenters.py            │ ← 最上层
+│   import：layers · postprocess · backbones · necks · heads     │   （聚合组件）
+└───────────────────────────────┬───────────────────────────────┘
+                                │
+            ┌───────────────────┼───────────────────┐
+            ▼                   ▼                   ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ heads/           │  │ losses/          │  │ backbones/ necks/│
+│ import: layers   │  │ import: layers,  │  │ import: layers   │
+│ (可选经 Registry │  │ postprocess      │  │                  │
+│  注入 necks 组件)│  │                  │  │                  │
+└────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘
+         │                     │                     │
+         └──────────┬──────────┴──────────┬──────────┘
+                    ▼                     ▼
+      ┌───────────────────────┐  ┌───────────────────────┐
+      │ layers/（通用算子/层）  │  │ postprocess.py        │ ← 最底层
+      │ anchors/attention/    │  │ NMS / IoU /           │
+      │ patch ops/...         │  │ 共享契约解码器         │
+      └───────────────────────┘  └───────────────────────┘
+```
+
+## 各层职责表
+
+| 层 | 模块 | 职责 | 允许 import | 禁止 import |
+|---|---|---|---|---|
+| 最底层 | layers/ | 通用算子/层（norm/attention/anchors/patch ops/CSP/ELAN/可变形…） | torch、registry | 任何上层模块 |
+| 最底层 | postprocess.py | NMS/IoU 原语 + 共享契约解码器 | torch | 任何上层模块 |
+| 组件层 | backbones/ | 骨干（Timm/Sequential/ConvNeXt/CSPDarknet/MobileNetV3/ViT/Swin） | layers | heads/detectors/losses/兄弟骨干 |
+| 组件层 | necks/ | FPN/PANet/PixelDecoder | layers | heads/detectors/losses/兄弟 neck |
+| 组件层 | heads/ | 各类头（每头一文件） | layers；可选 Registry 注入 necks 组件 | backbones/detectors/losses/兄弟 head |
+| 组件层 | losses/ | 各任务损失 + assigner/matcher | layers、postprocess | backbones/necks/heads/detectors |
+| 组合层（最上层） | detectors/、classifiers.py、segmenters.py | 组装 backbone+neck+head 为可用模型 | 下层全部 | 无 |
+
+## 规则条目
+
+- **R1 依赖单向（自顶向下）**：只允许上层 import 下层；禁止下层 import 上层（如 losses 不得 import detectors）；依赖方向与调用图一致。
+- **R2 同级隔离**：backbones / necks / heads / detectors 各自内部兄弟模块互不 import；共享实现一律下沉到 layers/、necks/ 或 postprocess.py。
+- **R3 职责边界**：heads 不依赖 backbones / detectors / losses；heads 可使用 layers 组件，并经 Registry 注入 necks 通用解码器组件（如 pixel_decoder）；anchors/bbox 编解码归属 layers/；losses 只依赖 layers/postprocess。
+- **R4 decode 策略**：模型专属解码与其 head/detector 同文件（如 fcos_decode）；多模型共享、契约一致的解码纯函数放 postprocess.py（如 maskformer_decode）；每个模型保留 decode() 实例方法做薄桥接。
+- **R5 组合器经 Registry 构建**：classifiers / segmenters / detectors 通过 BACKBONES/NECKS/HEADS 注册表构建下层组件，不直接 import 具体类。
+- **R6 新增组件流程**：新算子 -> layers/ 或 necks/ -> 新 head/backbone 只引用下层 -> 每头一文件 -> 注册即用。
