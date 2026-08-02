@@ -10,9 +10,11 @@
 
 from .anchors import AnchorGenerator, bbox2delta, delta2bbox
 from .base import SingleStageDetector, detr_decode
+from .centernet import CenterNetDetector
 from .deformable_detr import DeformableDETRDetector
 from .detr import DETRDetector
 from .fcos import FCOSDetector, fcos_decode
+from .nmsfree_yolo import NMSFreeYOLODetector
 from .retinanet import RetinaNetDetector, retinanet_decode
 from .rtdetr import RTDETRDetector
 from .rtdetr_full import RTDETRFullDetector
@@ -34,4 +36,6 @@ __all__ = [
     "RTDETRDetector",
     "RTDETRFullDetector",
     "DeformableDETRDetector",
+    "CenterNetDetector",
+    "NMSFreeYOLODetector",
 ]

@@ -12,6 +12,7 @@ import torch.nn.functional as F
 
 from ....registry import LOSSES
 from ...detectors.anchors import AnchorGenerator, bbox2delta
+from ...postprocess import box_iou
 from ..base import BaseLoss
 from .assigner import ATSSAssigner, FCOSAssigner, GridAssigner, MaxIoUAssigner, TaskAlignedAssigner
 from .box_loss import GIoULoss
@@ -557,6 +558,199 @@ class DETRLoss(BaseLoss):
         }
 
 
+@LOSSES.register()
+@LOSSES.register(name="yolo_v10_detection")
+class OneToOneYOLOLoss(BaseLoss):
+    """YOLOv10 风格 one-to-one 损失：每个 GT 只匹配一个最高质量预测（cls_score * IoU），
+    推理无需 NMS。分类用 BCE（软目标），框回归用 GIoU。"""
+
+    def __init__(
+        self,
+        num_classes: int,
+        strides=(8, 16, 32),
+        cls_weight: float = 1.0,
+        reg_weight: float = 1.0,
+        weight: float = 1.0,
+    ):
+        super().__init__(weight)
+        self.num_classes = num_classes
+        self.strides = list(strides)
+        self.cls_weight = float(cls_weight)
+        self.reg_weight = float(reg_weight)
+        self.giou = GIoULoss()
+
+    def _locations(self, h, w, stride, device):
+        ys = (torch.arange(h, device=device) + 0.5) * stride
+        xs = (torch.arange(w, device=device) + 0.5) * stride
+        cx, cy = torch.meshgrid(xs, ys, indexing="xy")
+        return torch.stack([cx.reshape(-1), cy.reshape(-1)], dim=1)
+
+    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        if device is None:
+            device = preds["cls"][0].device
+        cls_outs, reg_outs = preds["cls"], preds["reg"]
+        total_cls = torch.tensor(0.0, device=device)
+        total_reg = torch.tensor(0.0, device=device)
+
+        for b in range(len(batch["boxes"])):
+            gt_boxes = batch["boxes"][b].to(device).float()
+            gt_labels = batch["labels"][b].to(device).long()
+            if gt_boxes.numel() == 0:
+                continue
+            pred_boxes_all, pred_scores_all, centers_all = [], [], []
+            for lvl, stride in enumerate(self.strides):
+                cls_l = cls_outs[lvl][b]
+                reg_l = reg_outs[lvl][b]
+                c, h, w = cls_l.shape
+                locs = self._locations(h, w, stride, device)
+                centers_all.append(locs)
+                ltrb = reg_l.reshape(4, -1).t() * stride
+                pred_boxes = torch.stack(
+                    [
+                        locs[:, 0] - ltrb[:, 0],
+                        locs[:, 1] - ltrb[:, 1],
+                        locs[:, 0] + ltrb[:, 2],
+                        locs[:, 1] + ltrb[:, 3],
+                    ],
+                    dim=1,
+                )
+                pred_boxes_all.append(pred_boxes)
+                pred_scores_all.append(cls_l.reshape(c, -1).t())
+            pred_boxes_all = torch.cat(pred_boxes_all, dim=0)  # (N, 4)
+            pred_scores_all = torch.cat(pred_scores_all, dim=0)  # (N, C)
+
+            iou_matrix = box_iou(pred_boxes_all, gt_boxes)  # (N, M)
+            cls_score = pred_scores_all.sigmoid()[:, gt_labels]  # (N, M)
+            quality = cls_score * iou_matrix
+
+            N, M = quality.shape
+            cls_target = torch.zeros(N, self.num_classes, device=device)
+            box_target = torch.zeros(N, 4, device=device)
+            pos_mask = torch.zeros(N, dtype=torch.bool, device=device)
+            matched_gt = torch.zeros(M, dtype=torch.bool, device=device)
+            cand = quality.clone()
+            for _ in range(min(N, M)):
+                if not cand.any():
+                    break
+                flat = cand.argmax()
+                p, g = flat // M, flat % M
+                if quality[p, g] <= 0:
+                    break
+                cls_target[p, gt_labels[g]] = 1.0
+                box_target[p] = gt_boxes[g]
+                pos_mask[p] = True
+                matched_gt[g] = True
+                cand[:, g] = -1.0
+                cand[p, :] = -1.0  # 每个预测只用一个 GT
+
+            total_cls = (
+                total_cls
+                + F.binary_cross_entropy_with_logits(pred_scores_all, cls_target, reduction="none")
+                .sum(dim=1)
+                .mean()
+            )
+            if pos_mask.any():
+                total_reg = (
+                    total_reg + self.giou(pred_boxes_all[pos_mask], box_target[pos_mask]).mean()
+                )
+
+        total = self.cls_weight * total_cls + self.reg_weight * total_reg
+        return {"loss": total, "cls_loss": total_cls, "giou_loss": total_reg}
+
+
+@LOSSES.register()
+@LOSSES.register(name="centernet_detection")
+class CenterNetLoss(BaseLoss):
+    """CenterNet 损失：penalty-reduced Focal（热图）+ L1（宽高 / 偏移，仅中心点）。"""
+
+    def __init__(
+        self,
+        num_classes: int,
+        stride: int = 4,
+        hm_weight: float = 1.0,
+        wh_weight: float = 0.1,
+        offset_weight: float = 1.0,
+        weight: float = 1.0,
+    ):
+        super().__init__(weight)
+        self.num_classes = num_classes
+        self.stride = int(stride)
+        self.hm_weight = float(hm_weight)
+        self.wh_weight = float(wh_weight)
+        self.offset_weight = float(offset_weight)
+
+    def _build_targets(self, boxes, labels, H, W, device):
+        hm = torch.zeros((self.num_classes, H, W), device=device)
+        wh = torch.zeros((2, H, W), device=device)
+        offset = torch.zeros((2, H, W), device=device)
+        reg_mask = torch.zeros((H, W), dtype=torch.bool, device=device)
+        for box, lb in zip(boxes, labels):
+            cx = (box[0] + box[2]) / 2
+            cy = (box[1] + box[3]) / 2
+            bw = (box[2] - box[0]).clamp(min=1.0)
+            bh = (box[3] - box[1]).clamp(min=1.0)
+            cx_s, cy_s = cx / self.stride, cy / self.stride
+            ix, iy = int(cx_s), int(cy_s)
+            if not (0 <= ix < W and 0 <= iy < H):
+                continue
+            radius = max(1, int(max(bw, bh) / self.stride / 6.0))
+            sigma = radius / 3.0
+            y0, y1 = max(0, iy - radius), min(H - 1, iy + radius)
+            x0, x1 = max(0, ix - radius), min(W - 1, ix + radius)
+            ys = torch.arange(y0, y1 + 1, device=device).float()
+            xs = torch.arange(x0, x1 + 1, device=device).float()
+            gy = torch.exp(-((ys - cy_s) ** 2) / (2 * sigma * sigma))
+            gx = torch.exp(-((xs - cx_s) ** 2) / (2 * sigma * sigma))
+            gauss = torch.outer(gy, gx)  # (y_range, x_range)
+            hm[lb, y0 : y1 + 1, x0 : x1 + 1] = torch.maximum(
+                hm[lb, y0 : y1 + 1, x0 : x1 + 1], gauss
+            )
+            hm[lb, iy, ix] = 1.0
+            wh[:, iy, ix] = torch.tensor([bw, bh], device=device)
+            offset[:, iy, ix] = torch.tensor([cx_s - ix, cy_s - iy], device=device)
+            reg_mask[iy, ix] = True
+        return hm, wh, offset, reg_mask
+
+    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        if device is None:
+            device = preds["heatmap"].device
+        hm_pred = preds["heatmap"]
+        wh_pred = preds["wh"]
+        off_pred = preds["offset"]
+        B, C, H, W = hm_pred.shape
+        total_hm = torch.tensor(0.0, device=device)
+        total_wh = torch.tensor(0.0, device=device)
+        total_off = torch.tensor(0.0, device=device)
+
+        for b in range(len(batch["boxes"])):
+            boxes = batch["boxes"][b].to(device).float()
+            labels = batch["labels"][b].to(device).long()
+            hm_t, wh_t, off_t, reg_mask = self._build_targets(boxes, labels, H, W, device)
+
+            pred = hm_pred[b].sigmoid().clamp(1e-4, 1 - 1e-4)
+            pos = hm_t.eq(1).float()
+            neg = 1.0 - hm_t
+            loss_hm = -(
+                pos * (1 - pred) ** 2 * pred.log()
+                + neg * (1 - hm_t) ** 4 * pred**2 * (1 - pred).log()
+            )
+            total_hm = total_hm + loss_hm.mean()
+
+            if reg_mask.any():
+                total_wh = total_wh + F.l1_loss(wh_pred[b][:, reg_mask], wh_t[:, reg_mask])
+                total_off = total_off + F.l1_loss(off_pred[b][:, reg_mask], off_t[:, reg_mask])
+
+        total = (
+            self.hm_weight * total_hm + self.wh_weight * total_wh + self.offset_weight * total_off
+        )
+        return {
+            "loss": total,
+            "hm_loss": total_hm,
+            "wh_loss": total_wh,
+            "offset_loss": total_off,
+        }
+
+
 __all__ = [
     "ObjectnessLoss",
     "GridDetectionLoss",
@@ -565,4 +759,6 @@ __all__ = [
     "RetinaNetLoss",
     "YOLOLoss",
     "DETRLoss",
+    "OneToOneYOLOLoss",
+    "CenterNetLoss",
 ]

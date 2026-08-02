@@ -44,11 +44,11 @@ dvisionix/
 ├── config/               # Config（YAML 继承 / CLI 覆盖 / schema 校验）
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
-│   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath / CSP / ELAN / 可变形注意力）
+│   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath / CSP / ELAN / E-ELAN / 可变形注意力）
 │   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
 │   ├── necks/           # FPN / PANet
-│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer/MaskFormer/PSP/UPerNet）· 检测（Det/FCOS/RetinaNet/YOLO/DETR/RT-DETR/DeformableDETR）
-│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO / DETR / RT-DETR / DeformableDETR（decode 与模型同文件）
+│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC/CircleLoss/SimCLR）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer/MaskFormer(+2)/PSP/UPerNet/BiSeNet）· 检测（Det/FCOS/RetinaNet/YOLO(v8/v10)/DETR/RT-DETR(+full)/DeformableDETR/CenterNet）
+│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO(v8/v10) / DETR / RT-DETR(+full) / DeformableDETR / CenterNet（decode 与模型同文件）
 │   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
 │   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
 │   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
@@ -334,6 +334,13 @@ MIT License
 ---
 
 ## 📌 版本演进
+
+### 0.10.0（方向 3：模型继续扩充）
+- YOLO 系列：`EELANLayer`（YOLOv7 风格骨干）、`yolo_v10`（NMS-free：one-to-one 损失 + 免 NMS 解码）；
+- CenterNet：`centernet`（关键点热图 + 宽高 + 偏移，penalty-reduced Focal + L1）；
+- 分割：`bisenet_head`（轻量实时分割）；
+- 分类：`circle_loss_head` + `CircleLoss`、`simclr_head` + `InfoNCELoss`（对比学习）；
+- 新增 yolov7 / yolov10 / centernet 配置示例；全量测试 236 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.9.0（阶段 C：推荐组合实施）
 - 全景评估接入验证循环：`MaskFormerTask(panoptic=True)` 输出 `PQ / SQ / RQ`（`PanopticQuality`）；

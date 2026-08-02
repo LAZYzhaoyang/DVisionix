@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """分割头子包。"""
 
+from .bisenet import BiSeNetHead
 from .deeplabv3 import DeepLabV3Head
 from .deeplabv3plus import DeepLabV3PlusHead
 from .fcn import FCNHead
@@ -17,6 +18,7 @@ __all__ = [
     "FCNHead",
     "DeepLabV3Head",
     "DeepLabV3PlusHead",
+    "BiSeNetHead",
     "PSPHead",
     "UPerNetHead",
     "UNetDecoder",

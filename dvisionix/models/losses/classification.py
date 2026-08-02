@@ -99,7 +99,64 @@ class BinaryCrossEntropy(BaseLoss):
         return F.binary_cross_entropy_with_logits(logits, targets.float(), reduction=self.reduction)
 
 
-__all__ = ["CrossEntropy", "FocalLoss", "BinaryCrossEntropy", "DistillationLoss"]
+@LOSSES.register()
+@LOSSES.register(name="circle_loss")
+class CircleLoss(BaseLoss):
+    """Circle Loss：对目标类 / 非目标类相似度分别施加自适应 margin（Sun et al. 2020）。"""
+
+    def __init__(
+        self,
+        gamma: float = 80.0,
+        margin: float = 0.25,
+        weight: float = 1.0,
+    ):
+        super().__init__(weight)
+        self.gamma = float(gamma)
+        self.m = float(margin)
+        self.o_p = 1.0 + margin
+        self.o_n = -margin
+        self.delta_p = 1.0 - margin
+        self.delta_n = margin
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        s = max(float(logits.abs().max().item()), 1.0)
+        cos = logits / s  # 余弦相似度
+        num_classes = logits.shape[1]
+        one_hot = F.one_hot(targets, num_classes=num_classes).float()
+        cos_p = (cos * one_hot).sum(dim=1)  # (N,)
+        cos_n = cos * (1 - one_hot)  # (N, C)
+        alpha_p = self.gamma * F.relu(self.o_p - cos_p)  # (N,)
+        alpha_n = self.gamma * F.relu(cos_n - self.o_n)  # (N, C)
+        neg_term = torch.logsumexp(alpha_n * (cos_n - self.delta_n), dim=1)  # (N,)
+        pos_term = -alpha_p * (cos_p - self.delta_p)  # (N,)
+        return (F.softplus(neg_term) + F.softplus(pos_term)).mean()
+
+
+@LOSSES.register()
+@LOSSES.register(name="info_nce")
+class InfoNCELoss(BaseLoss):
+    """InfoNCE 对比损失（SimCLR 风格）：双视角 z1/z2，对角线为正样本对。"""
+
+    def __init__(self, temperature: float = 0.1, weight: float = 1.0):
+        super().__init__(weight)
+        self.temperature = float(temperature)
+
+    def forward(self, z1: torch.Tensor, z2: torch.Tensor, **kwargs) -> torch.Tensor:
+        z1 = F.normalize(z1, dim=1)
+        z2 = F.normalize(z2, dim=1)
+        sim = z1 @ z2.t() / self.temperature  # (B, B)
+        labels = torch.arange(sim.shape[0], device=sim.device)
+        return (F.cross_entropy(sim, labels) + F.cross_entropy(sim.t(), labels)) / 2
+
+
+__all__ = [
+    "CrossEntropy",
+    "FocalLoss",
+    "BinaryCrossEntropy",
+    "DistillationLoss",
+    "CircleLoss",
+    "InfoNCELoss",
+]
 
 
 @LOSSES.register()

@@ -683,3 +683,35 @@ models/
 - 分类/分割指标迁移 torchmetrics 可选后端。
 - 多卡实机验证（DDP 已隔离实现）。
 - YOLOv7/v10、CenterNet、更多分割头/度量头等模型扩充（按需排期）。
+
+
+---
+
+# 方向 3：模型继续扩充（v0.10.0）
+
+> 用户确认方向 3：YOLOv7/v10、CenterNet、更多分割头、更多度量头。
+
+## 一、YOLO 系列
+- `EELANLayer`（eelan_layer）：E-ELAN 交叉融合层（YOLOv7 风格），注册 LAYERS，可直接作骨干 stage。
+- `NMSFreeYOLOHead`（yolo_v10_head）+ `NMSFreeYOLODetector`（yolo_v10）：
+  - 结构与 YOLOHead 一致，训练配合 `OneToOneYOLOLoss`（yolo_v10_detection，每个 GT 只匹配一个最高质量预测，分类 BCE + 框 GIoU）；
+  - 推理免 NMS：逐层解码 + 跨层 top-k。
+- 配置示例：`configs/detection/yolov7_synthetic.yaml`（E-ELAN + PANet + YOLOHead）、`yolov10_synthetic.yaml`（NMS-free）。
+
+## 二、CenterNet
+- `CenterNetHead`（centernet_head）：中心点热图 + 宽高 + 偏移（单尺度，兼容列表输入取末层）。
+- `CenterNetLoss`（centernet_detection）：penalty-reduced Focal（热图）+ L1（宽高/偏移，仅中心点）。
+- `CenterNetDetector`（centernet）：3x3 max-pool 峰值过滤 + 偏移修正 + 像素框解码。
+- 配置示例：`configs/detection/centernet_synthetic.yaml`（stride-8 骨干）。
+
+## 三、分割头
+- `BiSeNetHead`（bisenet_head）：轻量实时分割（细节分支 + 全局上下文分支融合）。
+
+## 四、分类头 / 损失
+- `CircleLossHead`（circle_loss_head）+ `CircleLoss`（circle_loss）：Circle Loss 自适应 margin。
+- `SimCLRHead`（simclr_head，MLP 投影头）+ `InfoNCELoss`（info_nce）：SimCLR 风格对比学习（双视角 InfoNCE）。
+
+## 五、验证
+- 新增 `tests/test_models/test_v010_direction3.py`（7 项）：E-ELAN、yolo_v10 前向/解码/损失下降、
+  centernet 前向/解码/损失下降、新配置加载、BiSeNet、CircleLoss、SimCLR/InfoNCE。
+- 全量测试 236 passed + 2 skipped；ruff / black 全绿。

@@ -21,9 +21,11 @@ from .base import TASK_TYPES, BaseModel
 from .classifiers import LinearClassifier
 from .detectors import (
     AnchorGenerator,
+    CenterNetDetector,
     DeformableDETRDetector,
     DETRDetector,
     FCOSDetector,
+    NMSFreeYOLODetector,
     RetinaNetDetector,
     RTDETRDetector,
     RTDETRFullDetector,
@@ -133,6 +135,8 @@ __all__ = [
     "DETRDetector",
     "RTDETRDetector",
     "RTDETRFullDetector",
+    "CenterNetDetector",
+    "NMSFreeYOLODetector",
     "DeformableDETRDetector",
     "FPN",
     "PANet",

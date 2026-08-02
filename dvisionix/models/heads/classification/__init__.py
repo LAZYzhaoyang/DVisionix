@@ -3,12 +3,14 @@
 
 from .adaface import AdaFaceHead
 from .arcface import ArcFaceHead
+from .circle import CircleLossHead
 from .cosface import CosFaceHead
 from .curricularface import CurricularFaceHead
 from .linear import ClsHead
 from .multi_label import MultiLabelHead
 from .normface import NormFaceHead
 from .partial_fc import PartialFCHead
+from .simclr import SimCLRHead
 from .sphereface import SphereFaceHead
 
 __all__ = [
@@ -21,4 +23,6 @@ __all__ = [
     "PartialFCHead",
     "SphereFaceHead",
     "AdaFaceHead",
+    "CircleLossHead",
+    "SimCLRHead",
 ]

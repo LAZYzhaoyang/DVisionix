@@ -10,10 +10,12 @@ from .assigner import (
 )
 from .box_loss import CIoULoss, GIoULoss, L1BoxLoss
 from .losses import (
+    CenterNetLoss,
     DETRLoss,
     FCOSDetectionLoss,
     GridDetectionLoss,
     ObjectnessLoss,
+    OneToOneYOLOLoss,
     RetinaNetLoss,
     SigmoidFocalLoss,
     YOLOLoss,
@@ -35,4 +37,6 @@ __all__ = [
     "RetinaNetLoss",
     "YOLOLoss",
     "DETRLoss",
+    "OneToOneYOLOLoss",
+    "CenterNetLoss",
 ]
