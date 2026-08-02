@@ -95,15 +95,12 @@ def evaluate_mask_ap(
         target_masks = [
             _F.interpolate(
                 m.to(device).float().unsqueeze(0).unsqueeze(0), size=target_size, mode="nearest"
-            )
-            .squeeze(0)
-            .squeeze(0)
-            .bool()
+            ).bool()  # (1, H, W)
             for m in batch["mask"]
         ]
         target_labels = [
             lb.to(device)
-            for lb in batch.get("labels", [torch.full_like(m, 1) for m in target_masks])
+            for lb in batch.get("labels", [torch.tensor([1], device=device) for _ in target_masks])
         ]
         metric.update(masks_list, scores_list, labels_list, target_masks, target_labels)
     return metric.compute()

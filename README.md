@@ -335,6 +335,14 @@ MIT License
 
 ## 📌 版本演进
 
+### 0.9.0（阶段 C：推荐组合实施）
+- 全景评估接入验证循环：`MaskFormerTask(panoptic=True)` 输出 `PQ / SQ / RQ`（`PanopticQuality`）；
+- RT-DETR 增强版：`rtdetr_full`（多尺度可变形编码器 + IoU-aware query selection + 框细化，保留 compact 版）；
+- Mask2Former 完整版：`mask2former_head`（mask attention 解码器 + FPN 像素解码器，逐层细化掩码）；
+  `MaskFormerLoss` 支持真实实例 GT（`instance_masks` / `instance_labels`）；
+- 修复 mask mAP 真值格式（List[(M,H,W)]）与分辨率对齐；
+- 全量测试 229 passed + 2 skipped；ruff / black 全绿。
+
 ### 0.8.0（阶段 B：模型库扩充）
 - 分割：新增 `PSPHead` / `UPerNetHead` / `DeepLabV3PlusHead`（即插即用，多尺度头走 input_style）；
   `MaskFormerTask` 实例分割训练任务；`PanopticQuality`（PQ/SQ/RQ）+ `panoptic_decode` / `evaluate_panoptic` 打通全景评估；

@@ -4,6 +4,7 @@
 from .deeplabv3 import DeepLabV3Head
 from .deeplabv3plus import DeepLabV3PlusHead
 from .fcn import FCNHead
+from .mask2former import Mask2FormerHead
 from .maskformer import MaskFormerHead, maskformer_decode
 from .psp import PSPHead
 from .seg import SegHead
@@ -21,5 +22,6 @@ __all__ = [
     "UNetDecoder",
     "SegFormerHead",
     "MaskFormerHead",
+    "Mask2FormerHead",
     "maskformer_decode",
 ]

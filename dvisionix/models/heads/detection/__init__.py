@@ -7,6 +7,7 @@ from .fcos import FCOSHead
 from .grid import DetHead
 from .retinanet import RetinaNetHead
 from .rtdetr import RTDETRHead
+from .rtdetr_full import RTDETRFullHead
 from .yolo import YOLOHead
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "YOLOHead",
     "DETRHead",
     "RTDETRHead",
+    "RTDETRFullHead",
     "DeformableDETRHead",
 ]

@@ -15,6 +15,7 @@ from .detr import DETRDetector
 from .fcos import FCOSDetector, fcos_decode
 from .retinanet import RetinaNetDetector, retinanet_decode
 from .rtdetr import RTDETRDetector
+from .rtdetr_full import RTDETRFullDetector
 from .yolo import YOLODetector, yolo_decode
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "yolo_decode",
     "DETRDetector",
     "RTDETRDetector",
+    "RTDETRFullDetector",
     "DeformableDETRDetector",
 ]

@@ -640,3 +640,46 @@ models/
 - 指标：分类/分割指标迁移 torchmetrics 可选后端。
 - 训练/评估收尾：实例/全景评估接入训练验证循环（evaluate_panoptic 已就绪，可挂进 MaskFormerTask 或自定义回调）。
 - 文档/CI 收尾：README/CodePlan 同步、版本号、CI 全绿。
+
+
+---
+
+# 阶段 C：推荐组合实施（v0.9.0）
+
+> 用户确认：按推荐组合实施（Mask2Former 完整版 + RT-DETR 增强版 + 全景评估接入验证循环）；
+> 指标迁移 torchmetrics 列为未来优化项，暂不实施。
+
+## 一、C1：全景评估接入验证循环
+- `MaskFormerTask` 新增 `panoptic: bool = False` / `id_scale` 开关：
+  - `validation_step` 在 mask mAP 基础上追加 `panoptic_decode` 全景 id 图（preds 扩展为 4 元组，targets 为 3 元组）；
+  - GT 优先取 `batch["panoptic"]`，缺省退化为 `batch["mask"] * id_scale`；
+  - `update_metrics` 同时喂 `PanopticQuality`；`on_validation_epoch_end` 合并输出 `PQ / SQ / RQ`；
+  - `reset_metrics` 用 getattr 保护（BaseTask.__init__ 在子类属性初始化前调用）。
+- 顺带修复 mask mAP 评估的真值格式：`MaskAveragePrecision` 期望 `target_masks: List[(M,H,W)]`，
+  `evaluate_mask_ap` 与 `MaskFormerTask` 现统一构造 (1,H,W) 单实例掩码（或 instance_masks），并把 GT 对齐到预测分辨率。
+
+## 二、C2：RT-DETR 增强版
+- 新增 `RTDETRFullHead`（rtdetr_full_head）/ `RTDETRFullDetector`（rtdetr_full），保留 compact 版（rtdetr）不变：
+  - 多尺度**可变形编码器**（复用 MultiScaleDeformableAttention，替代简单卷积融合）；
+  - **IoU-aware query selection**：选择头预测类别 + 框 + IoU，score = class_score * iou 取 top-k；
+  - 解码器以选择出的 token 内容为初始 tgt、预测框中心为参考点，框经细化输出；
+  - 输出契约与 DETR 一致，复用 DETRLoss / detr_decode。
+
+## 三、C3：Mask2Former 完整版
+- 新增 `Mask2FormerHead`（mask2former_head）：
+  - FPN 风格像素解码器 + **mask attention 解码器**（交叉注意力受上一轮预测掩码约束，逐层细化）；
+  - 输出契约与 MaskFormerHead full 模式一致（pred_logits / pred_masks / semantic_logits），
+    复用 MaskFormerLoss / maskformer_decode / panoptic_decode；
+- `MaskFormerLoss` 支持真实实例 GT：`batch["instance_masks"]`（(N,H,W)）+ `batch["instance_labels"]`（(N,)），
+  缺省回退语义连通域近似。
+
+## 四、验证
+- 新增 `tests/test_models/test_v09_phase_c.py`（6 项）：panoptic 验证循环开/关、RT-DETR 增强前向/解码/损失下降、
+  Mask2Former 前向/解码/损失下降（语义 GT）、实例 GT 损失。
+- 全量测试 229 passed + 2 skipped；ruff / black 全绿。
+- 修复问题：MaskAveragePrecision 真值格式（List[(M,H,W)]）与分辨率对齐；BaseTask 初始化时序下的 reset_metrics 保护。
+
+## 五、未来优化项（暂不实施，已记录）
+- 分类/分割指标迁移 torchmetrics 可选后端。
+- 多卡实机验证（DDP 已隔离实现）。
+- YOLOv7/v10、CenterNet、更多分割头/度量头等模型扩充（按需排期）。

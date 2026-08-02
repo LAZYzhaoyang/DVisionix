@@ -155,11 +155,32 @@ class MaskFormerLoss(BaseLoss):
             logits = logits_all[b]  # (Q, C+1)
             masks = masks_all[b].flatten(1).sigmoid()  # (Q, HW)
 
-            gt_objects = []
-            for c in range(self.num_classes):
-                obj = gt_mask == c
-                if obj.any():
-                    gt_objects.append((c, obj.reshape(-1).float()))
+            if batch.get("instance_masks") is not None:
+                # 真实实例 GT：每图 (N, H, W) 二值掩码 + (N,) 类别
+                inst_masks = batch["instance_masks"][b]
+                inst_labels = batch["instance_labels"][b]
+                gt_objects = []
+                for lb, im in zip(inst_labels, inst_masks):
+                    im = im.to(device)
+                    if im.shape[-2:] != masks_all.shape[-2:]:
+                        im = (
+                            F.interpolate(
+                                im.float().unsqueeze(0).unsqueeze(0),
+                                size=masks_all.shape[-2:],
+                                mode="nearest",
+                            )
+                            .bool()
+                            .squeeze(0)
+                            .squeeze(0)
+                        )
+                    gt_objects.append((int(lb), im.reshape(-1).float()))
+            else:
+                # 语义掩码退化：按类别连通区域近似实例
+                gt_objects = []
+                for c in range(self.num_classes):
+                    obj = gt_mask == c
+                    if obj.any():
+                        gt_objects.append((c, obj.reshape(-1).float()))
 
             pred_idx, gt_idx = self._match(logits, masks, gt_objects)
 
