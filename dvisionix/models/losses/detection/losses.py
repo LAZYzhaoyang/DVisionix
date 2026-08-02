@@ -793,7 +793,12 @@ class YOLOv9Loss(BaseLoss):
 @LOSSES.register()
 @LOSSES.register(name="dino_detection")
 class DINOLoss(BaseLoss):
-    """DINO-lite 损失：主头 DETRLoss + 去噪分支损失（对比去噪：正样本参与分类+框回归，负样本仅分类）。"""
+    """DINO-lite 损失：主头 DETRLoss + 去噪分支损失（对比去噪：正样本参与分类+框回归，负样本仅分类）。
+
+    look-forward-twice（lft=True，默认）：主分支匈牙利匹配基于最后一层预测；各解码器层
+    的框回归损失使用「下一层」的细化框（最后一层用自身），使中间层获得一步前瞻监督。
+    需要模型输出 ``intermediate_boxes``（逐层累积框），否则自动回退为单层 DETRLoss。
+    """
 
     def __init__(
         self,
@@ -802,6 +807,8 @@ class DINOLoss(BaseLoss):
         cost_bbox: float = 5.0,
         cost_giou: float = 2.0,
         dn_weight: float = 1.0,
+        lft: bool = True,
+        layer_weights=None,
         weight: float = 1.0,
     ):
         super().__init__(weight)
@@ -810,11 +817,19 @@ class DINOLoss(BaseLoss):
             num_classes, cost_class=cost_class, cost_bbox=cost_bbox, cost_giou=cost_giou
         )
         self.dn_weight = float(dn_weight)
+        self.lft = bool(lft)
+        self.layer_weights = (
+            [float(w) for w in layer_weights] if layer_weights is not None else None
+        )
 
     def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
         if device is None:
             device = preds["logits"].device
-        main_out = self.main(preds, batch, image_hw=image_hw, device=device)
+        intermediate = preds.get("intermediate_boxes")
+        if self.lft and intermediate is not None and len(intermediate) > 1:
+            main_out = self._main_lft(preds, batch, image_hw, device, intermediate)
+        else:
+            main_out = self.main(preds, batch, image_hw=image_hw, device=device)
         if "dn_logits" not in preds:
             return main_out
         dn_logits = preds["dn_logits"]
@@ -865,6 +880,63 @@ class DINOLoss(BaseLoss):
         main_out["dn_cls_loss"] = total_cls
         main_out["dn_l1_loss"] = total_l1
         return main_out
+
+    def _main_lft(self, preds, batch, image_hw, device, intermediate) -> dict:
+        """look-forward-twice 主分支：匹配基于最后一层，各层框损失用下一层细化框。"""
+        img_h, img_w = image_hw
+        logits, last_boxes = preds["logits"], preds["boxes"]
+        num_layers = len(intermediate)
+        weights = self.layer_weights or [1.0] * num_layers
+        if len(weights) != num_layers:
+            raise ValueError(f"layer_weights 长度 {len(weights)} 与解码器层数 {num_layers} 不一致")
+
+        total_cls = torch.tensor(0.0, device=device)
+        total_l1 = torch.tensor(0.0, device=device)
+        total_giou = torch.tensor(0.0, device=device)
+
+        for b in range(len(batch["boxes"])):
+            gt_boxes = batch["boxes"][b].to(device).float()
+            gt_labels = batch["labels"][b].to(device).long()
+            pred_logits, pred_boxes = logits[b], last_boxes[b]
+            q = pred_logits.shape[0]
+
+            if gt_boxes.numel() > 0:
+                pred_idx, gt_idx = self.main.matcher(
+                    pred_logits,
+                    pred_boxes,
+                    self.main._px_to_xywh_norm(gt_boxes, img_w, img_h),
+                    gt_labels,
+                )
+            else:
+                pred_idx = gt_idx = torch.empty((0,), dtype=torch.long, device=device)
+
+            targets = torch.full((q,), self.num_classes, dtype=torch.long, device=device)
+            if gt_idx.numel() > 0:
+                targets[pred_idx] = gt_labels[gt_idx]
+            total_cls = total_cls + F.cross_entropy(pred_logits, targets)
+
+            if gt_idx.numel() > 0:
+                gb_norm = self.main._px_to_xywh_norm(gt_boxes, img_w, img_h)[gt_idx]
+                gt_px = gt_boxes[gt_idx]
+                for i, boxes_i in enumerate(intermediate):
+                    boxes_use = intermediate[i + 1] if i + 1 < num_layers else boxes_i
+                    w = weights[i]
+                    pb = boxes_use[b][pred_idx]
+                    total_l1 = total_l1 + w * F.l1_loss(pb, gb_norm)
+                    pb_px = self.main._xywh_norm_to_px(pb, img_w, img_h)
+                    total_giou = total_giou + w * self.main.giou(pb_px, gt_px)
+
+        total = (
+            self.main.cls_weight * total_cls
+            + self.main.bbox_weight * total_l1
+            + self.main.giou_weight * total_giou
+        )
+        return {
+            "loss": total,
+            "cls_loss": total_cls,
+            "l1_loss": total_l1,
+            "giou_loss": total_giou,
+        }
 
 
 __all__ = [

@@ -342,7 +342,9 @@ MIT License
 - 性能开关：`training.compile`（torch.compile，DDP 前编译、失败降级）/ `training.channels_last`（卷积内存格式）；
 - 实验管理：`hash_config`（work_dir 增加配置哈希后缀）、训练结束导出 `best_metrics.csv`、
   `training.export_best_onnx` 导出最优 checkpoint 为 ONNX；
-- 新增 P2+P3 测试 11 项，全量 282 passed + 2 skipped；ruff / black 全绿。
+- DINO look-forward-twice：解码器逐层累积中间框（`intermediate_boxes`），主分支各层回归损失用下一层细化框
+  （`DINOLoss(lft=true)`，可选 `layer_weights`）；
+- 新增 P2+P3+LFT 测试 15 项，全量 286 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.16.0（DINO-lite / 线性评估 / 训练工程 P1）
 - 检测：`dinodetr`（hybrid query selection + query denoising 对比正负样本 + box refinement）；

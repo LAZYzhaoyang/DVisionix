@@ -1076,3 +1076,27 @@ models/
 
 ## 四、下一步
 - DINO 可选增强：look-forward-twice（解码器各层中间 box + 主分支分层 box 损失），单独提交。
+
+
+---
+
+# DINO 可选增强：look-forward-twice（v0.17.0-DINO-LFT）
+
+> DINO 可选增强，训练工程 P2/P3 完成后单独提交。
+
+## 一、实现
+- `DINODetrHead`：解码器循环中逐层累积 box 更新（`box_acc = init_boxes + delta_i`，sigmoid），
+  训练输出 `intermediate_boxes: List[(B,k,4)]`（各层中间框），最后一层即最终框（训练/推理一致）；
+  推理仍只输出最后一层 logits/boxes，契约与 DETR 一致（decode 不受影响）。
+- `DINOLoss` 主分支 look-forward-twice：匈牙利匹配基于最后一层预测；各解码器层框回归损失使用
+  「下一层」的细化框（`intermediate_boxes[i+1]`，最后一层用自身）；新增 `lft`（默认 true）与
+  `layer_weights`（缺省全 1.0，长度须与解码器层数一致）。
+- 无 `intermediate_boxes`（如推理输出）或 `lft=False` 时自动回退单层 DETRLoss，dn 分支不变。
+
+## 二、验证
+- 新增 `tests/test_models/test_v017_dino_lft.py`（4 项）：训练输出中间框形状/末层=最终框、推理路径不受影响、
+  LFT 损失下降、layer_weights 校验与回退路径。
+- 全量测试 286 passed + 2 skipped；ruff / black 全绿。
+
+## 三、后续（默认推迟）
+- 多卡实验验证、指标 torchmetrics 迁移（永久计划，仅按明确指示实施）。

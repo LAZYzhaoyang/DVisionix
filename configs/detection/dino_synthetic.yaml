@@ -29,6 +29,9 @@ loss:
   _delete_: true
   type: "dino_detection"
   num_classes: 3
+  # look-forward-twice（默认开启）：主分支各解码器层用下一层细化框做回归损失
+  # lft: true
+  # layer_weights: [1.0, 1.0]   # 与 num_decoder_layers 长度一致；缺省全部 1.0
 
 data:
   dataset: "synthetic"

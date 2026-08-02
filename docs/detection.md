@@ -17,7 +17,11 @@ DVisionix 提供**组件化检测器**（backbone → neck → head 即插即用
 | `NMSFreeYOLODetector` | anchor-free（NMS-free） | `NMSFreeYOLOHead` + `OneToOneYOLOLoss`（免 NMS 解码） | `yolo_v10` |
 | `CenterNetDetector` | 关键点检测 | `CenterNetHead`（热图+宽高+偏移）+ `CenterNetLoss` | `centernet` |
 | `YOLOv9Detector` | anchor-free（PGI） | `ReversibleBlock` 骨干 + `YOLOHead` 主/辅头 + `YOLOv9Loss` | `yolo_v9` |
-| `DINODetrDetector` | transformer 端到端（DINO-lite） | `DINODetrHead`（hybrid selection + 去噪训练）+ `DINOLoss` | `dinodetr` |
+| `DINODetrDetector` | transformer 端到端（DINO-lite） | `DINODetrHead`（hybrid selection + 去噪训练 + look-forward-twice）+ `DINOLoss` | `dinodetr` |
+
+> DINO look-forward-twice（v0.17）：解码器逐层累积中间框（训练输出 `intermediate_boxes`），
+> `DINOLoss` 主分支匈牙利匹配基于最后一层，各层框回归损失用下一层细化框（最后一层用自身）；
+> 可配置 `lft: true`（默认）与 `layer_weights`（长度与 `num_decoder_layers` 一致，缺省全 1.0）。
 
 所有检测器由 `SingleStageDetector` 脚手架统一装配：backbone（自动 `features_only=True`）→ neck（可选 FPN / PANet）→ head。
 YOLO 系列骨干可用 `csp_layer` / `elan_layer` / `eelan_layer` / `c3k2_block` / `psa_block` 拼装（见 yolov5 / yolov7 / yolov9 / yolov10 / yolov11 配置示例）。

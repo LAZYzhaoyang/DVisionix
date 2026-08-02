@@ -20,8 +20,9 @@ from ...layers import (
 class DINODetrHead(BaseModel):
     """DINO-lite：多尺度可变形编码器 -> 混合 query 选择 -> 解码器（可变形交叉注意力）+ box 细化。
 
-    训练时（batch 非空）生成正/负去噪 query 与主 query 一起过解码器；输出主预测 + 去噪预测与掩码。
-    输出契约与 DETR 一致（logits/boxes），可复用 detr_decode。
+    解码器逐层累积 box 更新（迭代细化），训练时输出各层中间框 ``intermediate_boxes``
+    （配合 DINOLoss 的 look-forward-twice：第 i 层回归损失使用第 i+1 层的框）；
+    推理仍只输出最后一层 logits/boxes，契约与 DETR 一致（可复用 detr_decode）。
     """
 
     input_style = "multi_scale"  # 多尺度输入（装配器注入 in_channels_list）
@@ -124,14 +125,22 @@ class DINODetrHead(BaseModel):
         else:
             all_tgt, all_ref, all_pos = tgt, ref_q, query_pos
 
+        # 逐层累积 box 更新（迭代细化）；最后一层即为最终框，训练/推理一致
+        decoder_boxes = []
+        box_acc = init_boxes  # (B, k, 4) 归一化 xywh anchor
         for layer in self.decoder_layers:
             all_tgt = layer(all_tgt, all_pos, proj, all_ref)
+            delta = self.bbox_embed(all_tgt[:, :k])
+            box_acc = box_acc + delta
+            decoder_boxes.append(box_acc.sigmoid())
 
         main_tgt = all_tgt[:, :k]
         logits = self.class_embed(main_tgt)
-        delta = self.bbox_embed(main_tgt)
-        boxes = (init_boxes + delta).sigmoid()
+        boxes = decoder_boxes[-1]
         out = {"logits": logits, "boxes": boxes}
+        if training:
+            # look-forward-twice 需要各层中间框（主分支）
+            out["intermediate_boxes"] = decoder_boxes
         if training:
             dn_tgt = all_tgt[:, k:]
             dn_logits = self.class_embed(dn_tgt)
