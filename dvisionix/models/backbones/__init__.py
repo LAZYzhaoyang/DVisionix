@@ -7,8 +7,11 @@
 """
 
 from .convnext import ConvNeXtBackbone
+from .convnextv2 import ConvNeXtV2Backbone
 from .cspdarknet import CSPDarknetBackbone
+from .efficientnet_lite import EfficientNetLiteBackbone
 from .feature import FeatureBackboneBase
+from .mit import MiTBackbone
 from .mobilenetv3 import MobileNetV3Backbone
 from .sequential import SequentialBackbone
 from .swin import SwinBackbone
@@ -26,4 +29,7 @@ __all__ = [
     "MobileNetV3Backbone",
     "ViTBackbone",
     "SwinBackbone",
+    "ConvNeXtV2Backbone",
+    "EfficientNetLiteBackbone",
+    "MiTBackbone",
 ]

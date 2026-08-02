@@ -922,3 +922,33 @@ models/
 - **R4 decode 策略**：模型专属解码与其 head/detector 同文件（如 fcos_decode）；多模型共享、契约一致的解码纯函数放 postprocess.py（如 maskformer_decode）；每个模型保留 decode() 实例方法做薄桥接。
 - **R5 组合器经 Registry 构建**：classifiers / segmenters / detectors 通过 BACKBONES/NECKS/HEADS 注册表构建下层组件，不直接 import 具体类。
 - **R6 新增组件流程**：新算子 -> layers/ 或 necks/ -> 新 head/backbone 只引用下层 -> 每头一文件 -> 注册即用。
+
+
+---
+
+# 中期批次 1：骨干/分割/检测扩展（v0.14.0）
+
+> 用户确认：按顺序实施，批次 1 全部包含（B1 ConvNeXtV2、B2 EfficientNetLite、S1 MiTBackbone、
+> S2 SwinUNet 装配、D1 YOLOv11 C3k2+PSA）。
+
+## 一、骨干
+- `ConvNeXtV2Backbone`（convnextv2_backbone）：GRN（全局响应归一化）替代 LayerScale；新增 `layers/GRN`（grn）、`layers/ConvNeXtV2Block`（convnextv2_block）。
+- `EfficientNetLiteBackbone`（efficientnet_lite_backbone）：MBConv + SE（复用 MBConvBlock），B0-lite 配置。
+- `MiTBackbone`（mit_backbone）：SegFormer 编码器（overlap patch embed + MixFFN），stride 4/8/16/32。
+
+## 二、分割
+- `SwinUNet`（swin_unet 组合模型）：SwinBackbone（多尺度 encoder）+ SwinUNetDecoder（PatchExpand + 跳连）。
+- 配置示例：`configs/segmentation/swin_unet_synthetic.yaml`、`segformer_mit_synthetic.yaml`。
+
+## 三、检测
+- `C3k2Block`（c3k2_block，YOLOv11 CSP 变体）+ `PSABlock`（psa_block，位置自注意力）。
+- 配置示例：`configs/detection/yolov11_synthetic.yaml`（C3k2/PSA 骨干 + PANet + YOLOHead）。
+
+## 四、验证
+- 新增 `tests/test_models/test_v014_midterm.py`（10 项）：4 个新层前向、3 个新骨干分类+检测组合、
+  SwinUNet 前向+损失下降、YOLOv11 风格装配+损失下降、3 个新配置加载。
+- 全量测试 260 passed + 2 skipped；ruff / black 全绿。
+
+## 五、后续（批次 2 / 3，待确认）
+- 批次 2（v0.15.0）：B3 SwinV2、D2 多尺度可变形完整版、（可选 S3 分割头增强）。
+- 批次 3：D3 DINO 变体（大工作量，单独排期）。

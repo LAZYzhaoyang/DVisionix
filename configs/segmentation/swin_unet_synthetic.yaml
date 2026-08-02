@@ -1,0 +1,39 @@
+# Swin-UNet 端到端 demo 配置（Swin encoder + PatchExpand 解码 + 跳连）
+_base_: "../../dvisionix/config/defaults/segmentation.yaml"
+
+experiment_name: "demo_swin_unet_synthetic"
+
+model:
+  _delete_: true
+  type: "swin_unet"
+  num_classes: 4
+  backbone:
+    type: "swin_backbone"
+    embed_dim: 32
+    depths: [1, 1, 1, 1]
+    num_heads: [2, 2, 2, 2]
+  d_model: 32
+
+loss:
+  _delete_: true
+  type: "cross_entropy"
+  ignore_index: 255
+
+data:
+  dataset: "synthetic"
+  image_size: 32
+  num_samples: 32
+  val_samples: 8
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  optimizer: {type: adam, lr: 0.001}
+  device: "auto"
+  num_workers: 0
+  early_stopping: {enabled: false}
+
+checkpoint:
+  save_dir: "checkpoints"
+  monitor: "val_loss"
+  mode: "min"

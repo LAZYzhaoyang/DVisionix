@@ -16,7 +16,7 @@ def _read_long_description() -> str:
 
 setup(
     name="dvisionix",
-    version="0.13.0",
+    version="0.14.0",
     author="DVisionix Team",
     description="A PyTorch-based deep learning training framework for computer vision tasks",
     long_description=_read_long_description(),
@@ -40,7 +40,7 @@ setup(
             "mypy>=1.0.0",
         ],
         "full": [
-            "timm>=0.13.0",
+            "timm>=0.14.0",
             "albumentations>=1.3.0",
             "onnx>=1.13.0",
             "onnxruntime>=1.14.0",

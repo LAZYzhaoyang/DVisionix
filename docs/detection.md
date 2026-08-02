@@ -19,7 +19,7 @@ DVisionix 提供**组件化检测器**（backbone → neck → head 即插即用
 | `YOLOv9Detector` | anchor-free（PGI） | `ReversibleBlock` 骨干 + `YOLOHead` 主/辅头 + `YOLOv9Loss` | `yolo_v9` |
 
 所有检测器由 `SingleStageDetector` 脚手架统一装配：backbone（自动 `features_only=True`）→ neck（可选 FPN / PANet）→ head。
-YOLO 系列骨干可用 `csp_layer` / `elan_layer` / `eelan_layer` 拼装（见 `configs/detection/yolov5_synthetic.yaml` / `yolov7_synthetic.yaml` / `yolov9_synthetic.yaml` / `yolov10_synthetic.yaml`）。
+YOLO 系列骨干可用 `csp_layer` / `elan_layer` / `eelan_layer` / `c3k2_block` / `psa_block` 拼装（见 yolov5 / yolov7 / yolov9 / yolov10 / yolov11 配置示例）。
 backbone / neck / head 均配置驱动，可自由组合（例如 `timm_backbone` 或 `SequentialBackbone` 配 `fpn` / `panet`）。
 
 ## 数据格式

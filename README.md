@@ -45,7 +45,7 @@ dvisionix/
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath / CSP / ELAN / E-ELAN / 可变形注意力）
-│   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone / ConvNeXt / CSPDarknet / MobileNetV3 / ViT / Swin
+│   ├── backbones/       # Timm / Sequential / ConvNeXt(+V2) / CSPDarknet / MobileNetV3 / EfficientNetLite / ViT / Swin / MiT(SegFormer)
 │   ├── necks/           # FPN / PANet
 │   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC/CircleLoss/SimCLR）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer(+V2)/MaskFormer(+2)/PSP/UPerNet/BiSeNet/SwinUNet）· 检测（Det/FCOS/RetinaNet/YOLO(v8/v10)/DETR/RT-DETR(+full)/DeformableDETR/CenterNet）
 │   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO(v8/v9/v10) / DETR / RT-DETR(+full) / DeformableDETR / CenterNet（decode 与模型同文件）
@@ -334,6 +334,12 @@ MIT License
 ---
 
 ## 📌 版本演进
+
+### 0.14.0（中期批次 1：骨干/分割/检测扩展）
+- 骨干：`convnextv2_backbone`（GRN）、`efficientnet_lite_backbone`（MBConv+SE）、`mit_backbone`（SegFormer encoder）；
+- 分割：`swin_unet` 组合模型（Swin encoder + PatchExpand 解码 + 跳连）；
+- 检测：`c3k2_block` / `psa_block`（YOLOv11 风格骨干组件）+ yolov11 配置示例；
+- 新增 3 个配置示例；全量测试 260 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.13.0（model 模块分层与 layers 统一重构）
 - 共用子模块下沉：`LayerNorm2d` / `DeformableEncoder(Decoder)Layer` / `MixFFN` / `WindowAttention` / `PatchMerging` / `PatchExpand` 统一到 layers；

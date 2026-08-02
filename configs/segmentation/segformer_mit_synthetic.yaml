@@ -1,0 +1,41 @@
+# SegFormer（MiT encoder + SegFormer 头）端到端 demo 配置
+_base_: "../../dvisionix/config/defaults/segmentation.yaml"
+
+experiment_name: "demo_segformer_mit_synthetic"
+
+model:
+  _delete_: true
+  type: "segmentation_model"
+  num_classes: 4
+  backbone:
+    type: "mit_backbone"
+    embed_dims: [32, 64, 128, 256]
+    depths: [1, 1, 1, 1]
+  head:
+    type: "segformer_head"
+    num_classes: 4
+    channels: 64
+
+loss:
+  _delete_: true
+  type: "cross_entropy"
+  ignore_index: 255
+
+data:
+  dataset: "synthetic"
+  image_size: 32
+  num_samples: 32
+  val_samples: 8
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  optimizer: {type: adam, lr: 0.001}
+  device: "auto"
+  num_workers: 0
+  early_stopping: {enabled: false}
+
+checkpoint:
+  save_dir: "checkpoints"
+  monitor: "val_loss"
+  mode: "min"

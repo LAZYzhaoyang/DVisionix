@@ -18,8 +18,11 @@ from . import (
 )
 from .backbones import (
     ConvNeXtBackbone,
+    ConvNeXtV2Backbone,
     CSPDarknetBackbone,
+    EfficientNetLiteBackbone,
     FeatureBackboneBase,
+    MiTBackbone,
     MobileNetV3Backbone,
     SequentialBackbone,
     TimmBackbone,
@@ -107,7 +110,7 @@ from .losses import (
 )
 from .necks import FPN, PANet
 from .postprocess import batched_nms, box_iou, maskformer_decode, nms
-from .segmenters import SegmentationModel
+from .segmenters import SegmentationModel, SwinUNet
 from .toy import GridDetectionModel, SimpleCNN, SimpleSegmentationModel
 
 __all__ = [
@@ -122,6 +125,9 @@ __all__ = [
     "MobileNetV3Backbone",
     "ViTBackbone",
     "SwinBackbone",
+    "ConvNeXtV2Backbone",
+    "EfficientNetLiteBackbone",
+    "MiTBackbone",
     "list_timm_models",
     "build_layer",
     "build_norm_layer",
@@ -142,6 +148,7 @@ __all__ = [
     "maskformer_decode",
     "LinearClassifier",
     "SegmentationModel",
+    "SwinUNet",
     "SingleStageDetector",
     "AnchorGenerator",
     "FCOSDetector",

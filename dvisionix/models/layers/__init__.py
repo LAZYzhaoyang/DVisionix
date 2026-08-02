@@ -17,13 +17,17 @@ from .anchors import AnchorGenerator, bbox2delta, delta2bbox
 from .attention import PositionEmbeddingSine
 from .basic import MLP, ConvNormAct, DropPath, SEBlock
 from .builder import build_activation_layer, build_norm_layer
+from .c3k2 import C3k2Block
 from .convnext import ConvNeXtBlock
+from .convnextv2 import ConvNeXtV2Block
 from .csp import CSPLayer
 from .deformable_attention import MultiScaleDeformableAttention
 from .elan import EELANLayer, ELANLayer
+from .grn import GRN
 from .mbconv import MBConvBlock
 from .norm import LayerNorm2d
 from .patch_ops import PatchExpand, PatchMerging
+from .psa import PSABlock
 from .reversible import ReversibleBlock
 from .timm_layers import create_timm_layer, list_timm_layers
 from .transformer import DeformableDecoderLayer, DeformableEncoderLayer, MixFFN
@@ -74,4 +78,8 @@ __all__ = __all__ + [
     "window_reverse",
     "PatchMerging",
     "PatchExpand",
+    "GRN",
+    "ConvNeXtV2Block",
+    "C3k2Block",
+    "PSABlock",
 ]
