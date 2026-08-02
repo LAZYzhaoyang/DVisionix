@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Deformable DETR 风格检测头（紧凑版：纯 PyTorch 可变形注意力）。"""
 
 import torch

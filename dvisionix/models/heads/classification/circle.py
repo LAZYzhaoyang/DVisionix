@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CircleLoss 度量学习头（归一化余弦，配合 CircleLoss 损失使用）。"""
 
 import torch

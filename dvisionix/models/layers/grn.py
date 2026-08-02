@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """GRN（全局响应归一化，ConvNeXtV2）层。"""
 
 import torch

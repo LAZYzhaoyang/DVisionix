@@ -1,5 +1,3 @@
-# D:\ZhaoyangProject\DVisionix\dvisionix\training\__init__.py
-
 """
 训练模块（v0.3.1 目录重组）
 

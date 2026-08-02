@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """EfficientNetLite 轻量骨干（MBConv + SE，B0-lite 配置）。"""
 
 from typing import List, Optional, Sequence, Tuple

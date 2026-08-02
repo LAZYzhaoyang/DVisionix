@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.17 DINO 可选增强：look-forward-twice（LFT）。"""
 
 import pytest

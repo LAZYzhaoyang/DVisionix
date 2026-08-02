@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """PartialFC 度量学习头（大规模类别采样子集 softmax，compact）。"""
 
 from typing import Optional

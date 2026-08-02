@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Anchor 工具（通用几何工具，detectors 与 losses 平级共用）。"""
 
 import math

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """内置骨干基类：stage 列表 + dry-run 通道推导 + features_only 多尺度输出。"""
 
 from typing import List, Optional, Sequence

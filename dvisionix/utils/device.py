@@ -1,5 +1,3 @@
-# D:\ZhaoyangProject\DVisionix\dvisionix\utils\device.py
-
 """
 设备管理工具
 

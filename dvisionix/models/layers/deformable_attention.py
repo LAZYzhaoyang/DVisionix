@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """多尺度可变形注意力（纯 PyTorch compact 实现，无 C++ 算子）。
 
 对每个 query，在每层特征上预测 num_points 个采样偏移，用双线性采样聚合多尺度上下文，

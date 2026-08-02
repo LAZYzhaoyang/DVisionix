@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Swin Transformer 骨干（window attention + shifted window + patch merging，compact）。"""
 
 from typing import List, Optional, Sequence

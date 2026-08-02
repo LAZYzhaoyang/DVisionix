@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Transformer 共享层：可变形编解码层（DETR 家族）、MixFFN（SegFormer 家族）。"""
 
 import torch.nn as nn

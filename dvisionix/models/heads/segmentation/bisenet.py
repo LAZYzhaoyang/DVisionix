@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """BiSeNet 风格轻量分割头（细节分支 + 全局上下文分支，compact）。"""
 
 import torch

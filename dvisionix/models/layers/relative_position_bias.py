@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SwinV2 连续相对位置偏置（log-spaced，MLP 映射）。"""
 
 import torch

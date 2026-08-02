@@ -1,5 +1,3 @@
-# D:\ZhaoyangProject\DVisionix\dvisionix\__init__.py
-
 """
 DVisionix: 深度学习算法库
 
@@ -21,7 +19,7 @@ DVisionix: 深度学习算法库
     from dvisionix.training import build_task, Trainer
 """
 
-__version__ = "0.16.0"
+__version__ = "1.0.0"
 
 from . import config, data, export, metrics, models, training, utils
 

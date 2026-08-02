@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """可逆块（RevCol 风格 compact）：输入拆半，add 耦合，可精确逆向（PGI 用）。"""
 
 import torch

@@ -1,5 +1,3 @@
-# D:\ZhaoyangProject\DVisionix\dvisionix\utils\__init__.py
-
 from .device import get_device, get_device_info, move_to_device, set_seed
 from .logging import TensorBoardWriter, TrainingLogger, format_metrics, get_logger, log_metrics
 

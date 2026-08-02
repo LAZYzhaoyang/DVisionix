@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """YOLOv11 C3k2 块（CSP 变体，k=2 默认两个 3x3 bottleneck）。"""
 
 import torch

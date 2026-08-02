@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.17-P2 测试：超参搜索工具 + 特征蒸馏。"""
 
 import pytest

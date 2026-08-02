@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CSP（Cross Stage Partial）瓶颈层，用于 YOLOv5 风格骨干。"""
 
 import torch

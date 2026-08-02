@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.15.0 批次 2 测试：SwinV2 / 可变形注意力 V2 / SegFormerV3 / 组合器子包。"""
 
 import pytest

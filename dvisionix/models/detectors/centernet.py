@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CenterNet 检测器（关键点热图峰值解码）。"""
 
 from typing import Any, Dict, Optional

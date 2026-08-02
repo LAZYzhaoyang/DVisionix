@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """MobileNetV3 倒残差块（MBConv：1x1 扩展 + 深度可分离 + SE + 线性投影）。"""
 
 import torch

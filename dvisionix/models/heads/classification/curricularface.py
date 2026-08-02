@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CurricularFace 度量学习头（课程式自适应 margin，compact）。"""
 
 import torch

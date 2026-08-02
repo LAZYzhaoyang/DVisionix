@@ -1,4 +1,4 @@
-﻿# D:\\ZhaoyangProject\\DVisionix\\tests\\test_training\\test_trainer.py
+# D:\\ZhaoyangProject\\DVisionix\\tests\\test_training\\test_trainer.py
 
 """
 测试通用训练引擎和任务系统

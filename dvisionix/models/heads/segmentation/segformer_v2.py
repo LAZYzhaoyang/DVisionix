@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SegFormer 变体分割头（overlap patch embed + MixFFN，compact）。"""
 
 import torch

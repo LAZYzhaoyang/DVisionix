@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """YOLOv10 风格检测头（NMS-free，结构同 YOLOHead，配合 one-to-one 损失训练）。"""
 
 from ....registry import HEADS

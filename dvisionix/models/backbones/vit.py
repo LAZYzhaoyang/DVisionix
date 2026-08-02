@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ViT 骨干网络（patch embed + Transformer encoder，单尺度输出）。"""
 
 from typing import List, Optional, Sequence

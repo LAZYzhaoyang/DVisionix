@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """DeepLabV3+ 分割头（ASPP 编码 + 低层特征解码）。"""
 
 import torch

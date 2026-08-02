@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """MaskFormer 实例分割任务组件（MaskFormerHead full 模式 + MaskFormerLoss + mask mAP）。"""
 
 from typing import Any, Dict, Optional

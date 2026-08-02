@@ -1,9 +1,16 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.16.0 测试：DINO-lite / 线性评估 / 训练工程 P1。"""
+
+import os
 
 import pytest
 
 torch = pytest.importorskip("torch")
+
+# 测试配置根目录（仓库根 configs/，避免硬编码绝对路径）
+CFG_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs"
+)
 
 from dvisionix.data import detection_collate
 from dvisionix.models import build_model
@@ -79,7 +86,7 @@ def test_dino_forward_decode_and_loss():
 def test_dino_config_loads():
     from dvisionix.config import Config
 
-    cfg = Config.from_yaml(r"D:\ZhaoyangProject\DVisionix\configs\detection\dino_synthetic.yaml")
+    cfg = Config.from_yaml(os.path.join(CFG_ROOT, "detection", "dino_synthetic.yaml"))
     assert build_model(cfg.model.to_dict()) is not None
 
 

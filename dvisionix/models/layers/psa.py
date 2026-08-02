@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """YOLOv11 PSA 位置自注意力层（分组 + 自注意力 + 融合）。"""
 
 import torch

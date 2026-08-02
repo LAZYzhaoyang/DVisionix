@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """YOLOv9-lite 检测器（PGI：主头 + 浅层辅助头，可逆块骨干可选）。"""
 
 from typing import Any, Dict, Optional

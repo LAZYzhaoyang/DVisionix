@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """DINO 混合 query 选择（Hybrid Query Selection）。"""
 
 import torch

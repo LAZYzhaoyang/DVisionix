@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Swin-UNet 风格分割解码器（PatchExpand 逐级上采样 + 跳连融合，compact）。"""
 
 import torch.nn as nn

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ConvNeXtV2 骨干（GRN 全局响应归一化）。"""
 
 from typing import List, Optional, Sequence

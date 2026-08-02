@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CSPDarknet 骨干（YOLOv5/v8 官方结构：Conv stem + CSP 阶段）。"""
 
 from typing import List, Optional, Sequence

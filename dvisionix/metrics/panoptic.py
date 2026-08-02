@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """全景分割质量（Panoptic Quality，PQ / SQ / RQ）指标。
 
 遵循 Panoptic Segmentation (Kirillov et al.) 定义：按类别逐类匹配预测/真值片段

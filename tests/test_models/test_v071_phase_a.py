@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.7.1 阶段 A 测试：decode 统一契约 / input_style 自声明 / RT-DETR neck / 注册名别名。"""
 
 import pytest

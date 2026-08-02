@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Mask2Former 分割头（mask attention 解码器 + FPN 像素解码器，compact）。"""
 
 import torch

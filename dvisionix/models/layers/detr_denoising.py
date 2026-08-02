@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """DINO query denoising（去噪训练 query 生成，含对比正负样本）。"""
 
 import torch

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """UPerNet 分割头（FPN 风格多尺度融合 + 金字塔池化）。"""
 
 import torch

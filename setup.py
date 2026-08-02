@@ -1,4 +1,3 @@
-# D:\ZhaoyangProject\DVisionix\setup.py
 
 """DVisionix 安装脚本。"""
 
@@ -16,8 +15,8 @@ def _read_long_description() -> str:
 
 setup(
     name="dvisionix",
-    version="0.16.0",
-    author="DVisionix Team",
+    version="1.0.0",
+    author="Zhaoyang Li",
     description="A PyTorch-based deep learning training framework for computer vision tasks",
     long_description=_read_long_description(),
     long_description_content_type="text/markdown",
@@ -55,11 +54,10 @@ setup(
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Scientific/Engineering :: Image Recognition",
     ],

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """RT-DETR 增强版检测器（IoU-aware query selection，输出契约与 DETR 一致）。"""
 
 from typing import Any, Dict, Optional

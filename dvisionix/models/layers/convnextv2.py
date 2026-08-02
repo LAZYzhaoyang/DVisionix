@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ConvNeXtV2 块（GRN 全局响应归一化，替代 LayerScale）。"""
 
 import torch

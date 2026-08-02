@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Patch 操作：PatchMerging（Swin 降采样）与 PatchExpand（Swin-UNet 上采样）。"""
 
 import torch

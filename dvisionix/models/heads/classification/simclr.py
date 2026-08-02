@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SimCLR 对比学习投影头（MLP 投影，配合 InfoNCELoss）。"""
 
 import torch.nn as nn

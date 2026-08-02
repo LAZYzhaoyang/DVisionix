@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """RT-DETR 增强版检测头（IoU-aware query selection + 多尺度可变形编码器，compact）。"""
 
 import torch

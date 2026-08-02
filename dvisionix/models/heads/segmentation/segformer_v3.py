@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SegFormerV3 分割头（overlap embed + MixFFN + SE 通道注意力融合解码）。"""
 
 import torch

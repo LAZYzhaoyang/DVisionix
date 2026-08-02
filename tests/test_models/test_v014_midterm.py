@@ -1,9 +1,16 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.14.0 中期批次 1 测试：ConvNeXtV2 / EfficientNetLite / MiT / SwinUNet / YOLOv11(C3k2+PSA)。"""
+
+import os
 
 import pytest
 
 torch = pytest.importorskip("torch")
+
+# 测试配置根目录（仓库根 configs/，避免硬编码绝对路径）
+CFG_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs"
+)
 
 from dvisionix.data import detection_collate
 from dvisionix.models import build_model
@@ -183,8 +190,8 @@ def test_midterm_configs_load():
     from dvisionix.config import Config
 
     for name in ("yolov11_synthetic",):
-        cfg = Config.from_yaml(rf"D:\ZhaoyangProject\DVisionix\configs\detection\{name}.yaml")
+        cfg = Config.from_yaml(os.path.join(CFG_ROOT, "detection", f"{name}.yaml"))
         assert build_model(cfg.model.to_dict()) is not None
     for name in ("swin_unet_synthetic", "segformer_mit_synthetic"):
-        cfg = Config.from_yaml(rf"D:\ZhaoyangProject\DVisionix\configs\segmentation\{name}.yaml")
+        cfg = Config.from_yaml(os.path.join(CFG_ROOT, "segmentation", f"{name}.yaml"))
         assert build_model(cfg.model.to_dict()) is not None

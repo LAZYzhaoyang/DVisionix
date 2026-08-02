@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """NormFace 度量学习头（特征/权重 L2 归一化 + 缩放）。"""
 
 import torch

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """PixelDecoder 颈部（Mask2Former 像素解码器，与 FPN/PANet 同级）。"""
 
 import torch.nn as nn

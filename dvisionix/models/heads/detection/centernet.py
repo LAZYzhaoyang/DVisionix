@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """CenterNet 检测头（关键点热图 + 尺寸 + 偏移）。"""
 
 import torch.nn as nn

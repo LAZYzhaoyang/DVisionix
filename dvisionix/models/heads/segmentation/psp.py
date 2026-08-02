@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """PSPNet 分割头（金字塔场景解析池化 PPM）。"""
 
 import torch

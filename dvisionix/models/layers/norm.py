@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """归一化层：channels-first 的 LayerNorm2d。"""
 
 import torch

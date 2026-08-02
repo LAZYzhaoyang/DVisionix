@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SimCLR 双视角增强（随机裁剪/翻转/色彩抖动 + 归一化）。"""
 
 from typing import Tuple

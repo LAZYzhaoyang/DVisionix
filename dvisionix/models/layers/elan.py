@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ELAN（Efficient Layer Aggregation Network）层，用于 YOLOv7 / v9 风格骨干。"""
 
 from typing import Optional

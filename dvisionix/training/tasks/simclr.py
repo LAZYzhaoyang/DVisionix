@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SimCLR 对比学习任务（双视角 InfoNCE，自监督）。"""
 
 from typing import Any, Dict, Optional

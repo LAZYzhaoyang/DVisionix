@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.17-P3 测试：性能开关（torch.compile / channels_last）+ 实验管理（配置哈希 / best_metrics / ONNX 导出）。"""
 
 import csv

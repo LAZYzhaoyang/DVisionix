@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SwinV2 块（cosine attention + res-post-norm + 连续相对位置偏置）。"""
 
 import torch

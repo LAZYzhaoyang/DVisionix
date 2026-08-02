@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ConvNeXt 骨干网络（现代 CNN，LN + 深度可分离 + 层缩放）。"""
 
 from typing import List, Optional, Sequence

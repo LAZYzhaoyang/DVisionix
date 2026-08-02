@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """ConvNeXt 块（LN + 深度可分离 + 层缩放 + DropPath）。"""
 
 import torch

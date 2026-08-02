@@ -1,9 +1,16 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """v0.12.0 测试：ViT/Swin 骨干 / YOLOv9-lite（PGI）。"""
+
+import os
 
 import pytest
 
 torch = pytest.importorskip("torch")
+
+# 测试配置根目录（仓库根 configs/，避免硬编码绝对路径）
+CFG_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "configs"
+)
 
 from dvisionix.data import detection_collate
 from dvisionix.models import build_model
@@ -150,6 +157,6 @@ def test_yolov9_forward_decode_and_loss():
 def test_yolov9_config_loads():
     from dvisionix.config import Config
 
-    cfg = Config.from_yaml(r"D:\ZhaoyangProject\DVisionix\configs\detection\yolov9_synthetic.yaml")
+    cfg = Config.from_yaml(os.path.join(CFG_ROOT, "detection", "yolov9_synthetic.yaml"))
     m = build_model(cfg.model.to_dict())
     assert m is not None

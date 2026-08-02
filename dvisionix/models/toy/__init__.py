@@ -8,6 +8,7 @@
 from ...registry import MODELS
 from .classification import SimpleCNN
 from .detection import GridDetectionModel
+from .detection_head import DetHead
 from .segmentation import SimpleSegmentationModel
 
 _MODELS = (SimpleCNN, SimpleSegmentationModel, GridDetectionModel)
@@ -23,4 +24,4 @@ for _cls, _alias in _ALIASES.items():
     if _alias not in MODELS:
         MODELS.register(_cls, name=_alias)
 
-__all__ = ["SimpleCNN", "SimpleSegmentationModel", "GridDetectionModel"]
+__all__ = ["SimpleCNN", "SimpleSegmentationModel", "GridDetectionModel", "DetHead"]

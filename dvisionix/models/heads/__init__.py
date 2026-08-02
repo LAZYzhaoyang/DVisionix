@@ -21,7 +21,6 @@ from .classification import (
 from .detection import (
     CenterNetHead,
     DeformableDETRHead,
-    DetHead,
     DETRHead,
     DINODetrHead,
     FCOSHead,
@@ -74,7 +73,6 @@ __all__ = [
     "SwinUNetDecoder",
     "MaskFormerHead",
     "Mask2FormerHead",
-    "DetHead",
     "FCOSHead",
     "RetinaNetHead",
     "YOLOHead",

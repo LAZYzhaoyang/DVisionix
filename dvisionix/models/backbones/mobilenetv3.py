@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """MobileNetV3 轻量骨干（MBConv 倒残差 + SE，适合移动/实时）。"""
 
 from typing import List, Optional, Sequence, Tuple

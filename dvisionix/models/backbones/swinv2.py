@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SwinV2 骨干（cosine attention + 连续相对位置偏置 + res-post-norm）。"""
 
 from typing import List, Optional, Sequence

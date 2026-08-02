@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Swin 窗口注意力：WindowAttention + 窗口划分/还原工具。"""
 
 import torch

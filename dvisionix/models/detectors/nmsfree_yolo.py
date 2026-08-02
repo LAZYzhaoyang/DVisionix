@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """YOLOv10 风格检测器（one-to-one 训练，推理无需 NMS）。"""
 
 from typing import Any, Dict, Optional

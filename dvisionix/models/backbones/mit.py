@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """SegFormer 编码器（MiTBackbone）：overlap patch embed + MixFFN 多尺度输出。"""
 
 from typing import List, Optional, Sequence
