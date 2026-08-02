@@ -51,7 +51,9 @@ class LossComposer(nn.Module):
         super().__init__()
         self.losses = nn.ModuleList(losses)
 
-    def forward(self, preds: torch.Tensor, targets: torch.Tensor, **kwargs: Any) -> Dict[str, torch.Tensor]:
+    def forward(
+        self, preds: torch.Tensor, targets: torch.Tensor, **kwargs: Any
+    ) -> Dict[str, torch.Tensor]:
         total = None
         extras: Dict[str, torch.Tensor] = {}
         for loss in self.losses:
@@ -60,7 +62,9 @@ class LossComposer(nn.Module):
             if isinstance(out, dict):
                 for key, value in out.items():
                     if key == "loss":
-                        total = (torch.zeros_like(value) if total is None else total) + value * weight
+                        total = (
+                            torch.zeros_like(value) if total is None else total
+                        ) + value * weight
                     else:
                         extras[key] = value * weight
             else:
@@ -72,7 +76,7 @@ class LossComposer(nn.Module):
         return {"loss": total, **extras}
 
     def __repr__(self) -> str:
-        return f"LossComposer([{', '.join(repr(l) for l in self.losses)}])"
+        return f"LossComposer([{', '.join(repr(item) for item in self.losses)}])"
 
 
 def build_loss(cfg: LossSpec) -> BaseLoss:

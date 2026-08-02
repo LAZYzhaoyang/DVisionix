@@ -2,11 +2,11 @@
 """训练装配层：从配置构建 callbacks 与 Trainer。"""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from ..utils.logging import TrainingLogger
+from .callbacks import Callback, EarlyStopping, ModelCheckpoint
 from .trainer import Trainer
-from .callbacks import Callback, ModelCheckpoint, EarlyStopping
 
 
 def build_callbacks(cfg, work_dir: Optional[str] = None) -> List[Callback]:
@@ -17,23 +17,27 @@ def build_callbacks(cfg, work_dir: Optional[str] = None) -> List[Callback]:
     ckpt_dir = ckpt.get("save_dir", "checkpoints")
     if work_dir and not os.path.isabs(ckpt_dir):
         ckpt_dir = os.path.join(work_dir, ckpt_dir)
-    callbacks.append(ModelCheckpoint(
-        save_dir=ckpt_dir,
-        monitor=ckpt.get("monitor", "val_loss"),
-        mode=ckpt.get("mode", "min"),
-        save_best_only=ckpt.get("save_best_only", True),
-        save_last=ckpt.get("save_last", True),
-    ))
+    callbacks.append(
+        ModelCheckpoint(
+            save_dir=ckpt_dir,
+            monitor=ckpt.get("monitor", "val_loss"),
+            mode=ckpt.get("mode", "min"),
+            save_best_only=ckpt.get("save_best_only", True),
+            save_last=ckpt.get("save_last", True),
+        )
+    )
 
     training = cfg.get("training", {}) or {}
     es = training.get("early_stopping", {}) or {}
     if es.get("enabled", False):
-        callbacks.append(EarlyStopping(
-            monitor=es.get("monitor", "val_loss"),
-            mode=es.get("mode", "min"),
-            patience=es.get("patience", 10),
-            min_delta=es.get("min_delta", 0.0),
-        ))
+        callbacks.append(
+            EarlyStopping(
+                monitor=es.get("monitor", "val_loss"),
+                mode=es.get("mode", "min"),
+                patience=es.get("patience", 10),
+                min_delta=es.get("min_delta", 0.0),
+            )
+        )
     return callbacks
 
 

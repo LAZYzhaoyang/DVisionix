@@ -12,10 +12,9 @@
   避免在 dataset 里再补一次导致二次归一化。
 """
 
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, List, Optional, Sequence
 
 from ..sample import Sample
-from ...registry import TRANSFORMS
 
 
 class BaseTransform:
@@ -46,6 +45,7 @@ class TransformPipeline:
 
     def __init__(self, transforms: Optional[Sequence[Any]] = None):
         from .builder import build_transform  # 避免循环依赖
+
         if transforms is None:
             self.transforms: List[BaseTransform] = []
         else:
@@ -67,9 +67,10 @@ class TransformPipeline:
 
     def append(self, transform: Any) -> "TransformPipeline":
         from .builder import build_transform
+
         self.transforms.append(build_transform(transform))
-        self.provides_normalization = (
-            self.provides_normalization or getattr(self.transforms[-1], "provides_normalization", False)
+        self.provides_normalization = self.provides_normalization or getattr(
+            self.transforms[-1], "provides_normalization", False
         )
         return self
 

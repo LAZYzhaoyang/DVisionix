@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .base import BaseLoss
 from ...registry import LOSSES
+from .base import BaseLoss
 
 
 @LOSSES.register()
@@ -84,8 +84,6 @@ class FocalLoss(BaseLoss):
         return loss.mean() if self.reduction == "mean" else loss.sum()
 
 
-
-
 @LOSSES.register()
 @LOSSES.register(name="binary_cross_entropy")
 class BinaryCrossEntropy(BaseLoss):
@@ -131,5 +129,3 @@ class DistillationLoss(BaseLoss):
             reduction="batchmean",
         ) * (t * t)
         return (1.0 - self.alpha) * ce + self.alpha * kd
-
-

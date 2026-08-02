@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 TENSORBOARD_AVAILABLE = False
 try:
     from torch.utils.tensorboard import SummaryWriter
+
     TENSORBOARD_AVAILABLE = True
 except ImportError:  # pragma: no cover
     SummaryWriter = None  # type: ignore

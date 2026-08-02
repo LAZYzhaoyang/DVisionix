@@ -8,10 +8,9 @@
 from typing import Any, Dict, Optional
 
 import torch
-import torch.nn as nn
 
+from ...registry import BACKBONES, HEADS, NECKS
 from ..base import BaseModel
-from ...registry import BACKBONES, NECKS, HEADS
 
 
 class SingleStageDetector(BaseModel):
@@ -44,15 +43,23 @@ class SingleStageDetector(BaseModel):
             self.neck = NECKS.build(neck_cfg)
             neck_out = getattr(self.neck, "out_channels", None)
             self.in_channels = (
-                neck_out if isinstance(neck_out, int)
-                else (neck_out[-1] if isinstance(neck_out, (list, tuple)) else self.backbone.out_channels[-1])
+                neck_out
+                if isinstance(neck_out, int)
+                else (
+                    neck_out[-1]
+                    if isinstance(neck_out, (list, tuple))
+                    else self.backbone.out_channels[-1]
+                )
             )
         else:
             self.neck = None
             self.in_channels = self.backbone.out_channels[-1]
 
         head_cfg = dict(head)
-        head_cfg.setdefault("in_channels", self.in_channels)
+        if head.get("type") in ("rtdetr_head", "RTDETRHead"):
+            head_cfg.setdefault("in_channels_list", list(self.backbone.out_channels))
+        else:
+            head_cfg.setdefault("in_channels", self.in_channels)
         self.head = HEADS.build(head_cfg)
         self.num_classes = getattr(self.head, "num_classes", head_cfg.get("num_classes"))
 

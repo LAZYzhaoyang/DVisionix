@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...base import BaseModel
 from ....registry import HEADS
+from ...base import BaseModel
 
 
 @HEADS.register()
@@ -36,7 +36,9 @@ class MaskFormerHead(BaseModel):
         self.num_classes = num_classes
         self.d_model = d_model
         self.num_queries = num_queries
-        self.output_mode = output_mode  # "semantic"（张量）| "full"（dict，含 pred_logits/pred_masks）
+        self.output_mode = (
+            output_mode  # "semantic"（张量）| "full"（dict，含 pred_logits/pred_masks）
+        )
 
         self.pixel_decoder = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels_list])
         self.query_embed = nn.Embedding(num_queries, d_model)

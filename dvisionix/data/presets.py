@@ -12,12 +12,13 @@
 - 训练 / 验证样本列表用 ``train`` 参数区分。
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
+import numpy as np
+
+from ..registry import DATASETS
 from .base import BaseDataset
 from .collate import detection_collate, segmentation_collate
-from .sample import Sample
-from ..registry import DATASETS
 
 
 class _ImageFolderDataset(BaseDataset):
@@ -25,13 +26,17 @@ class _ImageFolderDataset(BaseDataset):
 
     task_type = "classification"
 
-    def __init__(self, root: str, train: bool = True, split: str = "train",
-                 transforms=None, **kwargs):
+    def __init__(
+        self, root: str, train: bool = True, split: str = "train", transforms=None, **kwargs
+    ):
         import os
+
         split_dir = os.path.join(root, split) if os.path.isdir(os.path.join(root, split)) else root
         if not os.path.isdir(split_dir):
             raise FileNotFoundError(f"ImageFolder root not found: {split_dir}")
-        classes = sorted(d for d in os.listdir(split_dir) if os.path.isdir(os.path.join(split_dir, d)))
+        classes = sorted(
+            d for d in os.listdir(split_dir) if os.path.isdir(os.path.join(split_dir, d))
+        )
         cls_to_idx = {c: i for i, c in enumerate(classes)}
         samples = []
         for c in classes:
@@ -39,7 +44,9 @@ class _ImageFolderDataset(BaseDataset):
                 p = os.path.join(split_dir, c, fname)
                 if os.path.isfile(p):
                     samples.append({"image": p, "label": cls_to_idx[c]})
-        super().__init__(samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+        super().__init__(
+            samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
         self.classes = classes
 
 
@@ -56,15 +63,24 @@ class CIFAR10Dataset(BaseDataset):
 
     task_type = "classification"
 
-    def __init__(self, root: str = "./data", train: bool = True, download: bool = True,
-                 transforms=None, **kwargs):
+    def __init__(
+        self,
+        root: str = "./data",
+        train: bool = True,
+        download: bool = True,
+        transforms=None,
+        **kwargs,
+    ):
         from torchvision.datasets import CIFAR10
+
         ds = CIFAR10(root=root, train=train, download=download)
         # CIFAR-10 数据在内存中，转成缓存文件以便 transforms 走统一图像加载路径
         import os
+
         cache_dir = os.path.join(root, "cifar10_cache", "train" if train else "val")
         os.makedirs(cache_dir, exist_ok=True)
         import cv2
+
         samples = []
         for idx in range(len(ds)):
             img_pil, label = ds[idx]
@@ -72,7 +88,9 @@ class CIFAR10Dataset(BaseDataset):
             if not os.path.exists(img_path):
                 cv2.imwrite(img_path, cv2.cvtColor(np.asarray(img_pil), cv2.COLOR_RGB2BGR))
             samples.append({"image": img_path, "label": int(label)})
-        super().__init__(samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+        super().__init__(
+            samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
         self.classes = ds.classes
 
 
@@ -80,11 +98,22 @@ class CIFAR10Dataset(BaseDataset):
 @DATASETS.register(name="cifar100")
 class CIFAR100Dataset(CIFAR10Dataset):
     """CIFAR-100 分类数据集。"""
-    def __init__(self, root: str = "./data", train: bool = True, download: bool = True,
-                 transforms=None, **kwargs):
+
+    def __init__(
+        self,
+        root: str = "./data",
+        train: bool = True,
+        download: bool = True,
+        transforms=None,
+        **kwargs,
+    ):
         from torchvision.datasets import CIFAR100
+
         ds = CIFAR100(root=root, train=train, download=download)
-        import os, cv2
+        import os
+
+        import cv2
+
         cache_dir = os.path.join(root, "cifar100_cache", "train" if train else "val")
         os.makedirs(cache_dir, exist_ok=True)
         samples = []
@@ -94,7 +123,9 @@ class CIFAR100Dataset(CIFAR10Dataset):
             if not os.path.exists(img_path):
                 cv2.imwrite(img_path, cv2.cvtColor(np.asarray(img_pil), cv2.COLOR_RGB2BGR))
             samples.append({"image": img_path, "label": int(label)})
-        BaseDataset.__init__(self, samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+        BaseDataset.__init__(
+            self, samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
         self.classes = ds.classes
 
 
@@ -102,9 +133,11 @@ class CIFAR100Dataset(CIFAR10Dataset):
 @DATASETS.register(name="imagenet")
 class ImageNetDataset(_ImageFolderDataset):
     """ImageNet 分类数据集（用 ImageFolder 风格 ``root/{train,val}/{wnid}/*.JPEG``）。"""
+
     def __init__(self, root: str, train: bool = True, transforms=None, **kwargs):
-        super().__init__(root, train=train, split="train" if train else "val",
-                         transforms=transforms, **kwargs)
+        super().__init__(
+            root, train=train, split="train" if train else "val", transforms=transforms, **kwargs
+        )
 
 
 class _CocoBaseDataset(BaseDataset):
@@ -117,8 +150,11 @@ class _CocoBaseDataset(BaseDataset):
         try:
             from pycocotools.coco import COCO
         except ImportError as exc:  # pragma: no cover
-            raise ImportError("pycocotools is required for COCO datasets. pip install pycocotools") from exc
+            raise ImportError(
+                "pycocotools is required for COCO datasets. pip install pycocotools"
+            ) from exc
         import os
+
         coco = COCO(annotation_file)
         img_dir = os.path.dirname(annotation_file).rstrip("/")
         if img_dir.endswith("annotations"):
@@ -135,11 +171,13 @@ class _CocoBaseDataset(BaseDataset):
                     continue
                 boxes.append([x, y, x + w, y + h])
                 labels.append(int(a["category_id"]))
-            samples.append({
-                "image": os.path.join(img_dir, img_info["file_name"]),
-                "boxes": np.asarray(boxes, dtype=np.float32).reshape(-1, 4),
-                "labels": np.asarray(labels, dtype=np.int64),
-            })
+            samples.append(
+                {
+                    "image": os.path.join(img_dir, img_info["file_name"]),
+                    "boxes": np.asarray(boxes, dtype=np.float32).reshape(-1, 4),
+                    "labels": np.asarray(labels, dtype=np.int64),
+                }
+            )
         return samples
 
 
@@ -154,11 +192,14 @@ class CocoDetectionDataset(_CocoBaseDataset):
         split: ``train`` / ``val``（决定加载哪个 annotation 文件）。
     """
 
-    def __init__(self, root: str, split: str = "train", year: str = "2017",
-                 transforms=None, **kwargs):
+    def __init__(
+        self, root: str, split: str = "train", year: str = "2017", transforms=None, **kwargs
+    ):
         ann_file = f"{root}/annotations/instances_{split}{year}.json"
         samples = self._build_samples(ann_file)
-        super().__init__(samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+        super().__init__(
+            samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
 
 
 @DATASETS.register()
@@ -169,14 +210,38 @@ class VOCDetectionDataset(BaseDataset):
     task_type = "detection"
     collate_fn = staticmethod(detection_collate)
 
-    def __init__(self, root: str, year: str = "2012", image_set: str = "train",
-                 transforms=None, **kwargs):
+    def __init__(
+        self, root: str, year: str = "2012", image_set: str = "train", transforms=None, **kwargs
+    ):
         from torchvision.datasets import VOCDetection
-        ds = VOCDetection(root=root, year=year, image_set=image_set, download=kwargs.get("download", False))
+
+        ds = VOCDetection(
+            root=root, year=year, image_set=image_set, download=kwargs.get("download", False)
+        )
         import numpy as np
-        VOC_LABELS = ["aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat",
-                      "chair", "cow", "diningtable", "dog", "horse", "motorbike", "person",
-                      "pottedplant", "sheep", "sofa", "train", "tvmonitor"]
+
+        VOC_LABELS = [
+            "aeroplane",
+            "bicycle",
+            "bird",
+            "boat",
+            "bottle",
+            "bus",
+            "car",
+            "cat",
+            "chair",
+            "cow",
+            "diningtable",
+            "dog",
+            "horse",
+            "motorbike",
+            "person",
+            "pottedplant",
+            "sheep",
+            "sofa",
+            "train",
+            "tvmonitor",
+        ]
         cls_to_idx = {c: i for i, c in enumerate(VOC_LABELS)}
         samples = []
         for img, target in ds:
@@ -190,12 +255,16 @@ class VOCDetectionDataset(BaseDataset):
                 x2, y2 = float(bb["xmax"]) - 1, float(bb["ymax"]) - 1
                 boxes.append([x1, y1, x2, y2])
                 labels.append(cls_to_idx[obj["name"]])
-            samples.append({
-                "image": img.filename if hasattr(img, "filename") else str(img),
-                "boxes": np.asarray(boxes, dtype=np.float32).reshape(-1, 4),
-                "labels": np.asarray(labels, dtype=np.int64),
-            })
-        super().__init__(samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+            samples.append(
+                {
+                    "image": img.filename if hasattr(img, "filename") else str(img),
+                    "boxes": np.asarray(boxes, dtype=np.float32).reshape(-1, 4),
+                    "labels": np.asarray(labels, dtype=np.int64),
+                }
+            )
+        super().__init__(
+            samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
         self.classes = VOC_LABELS
 
 
@@ -207,6 +276,7 @@ class _CityscapesBaseDataset(BaseDataset):
 
     def _build_samples(self, root: str, split: str) -> List[Dict[str, Any]]:
         import os
+
         img_dir = os.path.join(root, "leftImg8bit", split)
         gt_dir = os.path.join(root, "gtFine", split)
         samples = []
@@ -228,8 +298,11 @@ class _CityscapesBaseDataset(BaseDataset):
 @DATASETS.register(name="cityscapes")
 class CityscapesDataset(_CityscapesBaseDataset):
     def __init__(self, root: str, split: str = "train", transforms=None, **kwargs):
-        super().__init__(self._build_samples(root, split), transforms=transforms,
-                         return_meta=kwargs.get("return_meta", False))
+        super().__init__(
+            self._build_samples(root, split),
+            transforms=transforms,
+            return_meta=kwargs.get("return_meta", False),
+        )
 
 
 @DATASETS.register()
@@ -242,6 +315,7 @@ class ADE20KDataset(BaseDataset):
 
     def __init__(self, root: str, split: str = "train", transforms=None, **kwargs):
         import os
+
         img_dir = os.path.join(root, "images", split)
         mask_dir = os.path.join(root, "annotations", split)
         samples = []
@@ -250,7 +324,9 @@ class ADE20KDataset(BaseDataset):
             img_path, mask_path = os.path.join(img_dir, fname), os.path.join(mask_dir, mask_name)
             if os.path.isfile(img_path) and os.path.isfile(mask_path):
                 samples.append({"image": img_path, "mask": mask_path})
-        super().__init__(samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+        super().__init__(
+            samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
 
 
 @DATASETS.register()
@@ -261,14 +337,24 @@ class VOCSegmentationDataset(BaseDataset):
     task_type = "segmentation"
     collate_fn = staticmethod(segmentation_collate)
 
-    def __init__(self, root: str, year: str = "2012", image_set: str = "train",
-                 transforms=None, **kwargs):
+    def __init__(
+        self, root: str, year: str = "2012", image_set: str = "train", transforms=None, **kwargs
+    ):
         from torchvision.datasets import VOCSegmentation
-        ds = VOCSegmentation(root=root, year=year, image_set=image_set, download=kwargs.get("download", False))
-        samples = [{"image": img.filename if hasattr(img, "filename") else str(img),
-                    "mask": mask.filename if hasattr(mask, "filename") else str(mask)}
-                   for img, mask in ds]
-        super().__init__(samples, transforms=transforms, return_meta=kwargs.get("return_meta", False))
+
+        ds = VOCSegmentation(
+            root=root, year=year, image_set=image_set, download=kwargs.get("download", False)
+        )
+        samples = [
+            {
+                "image": img.filename if hasattr(img, "filename") else str(img),
+                "mask": mask.filename if hasattr(mask, "filename") else str(mask),
+            }
+            for img, mask in ds
+        ]
+        super().__init__(
+            samples, transforms=transforms, return_meta=kwargs.get("return_meta", False)
+        )
 
 
 __all__ = [

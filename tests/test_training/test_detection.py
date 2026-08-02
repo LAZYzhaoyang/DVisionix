@@ -8,19 +8,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import torch
 
+from dvisionix.data import detection_collate
 from dvisionix.models import GridDetectionModel
 from dvisionix.training import DetectionTask
-from dvisionix.data import detection_collate
 
 
 def _make_batch(num_classes=3, image_size=64, bs=2):
     samples = []
     for i in range(bs):
-        samples.append({
-            "image": torch.randn(3, image_size, image_size),
-            "boxes": torch.tensor([[5.0, 5.0, 25.0, 25.0], [30.0, 30.0, 50.0, 50.0]]),
-            "labels": torch.tensor([i % num_classes, (i + 1) % num_classes]),
-        })
+        samples.append(
+            {
+                "image": torch.randn(3, image_size, image_size),
+                "boxes": torch.tensor([[5.0, 5.0, 25.0, 25.0], [30.0, 30.0, 50.0, 50.0]]),
+                "labels": torch.tensor([i % num_classes, (i + 1) % num_classes]),
+            }
+        )
     return detection_collate(samples)
 
 
@@ -44,7 +46,9 @@ def test_detection_training_step():
     batch = _make_batch()
     device = torch.device("cpu")
     result = task.training_step(model, batch, device)
-    assert "loss" in result and "obj_loss" in result and "box_loss" in result and "cls_loss" in result
+    assert (
+        "loss" in result and "obj_loss" in result and "box_loss" in result and "cls_loss" in result
+    )
     assert result["loss"].requires_grad
     # 反向传播可用
     result["loss"].backward()
@@ -74,8 +78,12 @@ def test_detection_loss_decreases():
 
 if __name__ == "__main__":
     print("Running detection tests...")
-    test_grid_model_output_shape(); print("ok test_grid_model_output_shape")
-    test_detection_collate(); print("ok test_detection_collate")
-    test_detection_training_step(); print("ok test_detection_training_step")
-    test_detection_loss_decreases(); print("ok test_detection_loss_decreases")
+    test_grid_model_output_shape()
+    print("ok test_grid_model_output_shape")
+    test_detection_collate()
+    print("ok test_detection_collate")
+    test_detection_training_step()
+    print("ok test_detection_training_step")
+    test_detection_loss_decreases()
+    print("ok test_detection_loss_decreases")
     print("All detection tests passed!")

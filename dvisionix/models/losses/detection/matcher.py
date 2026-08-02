@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """匈牙利匹配器（DETR set-based 损失用）。"""
 
-from typing import List, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
@@ -28,7 +28,8 @@ def _hungarian(cost: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         padded[:n, :m] = cost
     else:
         padded = cost
-    n = m = size
+    n = size
+    m = size
     cost = padded
 
     u = np.zeros(n + 1, dtype=np.float64)
@@ -87,19 +88,24 @@ class HungarianMatcher:
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
 
-    def __call__(self, pred_logits: torch.Tensor, pred_boxes: torch.Tensor,
-                 gt_boxes: torch.Tensor, gt_labels: torch.Tensor):
+    def __call__(
+        self,
+        pred_logits: torch.Tensor,
+        pred_boxes: torch.Tensor,
+        gt_boxes: torch.Tensor,
+        gt_labels: torch.Tensor,
+    ):
         """单张图：pred_logits (Q, C+1)，pred_boxes (Q, 4) 归一化 cxcywh。
 
         Returns:
             (pred_idx, gt_idx)：匹配索引（Tensor）。
         """
         if gt_boxes.numel() == 0:
-            return torch.empty((0,), dtype=torch.long, device=pred_logits.device), \
-                torch.empty((0,), dtype=torch.long, device=pred_logits.device)
+            return torch.empty((0,), dtype=torch.long, device=pred_logits.device), torch.empty(
+                (0,), dtype=torch.long, device=pred_logits.device
+            )
 
         q, c = pred_logits.shape
-        m = gt_boxes.shape[0]
 
         # 分类代价：-log_softmax 中对应 gt 类别
         out_prob = F.log_softmax(pred_logits, dim=-1)  # (Q, C+1)
@@ -116,8 +122,13 @@ class HungarianMatcher:
         pb = _xywh_to_xyxy(pred_boxes)
         gb = _xywh_to_xyxy(gt_boxes)
         # 简单 IoU 矩阵（归一化坐标下）
-        inter = torch.clamp(torch.min(pb[:, None, 2:], gb[None, :, 2:]) - torch.max(pb[:, None, :2], gb[None, :, :2]), min=0)
-        iw = inter[..., 0]; ih = inter[..., 1]
+        inter = torch.clamp(
+            torch.min(pb[:, None, 2:], gb[None, :, 2:])
+            - torch.max(pb[:, None, :2], gb[None, :, :2]),
+            min=0,
+        )
+        iw = inter[..., 0]
+        ih = inter[..., 1]
         inter_area = iw * ih
         area_p = torch.clamp(pb[:, 2] - pb[:, 0], min=0) * torch.clamp(pb[:, 3] - pb[:, 1], min=0)
         area_g = torch.clamp(gb[:, 2] - gb[:, 0], min=0) * torch.clamp(gb[:, 3] - gb[:, 1], min=0)

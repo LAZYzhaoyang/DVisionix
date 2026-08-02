@@ -6,9 +6,8 @@
 
 from typing import Any, Dict, Union
 
-from .base import BaseTransform, TransformPipeline
 from ...registry import TRANSFORMS
-
+from .base import BaseTransform, TransformPipeline
 
 TransformSpec = Union[BaseTransform, TransformPipeline, Dict[str, Any], str]
 

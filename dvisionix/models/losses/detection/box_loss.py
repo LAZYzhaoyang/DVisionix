@@ -6,13 +6,12 @@
 """
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
 
-from ..base import BaseLoss
 from ....registry import LOSSES
+from ..base import BaseLoss
 
 
 def _compute_iou_union(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -40,10 +39,16 @@ class GIoULoss(BaseLoss):
         super().__init__(weight)
         self.reduction = reduction
 
-    def forward(self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
+    ) -> torch.Tensor:
         iou, union = _compute_iou_union(pred_boxes, target_boxes)
-        cw = torch.max(pred_boxes[:, 2], target_boxes[:, 2]) - torch.min(pred_boxes[:, 0], target_boxes[:, 0])
-        ch = torch.max(pred_boxes[:, 3], target_boxes[:, 3]) - torch.min(pred_boxes[:, 1], target_boxes[:, 1])
+        cw = torch.max(pred_boxes[:, 2], target_boxes[:, 2]) - torch.min(
+            pred_boxes[:, 0], target_boxes[:, 0]
+        )
+        ch = torch.max(pred_boxes[:, 3], target_boxes[:, 3]) - torch.min(
+            pred_boxes[:, 1], target_boxes[:, 1]
+        )
         c_area = cw * ch + 1e-8
         giou = iou - (c_area - union) / c_area
         loss = 1.0 - giou
@@ -60,7 +65,9 @@ class CIoULoss(BaseLoss):
         super().__init__(weight)
         self.reduction = reduction
 
-    def forward(self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
+    ) -> torch.Tensor:
         iou, union = _compute_iou_union(pred_boxes, target_boxes)
 
         pcx = (pred_boxes[:, 0] + pred_boxes[:, 2]) / 2
@@ -69,16 +76,20 @@ class CIoULoss(BaseLoss):
         tcy = (target_boxes[:, 1] + target_boxes[:, 3]) / 2
         rho2 = (pcx - tcx) ** 2 + (pcy - tcy) ** 2
 
-        cw = torch.max(pred_boxes[:, 2], target_boxes[:, 2]) - torch.min(pred_boxes[:, 0], target_boxes[:, 0])
-        ch = torch.max(pred_boxes[:, 3], target_boxes[:, 3]) - torch.min(pred_boxes[:, 1], target_boxes[:, 1])
-        c2 = cw ** 2 + ch ** 2 + 1e-8
+        cw = torch.max(pred_boxes[:, 2], target_boxes[:, 2]) - torch.min(
+            pred_boxes[:, 0], target_boxes[:, 0]
+        )
+        ch = torch.max(pred_boxes[:, 3], target_boxes[:, 3]) - torch.min(
+            pred_boxes[:, 1], target_boxes[:, 1]
+        )
+        c2 = cw**2 + ch**2 + 1e-8
 
         w_p = (pred_boxes[:, 2] - pred_boxes[:, 0]).clamp(min=1e-6)
         h_p = (pred_boxes[:, 3] - pred_boxes[:, 1]).clamp(min=1e-6)
         w_t = (target_boxes[:, 2] - target_boxes[:, 0]).clamp(min=1e-6)
         h_t = (target_boxes[:, 3] - target_boxes[:, 1]).clamp(min=1e-6)
 
-        v = (4.0 / (math.pi ** 2)) * (torch.atan(w_t / h_t) - torch.atan(w_p / h_p)) ** 2
+        v = (4.0 / (math.pi**2)) * (torch.atan(w_t / h_t) - torch.atan(w_p / h_p)) ** 2
         alpha = v / (1.0 - iou + v + 1e-8)
         ciou = iou - rho2 / c2 - alpha * v
         loss = 1.0 - ciou
@@ -95,7 +106,9 @@ class L1BoxLoss(BaseLoss):
         super().__init__(weight)
         self.reduction = reduction
 
-    def forward(self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
+    ) -> torch.Tensor:
         loss = F.l1_loss(pred_boxes, target_boxes, reduction=self.reduction)
         return loss
 

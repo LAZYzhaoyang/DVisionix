@@ -2,16 +2,15 @@
 """阶段 A-D 新增模型测试：YOLO / DETR / SegFormer / MaskFormer / 度量学习头 / MultiLabelTask。"""
 
 import pytest
-import torch
 
 torch = pytest.importorskip("torch")
 
-from dvisionix.models import build_model
-from dvisionix.models.losses import YOLOLoss, DETRLoss
-from dvisionix.models.heads import CosFaceHead, SphereFaceHead, AdaFaceHead
-from dvisionix.training import MultiLabelTask
-from dvisionix.registry import MODELS, HEADS, TASKS
 from dvisionix.data import detection_collate
+from dvisionix.models import build_model
+from dvisionix.models.heads import AdaFaceHead, CosFaceHead, SphereFaceHead
+from dvisionix.models.losses import DETRLoss, YOLOLoss
+from dvisionix.registry import HEADS, MODELS, TASKS
+from dvisionix.training import MultiLabelTask
 
 STAGES = [
     {"type": "conv_norm_act", "in_channels": 3, "out_channels": 16, "stride": 2},
@@ -24,17 +23,26 @@ NECK = {"type": "fpn", "out_channels": 32}
 
 def _batch(bs=2, size=128):
     samples = [
-        {"image": torch.randn(3, size, size),
-         "boxes": torch.tensor([[20., 20., 50., 50.], [70., 70., 100., 100.]]),
-         "labels": torch.tensor([0, 1])}
+        {
+            "image": torch.randn(3, size, size),
+            "boxes": torch.tensor([[20.0, 20.0, 50.0, 50.0], [70.0, 70.0, 100.0, 100.0]]),
+            "labels": torch.tensor([0, 1]),
+        }
         for _ in range(bs)
     ]
     return detection_collate(samples)
 
 
 def test_yolo_registered_and_forward_decode():
-    model = build_model({"type": "yolo", "num_classes": 3, "backbone": BACKBONE, "neck": NECK,
-                         "head": {"type": "yolo_head", "num_classes": 3, "strides": [2, 4, 8]}})
+    model = build_model(
+        {
+            "type": "yolo",
+            "num_classes": 3,
+            "backbone": BACKBONE,
+            "neck": NECK,
+            "head": {"type": "yolo_head", "num_classes": 3, "strides": [2, 4, 8]},
+        }
+    )
     preds = model(torch.randn(1, 3, 128, 128))
     assert set(preds.keys()) == {"cls", "reg"}
     boxes, scores, labels = model.decode(preds, (128, 128), score_threshold=0.0)
@@ -43,8 +51,15 @@ def test_yolo_registered_and_forward_decode():
 
 def test_yolo_loss_decreases():
     torch.manual_seed(0)
-    model = build_model({"type": "yolo", "num_classes": 3, "backbone": BACKBONE, "neck": NECK,
-                         "head": {"type": "yolo_head", "num_classes": 3, "strides": [2, 4, 8]}})
+    model = build_model(
+        {
+            "type": "yolo",
+            "num_classes": 3,
+            "backbone": BACKBONE,
+            "neck": NECK,
+            "head": {"type": "yolo_head", "num_classes": 3, "strides": [2, 4, 8]},
+        }
+    )
     loss_fn = YOLOLoss(num_classes=3, strides=(2, 4, 8))
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     batch = _batch()
@@ -61,9 +76,22 @@ def test_yolo_loss_decreases():
 
 
 def test_detr_registered_forward_decode():
-    model = build_model({"type": "detr", "num_classes": 3, "backbone": BACKBONE,
-                         "head": {"type": "detr_head", "num_classes": 3, "d_model": 64, "num_queries": 10,
-                                  "num_encoder_layers": 2, "num_decoder_layers": 2, "num_heads": 4}})
+    model = build_model(
+        {
+            "type": "detr",
+            "num_classes": 3,
+            "backbone": BACKBONE,
+            "head": {
+                "type": "detr_head",
+                "num_classes": 3,
+                "d_model": 64,
+                "num_queries": 10,
+                "num_encoder_layers": 2,
+                "num_decoder_layers": 2,
+                "num_heads": 4,
+            },
+        }
+    )
     preds = model(torch.randn(1, 3, 128, 128))
     assert set(preds.keys()) == {"logits", "boxes"}
     boxes, scores, labels = model.decode(preds, (128, 128), score_threshold=0.0)
@@ -72,9 +100,22 @@ def test_detr_registered_forward_decode():
 
 def test_detr_loss_decreases():
     torch.manual_seed(1)
-    model = build_model({"type": "detr", "num_classes": 3, "backbone": BACKBONE,
-                         "head": {"type": "detr_head", "num_classes": 3, "d_model": 64, "num_queries": 10,
-                                  "num_encoder_layers": 2, "num_decoder_layers": 2, "num_heads": 4}})
+    model = build_model(
+        {
+            "type": "detr",
+            "num_classes": 3,
+            "backbone": BACKBONE,
+            "head": {
+                "type": "detr_head",
+                "num_classes": 3,
+                "d_model": 64,
+                "num_queries": 10,
+                "num_encoder_layers": 2,
+                "num_decoder_layers": 2,
+                "num_heads": 4,
+            },
+        }
+    )
     loss_fn = DETRLoss(num_classes=3)
     opt = torch.optim.Adam(model.parameters(), lr=1e-4)
     batch = _batch()
@@ -91,11 +132,23 @@ def test_detr_loss_decreases():
 
 
 def test_segformer_and_maskformer_heads():
-    seg = build_model({"type": "segmentation_model", "num_classes": 4, "backbone": BACKBONE,
-                       "head": {"type": "segformer_head", "num_classes": 4, "channels": 32}})
+    seg = build_model(
+        {
+            "type": "segmentation_model",
+            "num_classes": 4,
+            "backbone": BACKBONE,
+            "head": {"type": "segformer_head", "num_classes": 4, "channels": 32},
+        }
+    )
     assert seg(torch.randn(1, 3, 128, 128)).shape == (1, 4, 128, 128)
-    mf = build_model({"type": "segmentation_model", "num_classes": 4, "backbone": BACKBONE,
-                      "head": {"type": "maskformer_head", "num_classes": 4, "d_model": 32, "num_queries": 8}})
+    mf = build_model(
+        {
+            "type": "segmentation_model",
+            "num_classes": 4,
+            "backbone": BACKBONE,
+            "head": {"type": "maskformer_head", "num_classes": 4, "d_model": 32, "num_queries": 8},
+        }
+    )
     assert mf(torch.randn(1, 3, 128, 128)).shape == (1, 4, 128, 128)
 
 
@@ -109,8 +162,11 @@ def test_metric_learning_heads():
 def test_multilabel_task():
     task = MultiLabelTask(num_classes=5)
     from dvisionix.models import LinearClassifier
-    model = LinearClassifier(backbone={"type": "sequential_backbone", "stages": STAGES},
-                             head={"type": "multi_label", "num_classes": 5})
+
+    model = LinearClassifier(
+        backbone={"type": "sequential_backbone", "stages": STAGES},
+        head={"type": "multi_label", "num_classes": 5},
+    )
     batch = {"image": torch.randn(2, 3, 128, 128), "label": torch.randint(0, 2, (2, 5))}
     result = task.training_step(model, batch, torch.device("cpu"))
     assert "loss" in result and result["loss"].requires_grad

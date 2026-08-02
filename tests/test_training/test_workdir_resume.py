@@ -2,23 +2,21 @@
 """工作目录隔离与自动断点续训测试。"""
 
 import os
-import tempfile
 
-import pytest
 import torch
 from torch.utils.data import DataLoader
 
 from dvisionix.config import Config
+from dvisionix.models import SimpleCNN
 from dvisionix.training import (
-    Trainer,
     ClassificationTask,
     ModelCheckpoint,
-    resolve_work_dir,
-    find_latest_run,
-    find_checkpoint,
+    Trainer,
     dump_config,
+    find_checkpoint,
+    find_latest_run,
+    resolve_work_dir,
 )
-from dvisionix.models import SimpleCNN
 
 
 class _TinyDS(torch.utils.data.Dataset):
@@ -80,17 +78,38 @@ def test_auto_resume_roundtrip(tmp_path):
     torch.manual_seed(0)
     ckpt_dir = os.path.join(tmp_path, "checkpoints")
     task = ClassificationTask(num_classes=3, learning_rate=1e-2)
-    callbacks = [ModelCheckpoint(save_dir=ckpt_dir, monitor="val_loss", mode="min", save_best_only=False, save_last=True)]
+    callbacks = [
+        ModelCheckpoint(
+            save_dir=ckpt_dir, monitor="val_loss", mode="min", save_best_only=False, save_last=True
+        )
+    ]
 
-    t1 = Trainer(task, _make_loader(), _make_loader(), callbacks=callbacks, max_epochs=1, device="cpu", log_interval=999, seed=42)
+    t1 = Trainer(
+        task,
+        _make_loader(),
+        _make_loader(),
+        callbacks=callbacks,
+        max_epochs=1,
+        device="cpu",
+        log_interval=999,
+        seed=42,
+    )
     model1 = SimpleCNN(num_classes=3, in_channels=3)
     t1.fit(model1)
     last_pt = os.path.join(ckpt_dir, "last.pt")
     assert os.path.exists(last_pt)
 
     # 新 trainer 从 last.pt 续训：current_epoch 应变为 1，可继续训练
-    t2 = Trainer(ClassificationTask(num_classes=3, learning_rate=1e-2), _make_loader(), _make_loader(),
-                 max_epochs=3, device="cpu", log_interval=999, resume_from=last_pt, seed=42)
+    t2 = Trainer(
+        ClassificationTask(num_classes=3, learning_rate=1e-2),
+        _make_loader(),
+        _make_loader(),
+        max_epochs=3,
+        device="cpu",
+        log_interval=999,
+        resume_from=last_pt,
+        seed=42,
+    )
     model2 = SimpleCNN(num_classes=3, in_channels=3)
     result = t2.fit(model2)
     assert t2.current_epoch == 2  # 续训完成后停在最后一个 epoch（epoch 1、2）

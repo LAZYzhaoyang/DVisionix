@@ -4,14 +4,13 @@
 import os
 
 import pytest
-import torch
 
 torch = pytest.importorskip("torch")
 
-from dvisionix.training import Trainer, ClassificationTask, EMA, DistillCallback, ModelCheckpoint
-from dvisionix.models import build_model, SimpleCNN
-from dvisionix.models.losses import MaskFormerLoss, DistillationLoss
+from dvisionix.models import SimpleCNN, build_model
+from dvisionix.models.losses import DistillationLoss, MaskFormerLoss
 from dvisionix.registry import LOSSES
+from dvisionix.training import EMA, ClassificationTask, DistillCallback, ModelCheckpoint, Trainer
 
 STAGES = [
     {"type": "conv_norm_act", "in_channels": 3, "out_channels": 16, "stride": 2},
@@ -30,20 +29,31 @@ class _DS(torch.utils.data.Dataset):
 
 def _loader():
     from torch.utils.data import DataLoader
+
     return DataLoader(_DS(), batch_size=4)
 
 
 def test_ema_callback_trains():
     task = ClassificationTask(num_classes=3, learning_rate=1e-2)
     ema = EMA(decay=0.9)
-    trainer = Trainer(task, _loader(), _loader(), callbacks=[ema], max_epochs=1, device="cpu", log_interval=999)
+    trainer = Trainer(
+        task, _loader(), _loader(), callbacks=[ema], max_epochs=1, device="cpu", log_interval=999
+    )
     trainer.fit(SimpleCNN(num_classes=3))
     assert len(ema.shadow) > 0
 
 
 def test_history_csv_exported(tmp_path):
     task = ClassificationTask(num_classes=3, learning_rate=1e-2)
-    trainer = Trainer(task, _loader(), _loader(), work_dir=str(tmp_path), max_epochs=1, device="cpu", log_interval=999)
+    trainer = Trainer(
+        task,
+        _loader(),
+        _loader(),
+        work_dir=str(tmp_path),
+        max_epochs=1,
+        device="cpu",
+        log_interval=999,
+    )
     trainer.fit(SimpleCNN(num_classes=3))
     csv_path = os.path.join(tmp_path, "history.csv")
     assert os.path.exists(csv_path)
@@ -51,10 +61,17 @@ def test_history_csv_exported(tmp_path):
 
 
 def test_checkpoint_retention(tmp_path):
-    ckpt = ModelCheckpoint(save_dir=str(tmp_path), save_best_only=False, save_last=True,
-                           save_every_n_epochs=1, max_epoch_checkpoints=2)
+    ckpt = ModelCheckpoint(
+        save_dir=str(tmp_path),
+        save_best_only=False,
+        save_last=True,
+        save_every_n_epochs=1,
+        max_epoch_checkpoints=2,
+    )
     task = ClassificationTask(num_classes=3, learning_rate=1e-2)
-    trainer = Trainer(task, _loader(), _loader(), callbacks=[ckpt], max_epochs=4, device="cpu", log_interval=999)
+    trainer = Trainer(
+        task, _loader(), _loader(), callbacks=[ckpt], max_epochs=4, device="cpu", log_interval=999
+    )
     trainer.fit(SimpleCNN(num_classes=3))
     epoch_files = [f for f in os.listdir(tmp_path) if f.startswith("epoch=")]
     assert 2 <= len(epoch_files) <= 2  # max_epoch_checkpoints 上限
@@ -74,10 +91,26 @@ def test_distill_loss_and_callback():
 
 
 def test_maskformer_full_and_loss():
-    model = build_model({"type": "segmentation_model", "num_classes": 3, "backbone": {"type": "sequential_backbone", "stages": STAGES, "features_only": True},
-                         "head": {"type": "maskformer_head", "num_classes": 3, "d_model": 32, "num_queries": 8, "output_mode": "full"}})
+    model = build_model(
+        {
+            "type": "segmentation_model",
+            "num_classes": 3,
+            "backbone": {"type": "sequential_backbone", "stages": STAGES, "features_only": True},
+            "head": {
+                "type": "maskformer_head",
+                "num_classes": 3,
+                "d_model": 32,
+                "num_queries": 8,
+                "output_mode": "full",
+            },
+        }
+    )
     preds = model(torch.randn(1, 3, 64, 64))
-    assert isinstance(preds, dict) and set(preds.keys()) == {"pred_logits", "pred_masks", "semantic_logits"}
+    assert isinstance(preds, dict) and set(preds.keys()) == {
+        "pred_logits",
+        "pred_masks",
+        "semantic_logits",
+    }
     loss_fn = MaskFormerLoss(num_classes=3)
     batch = {"mask": torch.randint(0, 3, (1, 16, 16))}
     out = loss_fn(preds, batch)

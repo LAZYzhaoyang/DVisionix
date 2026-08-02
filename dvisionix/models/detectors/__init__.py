@@ -8,12 +8,13 @@
 - yolo：YOLODetector（YOLOv8 风格，anchor-free）。
 """
 
-from .base import SingleStageDetector
 from .anchors import AnchorGenerator, bbox2delta, delta2bbox
+from .base import SingleStageDetector
+from .detr import DETRDetector
 from .fcos import FCOSDetector
 from .retinanet import RetinaNetDetector
+from .rtdetr import RTDETRDetector
 from .yolo import YOLODetector
-from .detr import DETRDetector
 
 __all__ = [
     "SingleStageDetector",
@@ -24,4 +25,5 @@ __all__ = [
     "RetinaNetDetector",
     "YOLODetector",
     "DETRDetector",
+    "RTDETRDetector",
 ]

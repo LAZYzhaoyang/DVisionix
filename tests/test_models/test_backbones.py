@@ -40,8 +40,12 @@ def test_freeze_backbone():
 
 if __name__ == "__main__":
     print("Running backbone tests...")
-    test_resnet_backbone(); print("ok test_resnet_backbone")
-    test_vit_classifier(); print("ok test_vit_classifier")
-    test_swin_classifier(); print("ok test_swin_classifier")
-    test_freeze_backbone(); print("ok test_freeze_backbone")
+    test_resnet_backbone()
+    print("ok test_resnet_backbone")
+    test_vit_classifier()
+    print("ok test_vit_classifier")
+    test_swin_classifier()
+    print("ok test_swin_classifier")
+    test_freeze_backbone()
+    print("ok test_freeze_backbone")
     print("All backbone tests passed!")

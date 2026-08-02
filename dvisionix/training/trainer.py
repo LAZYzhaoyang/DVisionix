@@ -15,19 +15,18 @@
 
 import os
 import random
-import time
-from typing import Any, Dict, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from ..utils import get_device, get_logger, set_seed
+from ..utils import get_device, set_seed
 from ..utils.logging import TrainingLogger
-from .tasks import BaseTask
 from .callbacks import Callback, CallbackList, ProgressBar
+from .tasks import BaseTask
 
 
 def _make_scaler(amp: bool, device: torch.device):
@@ -145,7 +144,9 @@ class Trainer:
         log_dir = os.path.join(work_dir, "logs") if work_dir else None
         tb_dir = os.path.join(work_dir, "tb") if work_dir else None
         self.logger = logger or TrainingLogger("dvisionix.trainer", log_dir=log_dir, tb_dir=tb_dir)
-        self.logger.info(f"Using device: {self.device}, amp: {bool(self.scaler)}, strategy: {self.strategy}")
+        self.logger.info(
+            f"Using device: {self.device}, amp: {bool(self.scaler)}, strategy: {self.strategy}"
+        )
 
         # 回调系统
         default_callbacks = [ProgressBar(log_interval=log_interval)]
@@ -174,8 +175,10 @@ class Trainer:
         if self.strategy == "auto":
             self.strategy = (
                 "ddp"
-                if dist.is_available() and dist.is_initialized()
-                and dist.get_world_size() > 1 and torch.cuda.is_available()
+                if dist.is_available()
+                and dist.is_initialized()
+                and dist.get_world_size() > 1
+                and torch.cuda.is_available()
                 else "none"
             )
         if self.strategy == "ddp":
@@ -201,6 +204,7 @@ class Trainer:
         if not self.is_distributed:
             return loader
         from torch.utils.data.distributed import DistributedSampler
+
         sampler = DistributedSampler(
             loader.dataset,
             num_replicas=self.world_size,
@@ -312,7 +316,9 @@ class Trainer:
         self._write_history_csv()
         self.logger.info("Training finished!")
         if self._is_rank0():
-            self.logger.log_event("train_end", epochs=self.current_epoch, global_step=self.global_step)
+            self.logger.log_event(
+                "train_end", epochs=self.current_epoch, global_step=self.global_step
+            )
 
         return {
             "current_epoch": self.current_epoch,
@@ -351,7 +357,7 @@ class Trainer:
 
         total_batches = len(loader)
         for batch_idx, batch in enumerate(loader):
-            self.callbacks.on_batch_begin(self, batch_idx, mode)
+            self.callbacks.on_batch_begin(self, batch_idx, mode, batch)
 
             if mode == "train":
                 with torch.autocast(device_type=self.device.type, enabled=bool(self.scaler)):
@@ -360,7 +366,9 @@ class Trainer:
                 if self.scaler is not None:
                     loss = self.scaler.scale(loss)
                 loss.backward()
-                if (batch_idx + 1) % self.accumulate_grad_batches == 0 or (batch_idx + 1) == total_batches:
+                if (batch_idx + 1) % self.accumulate_grad_batches == 0 or (
+                    batch_idx + 1
+                ) == total_batches:
                     self._optimizer_step()
                     self.global_step += 1
             else:
@@ -390,7 +398,7 @@ class Trainer:
                 metric_sums[k] = metric_sums.get(k, 0.0) + v * batch_size
                 metric_counts[k] = metric_counts.get(k, 0) + batch_size
 
-            self.callbacks.on_batch_end(self, batch_idx, step_logs, mode)
+            self.callbacks.on_batch_end(self, batch_idx, step_logs, mode, batch)
 
         if mode == "val":
             self.callbacks.on_validation_end(self)
@@ -413,7 +421,9 @@ class Trainer:
     # ------------------------------------------------------------------
     # 独立验证
     # ------------------------------------------------------------------
-    def validate(self, model: nn.Module, val_loader: Optional[DataLoader] = None) -> Dict[str, float]:
+    def validate(
+        self, model: nn.Module, val_loader: Optional[DataLoader] = None
+    ) -> Dict[str, float]:
         self.model = model.to(self.device)
         loader = val_loader or self.val_loader
         if loader is None:
@@ -541,6 +551,7 @@ class Trainer:
             return
         try:
             import csv
+
             keys = sorted({k for epoch in self.history for k in epoch.keys()})
             path = os.path.join(self.work_dir, "history.csv")
             with open(path, "w", newline="", encoding="utf-8") as f:
@@ -551,5 +562,6 @@ class Trainer:
             self.logger.info(f"History exported to: {path}")
         except Exception as exc:  # pragma: no cover
             self.logger.warning(f"Failed to export history.csv: {exc}")
+
 
 __all__ = ["Trainer"]

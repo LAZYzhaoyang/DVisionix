@@ -15,8 +15,8 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 
-from .base import BaseMetric
 from ..registry import METRICS
+from .base import BaseMetric
 
 
 @METRICS.register()
@@ -43,13 +43,20 @@ class MeanAveragePrecision(BaseMetric):
     ):
         self.num_classes = num_classes
         self.use_torchmetrics = use_torchmetrics
-        self.iou_thresholds = iou_thresholds if iou_thresholds is not None else np.linspace(0.5, 0.95, 10).tolist()
-        self.recall_thresholds = recall_thresholds if recall_thresholds is not None else np.linspace(0, 1.0, 101).tolist()
+        self.iou_thresholds = (
+            iou_thresholds if iou_thresholds is not None else np.linspace(0.5, 0.95, 10).tolist()
+        )
+        self.recall_thresholds = (
+            recall_thresholds
+            if recall_thresholds is not None
+            else np.linspace(0, 1.0, 101).tolist()
+        )
 
         self._torch_metric = None
         if use_torchmetrics:
             try:
                 from torchmetrics.detection import MeanAveragePrecision as _TMmAP
+
                 self._torch_metric = _TMmAP(
                     box_format="xyxy",
                     iou_thresholds=self.iou_thresholds,
@@ -57,6 +64,7 @@ class MeanAveragePrecision(BaseMetric):
                 )
             except ImportError:
                 import warnings
+
                 warnings.warn("torchmetrics[detection] not installed; falling back to built-in mAP")
                 self.use_torchmetrics = False
 
@@ -92,8 +100,7 @@ class MeanAveragePrecision(BaseMetric):
                 for pb, ps, pl in zip(pred_boxes, pred_scores, pred_labels)
             ]
             targets = [
-                dict(boxes=tb, labels=tl.long())
-                for tb, tl in zip(target_boxes, target_labels)
+                dict(boxes=tb, labels=tl.long()) for tb, tl in zip(target_boxes, target_labels)
             ]
             self._torch_metric.update(preds, targets)
             return
@@ -109,20 +116,28 @@ class MeanAveragePrecision(BaseMetric):
             for box, score, label in zip(boxes_np, scores_np, labels_np):
                 label_int = int(label)
                 if 0 <= label_int < self.num_classes:
-                    self.detections[label_int].append({"image_id": image_id, "box": box, "score": score})
+                    self.detections[label_int].append(
+                        {"image_id": image_id, "box": box, "score": score}
+                    )
 
             t_boxes_np = target_boxes[i].cpu().numpy()
             t_labels_np = target_labels[i].cpu().numpy()
             for box, label in zip(t_boxes_np, t_labels_np):
                 label_int = int(label)
                 if 0 <= label_int < self.num_classes:
-                    self.annotations[label_int].append({"image_id": image_id, "box": box, "matched": False})
+                    self.annotations[label_int].append(
+                        {"image_id": image_id, "box": box, "matched": False}
+                    )
 
     def compute(self) -> Dict[str, float]:
         """计算 mAP / mAP_50 / mAP_75。"""
         if self.use_torchmetrics and self._torch_metric is not None:
             raw = self._torch_metric.compute()
-            return {"mAP": float(raw["map"]), "mAP_50": float(raw["map_50"]), "mAP_75": float(raw["map_75"])}
+            return {
+                "mAP": float(raw["map"]),
+                "mAP_50": float(raw["map_50"]),
+                "mAP_75": float(raw["map_75"]),
+            }
 
         aps_per_class = []
         for c in range(self.num_classes):
@@ -144,7 +159,9 @@ class MeanAveragePrecision(BaseMetric):
 
         anns_by_image: Dict[int, List[Dict]] = {}
         for ann in self.annotations[c]:
-            anns_by_image.setdefault(ann["image_id"], []).append({"box": ann["box"], "matched": False})
+            anns_by_image.setdefault(ann["image_id"], []).append(
+                {"box": ann["box"], "matched": False}
+            )
 
         tp = np.zeros(len(dets))
         fp = np.zeros(len(dets))

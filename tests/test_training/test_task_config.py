@@ -1,23 +1,22 @@
 # -*- coding: utf-8 -*-
 """Task 组件化测试：配置驱动构建 / optimizer/scheduler/loss/metrics 注入。"""
 
-import pytest
 import torch
 from torch.utils.data import DataLoader
 
+from dvisionix.metrics import MetricCollection
+from dvisionix.models import SimpleCNN
+from dvisionix.models.losses import CrossEntropy, FocalLoss
 from dvisionix.training import (
-    build_task,
-    ClassificationTask,
-    SegmentationTask,
-    DetectionTask,
     OPTIMIZERS,
     SCHEDULERS,
+    ClassificationTask,
+    DetectionTask,
+    SegmentationTask,
     build_optimizer,
     build_scheduler,
+    build_task,
 )
-from dvisionix.models import SimpleCNN
-from dvisionix.models.losses import FocalLoss, CrossEntropy
-from dvisionix.metrics import MetricCollection, get_preset_metrics
 
 
 class _TinyDS(torch.utils.data.Dataset):
@@ -32,13 +31,15 @@ class _TinyDS(torch.utils.data.Dataset):
 
 
 def test_build_task_from_config_classification():
-    task = build_task({
-        "type": "ClassificationTask",
-        "num_classes": 4,
-        "optimizer_cfg": {"type": "adamw", "lr": 1e-3, "weight_decay": 0.01},
-        "scheduler_cfg": {"type": "cosine", "T_max": 50},
-        "loss": {"type": "focal", "gamma": 2.0},
-    })
+    task = build_task(
+        {
+            "type": "ClassificationTask",
+            "num_classes": 4,
+            "optimizer_cfg": {"type": "adamw", "lr": 1e-3, "weight_decay": 0.01},
+            "scheduler_cfg": {"type": "cosine", "T_max": 50},
+            "loss": {"type": "focal", "gamma": 2.0},
+        }
+    )
     assert isinstance(task, ClassificationTask)
     assert isinstance(task.loss, FocalLoss)
     opt_cfg = task.configure_optimizers(SimpleCNN(num_classes=4))
@@ -61,10 +62,12 @@ def test_build_task_from_config_segmentation():
 
 
 def test_custom_metrics_injection():
-    metrics = MetricCollection([
-        {"type": "accuracy"},
-        {"type": "top_k_accuracy", "k": 2},
-    ])
+    metrics = MetricCollection(
+        [
+            {"type": "accuracy"},
+            {"type": "top_k_accuracy", "k": 2},
+        ]
+    )
     task = ClassificationTask(num_classes=3, metrics=metrics)
     assert task.metrics is not None and len(task.metrics) == 2
 
@@ -83,8 +86,8 @@ def test_optimizer_and_scheduler_registries():
 
 def test_validation_metrics_integration():
     """Trainer 验证循环应产出任务指标（accuracy 等）。"""
-    from dvisionix.training import Trainer
     from dvisionix.models import SimpleCNN
+    from dvisionix.training import Trainer
 
     train_ds = _TinyDS(n=8, num_classes=3)
     val_ds = _TinyDS(n=6, num_classes=3)

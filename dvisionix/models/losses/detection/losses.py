@@ -10,12 +10,12 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn.functional as F
 
-from ..base import BaseLoss
-from ...detectors.anchors import AnchorGenerator, bbox2delta
-from .assigner import GridAssigner, FCOSAssigner, MaxIoUAssigner, ATSSAssigner, TaskAlignedAssigner
-from .matcher import HungarianMatcher
-from .box_loss import GIoULoss
 from ....registry import LOSSES
+from ...detectors.anchors import AnchorGenerator, bbox2delta
+from ..base import BaseLoss
+from .assigner import ATSSAssigner, FCOSAssigner, GridAssigner, MaxIoUAssigner, TaskAlignedAssigner
+from .box_loss import GIoULoss
+from .matcher import HungarianMatcher
 
 
 @LOSSES.register()
@@ -97,9 +97,6 @@ class GridDetectionLoss(BaseLoss):
         }
 
 
-
-
-
 @LOSSES.register()
 @LOSSES.register(name="sigmoid_focal")
 class SigmoidFocalLoss(BaseLoss):
@@ -108,7 +105,9 @@ class SigmoidFocalLoss(BaseLoss):
     targets 为 0/1 one-hot（与 logits 同形状）。
     """
 
-    def __init__(self, weight: float = 1.0, alpha: float = 0.25, gamma: float = 2.0, reduction: str = "mean"):
+    def __init__(
+        self, weight: float = 1.0, alpha: float = 0.25, gamma: float = 2.0, reduction: str = "mean"
+    ):
         super().__init__(weight)
         self.alpha = alpha
         self.gamma = float(gamma)
@@ -152,8 +151,11 @@ class FCOSDetectionLoss(BaseLoss):
         self.num_classes = num_classes
         self.strides = list(strides)
         self.assigner = FCOSAssigner(
-            num_classes, strides=strides, scales=scales,
-            center_sampling=center_sampling, center_sample_radius=center_sample_radius,
+            num_classes,
+            strides=strides,
+            scales=scales,
+            center_sampling=center_sampling,
+            center_sample_radius=center_sample_radius,
         )
         self.cls_weight = float(cls_weight)
         self.reg_weight = float(reg_weight)
@@ -197,7 +199,6 @@ class FCOSDetectionLoss(BaseLoss):
                 cls_l = cls_outs[lvl][b]
                 reg_l = reg_outs[lvl][b]
                 cen_l = center_outs[lvl][b]
-                n_loc = cls_l.shape[1] * cls_l.shape[2]
 
                 cls_flat = cls_l.reshape(self.num_classes, -1).t()
                 reg_flat = reg_l.reshape(4, -1).t()
@@ -215,12 +216,15 @@ class FCOSDetectionLoss(BaseLoss):
                     num_pos += int(pos.sum())
                     locs = self._locations(cls_l.shape[1], cls_l.shape[2], stride, device)
                     pred_ltrb = torch.exp(reg_flat[pos].clamp(min=-8, max=8)) * stride
-                    pred_boxes = torch.stack([
-                        locs[pos, 0] - pred_ltrb[:, 0],
-                        locs[pos, 1] - pred_ltrb[:, 1],
-                        locs[pos, 0] + pred_ltrb[:, 2],
-                        locs[pos, 1] + pred_ltrb[:, 3],
-                    ], dim=1)
+                    pred_boxes = torch.stack(
+                        [
+                            locs[pos, 0] - pred_ltrb[:, 0],
+                            locs[pos, 1] - pred_ltrb[:, 1],
+                            locs[pos, 0] + pred_ltrb[:, 2],
+                            locs[pos, 1] + pred_ltrb[:, 3],
+                        ],
+                        dim=1,
+                    )
                     giou_loss = self.giou(pred_boxes, box_t[pos])
                     l1_loss = F.l1_loss(reg_flat[pos], reg_t[pos])
                     total_reg = total_reg + (giou_loss if self.use_giou else l1_loss) + l1_loss
@@ -228,8 +232,11 @@ class FCOSDetectionLoss(BaseLoss):
                         cen_flat[pos], cnt_t[pos]
                     )
 
-        total = (self.cls_weight * total_cls + self.reg_weight * total_reg
-                 + self.center_weight * total_center)
+        total = (
+            self.cls_weight * total_cls
+            + self.reg_weight * total_reg
+            + self.center_weight * total_center
+        )
         return {
             "loss": total,
             "cls_loss": total_cls,
@@ -269,7 +276,9 @@ class RetinaNetLoss(BaseLoss):
             self.assigner = MaxIoUAssigner(num_classes, pos_iou_thr, neg_iou_thr)
             self._atss = False
         elif assigner == "atss":
-            self.assigner = ATSSAssigner(num_classes, num_anchors=self.anchor_gen.num_anchors, topk=topk)
+            self.assigner = ATSSAssigner(
+                num_classes, num_anchors=self.anchor_gen.num_anchors, topk=topk
+            )
             self._atss = True
         else:
             raise ValueError(f"未知 assigner: {assigner!r}（可选 max_iou / atss）")
@@ -277,7 +286,9 @@ class RetinaNetLoss(BaseLoss):
         self.reg_weight = float(reg_weight)
         self.focal = SigmoidFocalLoss()
 
-    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(
+        self, preds, batch, image_hw=None, device=None, **kwargs
+    ) -> Dict[str, torch.Tensor]:
         if device is None:
             device = preds["cls"][0].device
         if image_hw is None:
@@ -307,7 +318,11 @@ class RetinaNetLoss(BaseLoss):
                 _, h, w = cls_l.shape
                 n_loc = h * w
 
-                cls_flat = cls_l.reshape(A, self.num_classes, h, w).permute(2, 3, 0, 1).reshape(-1, self.num_classes)
+                cls_flat = (
+                    cls_l.reshape(A, self.num_classes, h, w)
+                    .permute(2, 3, 0, 1)
+                    .reshape(-1, self.num_classes)
+                )
                 reg_flat = reg_l.reshape(A, 4, h, w).permute(2, 3, 0, 1).reshape(-1, 4)
 
                 start = sum(a.shape[0] for a in anchors_per_level[:lvl])
@@ -365,7 +380,9 @@ class YOLOLoss(BaseLoss):
         cx, cy = torch.meshgrid(xs, ys, indexing="xy")
         return torch.stack([cx.reshape(-1), cy.reshape(-1)], dim=1)
 
-    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(
+        self, preds, batch, image_hw=None, device=None, **kwargs
+    ) -> Dict[str, torch.Tensor]:
         if device is None:
             device = preds["cls"][0].device
         if image_hw is None:
@@ -388,10 +405,15 @@ class YOLOLoss(BaseLoss):
                 locs = self._locations(h, w, stride, device)
                 centers_l.append(locs)
                 ltrb = reg_l.reshape(4, -1).t() * stride
-                pred_boxes = torch.stack([
-                    locs[:, 0] - ltrb[:, 0], locs[:, 1] - ltrb[:, 1],
-                    locs[:, 0] + ltrb[:, 2], locs[:, 1] + ltrb[:, 3],
-                ], dim=1)
+                pred_boxes = torch.stack(
+                    [
+                        locs[:, 0] - ltrb[:, 0],
+                        locs[:, 1] - ltrb[:, 1],
+                        locs[:, 0] + ltrb[:, 2],
+                        locs[:, 1] + ltrb[:, 3],
+                    ],
+                    dim=1,
+                )
                 pred_boxes_l.append(pred_boxes)
                 pred_scores_l.append(cls_l.reshape(c, -1).t())
 
@@ -414,10 +436,15 @@ class YOLOLoss(BaseLoss):
                 if pos.any():
                     num_pos += int(pos.sum())
                     locs = centers_l[lvl][pos]
-                    ltrb_t = torch.stack([
-                        locs[:, 0] - box_t[pos, 0], locs[:, 1] - box_t[pos, 1],
-                        box_t[pos, 2] - locs[:, 0], box_t[pos, 3] - locs[:, 1],
-                    ], dim=1).clamp(min=0)
+                    ltrb_t = torch.stack(
+                        [
+                            locs[:, 0] - box_t[pos, 0],
+                            locs[:, 1] - box_t[pos, 1],
+                            box_t[pos, 2] - locs[:, 0],
+                            box_t[pos, 3] - locs[:, 1],
+                        ],
+                        dim=1,
+                    ).clamp(min=0)
                     pred_boxes = pred_boxes_l[lvl][pos]
                     giou_loss = self.giou(pred_boxes, box_t[pos])
                     l1_loss = F.l1_loss(reg_flat[pos], ltrb_t / stride)
@@ -474,7 +501,9 @@ class DETRLoss(BaseLoss):
         h = (y2 - y1) / img_h
         return torch.stack([cx, cy, w, h], dim=-1)
 
-    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(
+        self, preds, batch, image_hw=None, device=None, **kwargs
+    ) -> Dict[str, torch.Tensor]:
         if device is None:
             device = preds["logits"].device
         if image_hw is None:
@@ -495,8 +524,10 @@ class DETRLoss(BaseLoss):
 
             if gt_boxes.numel() > 0:
                 pred_idx, gt_idx = self.matcher(
-                    pred_logits, pred_boxes,
-                    self._px_to_xywh_norm(gt_boxes, img_w, img_h), gt_labels,
+                    pred_logits,
+                    pred_boxes,
+                    self._px_to_xywh_norm(gt_boxes, img_w, img_h),
+                    gt_labels,
                 )
             else:
                 pred_idx = gt_idx = torch.empty((0,), dtype=torch.long, device=device)
@@ -513,7 +544,11 @@ class DETRLoss(BaseLoss):
                 pb_px = self._xywh_norm_to_px(pb, img_w, img_h)
                 total_giou = total_giou + self.giou(pb_px, gt_boxes[gt_idx])
 
-        total = self.cls_weight * total_cls + self.bbox_weight * total_l1 + self.giou_weight * total_giou
+        total = (
+            self.cls_weight * total_cls
+            + self.bbox_weight * total_l1
+            + self.giou_weight * total_giou
+        )
         return {
             "loss": total,
             "cls_loss": total_cls,
@@ -523,6 +558,11 @@ class DETRLoss(BaseLoss):
 
 
 __all__ = [
-    "ObjectnessLoss", "GridDetectionLoss", "SigmoidFocalLoss",
-    "FCOSDetectionLoss", "RetinaNetLoss", "YOLOLoss", "DETRLoss",
+    "ObjectnessLoss",
+    "GridDetectionLoss",
+    "SigmoidFocalLoss",
+    "FCOSDetectionLoss",
+    "RetinaNetLoss",
+    "YOLOLoss",
+    "DETRLoss",
 ]

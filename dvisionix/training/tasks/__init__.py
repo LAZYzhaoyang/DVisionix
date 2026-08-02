@@ -10,8 +10,8 @@ from ...registry import TASKS
 from .base import BaseTask
 from .classification import ClassificationTask
 from .detection import DetectionTask
-from .segmentation import SegmentationTask
 from .multi_label import MultiLabelTask
+from .segmentation import SegmentationTask
 
 for _cls in (ClassificationTask, DetectionTask, SegmentationTask, MultiLabelTask):
     if _cls.__name__ not in TASKS:

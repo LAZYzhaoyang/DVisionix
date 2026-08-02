@@ -7,8 +7,8 @@
 
 from ...registry import MODELS
 from .classification import SimpleCNN
-from .segmentation import SimpleSegmentationModel
 from .detection import GridDetectionModel
+from .segmentation import SimpleSegmentationModel
 
 _MODELS = (SimpleCNN, SimpleSegmentationModel, GridDetectionModel)
 _ALIASES = {

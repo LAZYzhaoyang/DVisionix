@@ -14,9 +14,8 @@ compute 汇总为一个 dict。支持三种成员写法（可混用）：
 
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from .base import BaseMetric
 from ..registry import METRICS
-
+from .base import BaseMetric
 
 MetricSpec = Union[BaseMetric, Dict[str, Any], str]
 
@@ -52,6 +51,7 @@ class MetricCollection:
         """
         if task_type is not None:
             from .presets import get_preset_metrics
+
             preset = get_preset_metrics(task_type, num_classes=num_classes, **kwargs)
             self.metrics: List[BaseMetric] = list(preset.metrics)
         else:

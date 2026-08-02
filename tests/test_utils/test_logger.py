@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from dvisionix.utils import get_logger, log_metrics, format_metrics
+from dvisionix.utils import format_metrics, get_logger, log_metrics
 
 
 def test_console_logger():
@@ -23,7 +23,9 @@ def test_file_logger_writes():
         log_file = getattr(logger, "log_file")
         # 关闭 handler 以刷新写入
         for h in list(logger.handlers):
-            h.flush(); h.close(); logger.removeHandler(h)
+            h.flush()
+            h.close()
+            logger.removeHandler(h)
         assert os.path.exists(log_file)
         with open(log_file, "r", encoding="utf-8") as f:
             content = f.read()
@@ -43,8 +45,12 @@ def test_log_metrics_no_error():
 
 if __name__ == "__main__":
     print("Running logger tests...")
-    test_console_logger(); print("ok test_console_logger")
-    test_file_logger_writes(); print("ok test_file_logger_writes")
-    test_format_metrics(); print("ok test_format_metrics")
-    test_log_metrics_no_error(); print("ok test_log_metrics_no_error")
+    test_console_logger()
+    print("ok test_console_logger")
+    test_file_logger_writes()
+    print("ok test_file_logger_writes")
+    test_format_metrics()
+    print("ok test_format_metrics")
+    test_log_metrics_no_error()
+    print("ok test_log_metrics_no_error")
     print("All logger tests passed!")

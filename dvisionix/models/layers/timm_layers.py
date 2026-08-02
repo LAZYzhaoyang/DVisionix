@@ -17,6 +17,7 @@ from ...registry import LAYERS
 def _require_timm_layers():
     try:
         import timm.layers as timm_layers
+
         return timm_layers
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
@@ -27,19 +28,19 @@ def _require_timm_layers():
 def create_timm_layer(name: str, *args: Any, **kwargs: Any):
     """按名称实例化 timm.layers 中的层或调用其工厂函数。
 
-    Args:
-        name: timm.layers 中的类名或工厂函数名，如 ``"SqueezeExcite"``、
-            ``"DropPath"``、``"create_conv2d"``、``"get_act_layer"``。
-        *args, **kwargs: 传给该类/函数的参数。
+        Args:
+            name: timm.layers 中的类名或工厂函数名，如 ``"SqueezeExcite"``、
+                ``"DropPath"``、``"create_conv2d"``、``"get_act_layer"``。
+            *args, **kwargs: 传给该类/函数的参数。
 
-    Returns:
-        实例化后的 `
-n.Module`` 或工厂函数的返回值。
+        Returns:
+            实例化后的 `
+    n.Module`` 或工厂函数的返回值。
 
-    Examples:
-        >>> se = create_timm_layer("SqueezeExcite", 64, rd_ratio=0.25)
-        >>> dp = create_timm_layer("DropPath", drop_prob=0.1)
-        >>> conv = create_timm_layer("create_conv2d", 32, 64, kernel_size=3)
+        Examples:
+            >>> se = create_timm_layer("SqueezeExcite", 64, rd_ratio=0.25)
+            >>> dp = create_timm_layer("DropPath", drop_prob=0.1)
+            >>> conv = create_timm_layer("create_conv2d", 32, 64, kernel_size=3)
     """
     timm_layers = _require_timm_layers()
     if not hasattr(timm_layers, name):

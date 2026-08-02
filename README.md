@@ -346,6 +346,12 @@ MIT License
   `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
 - **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
 
+### 0.7.0（RT-DETR / mask mAP / 本地 lint 工具链）
+- 检测：新增 `RTDETRDetector`（RT-DETR-lite：混合编码器 + query 选择 + 解码器，复用 DETRLoss/decode）；
+- 实例分割：新增 `MaskAveragePrecision`（mask mAP，COCO 风格）+ `maskformer_decode` + `evaluate_mask_ap`；
+- 本地工具链落地：安装并跑通 ruff（0 错误）+ black（全仓格式化，CI 一致）；
+- 回调 `on_batch_begin/end` 支持透传 batch（供 DistillCallback 使用）。
+
 ### 0.6.0（训练工程与 Mask2Former 完整版）
 - MaskFormer 完整版：mask 监督（匈牙利 mask 匹配 + CE/Dice/BCE，`MaskFormerLoss`）；
 - 训练工程：`EMA` 回调、`DistillCallback` + `DistillationLoss`、ModelCheckpoint 保留策略

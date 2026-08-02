@@ -15,15 +15,14 @@
 - 其余字段（如 ``keypoints``）可由自定义任务自由扩展，transform 应当按字段缺失则不处理。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
-
-import numpy as np
+from typing import Any, List
 
 
 class ImageMode(str, Enum):
     """图像色彩约定，dataset 输出与 transform 默认按此约定工作。"""
+
     RGB = "rgb"
     BGR = "bgr"
 
@@ -49,6 +48,7 @@ class Sample(dict):
 @dataclass
 class ImageInfo:
     """图像相关元信息。"""
+
     height: int
     width: int
     channels: int = 3
@@ -58,6 +58,7 @@ class ImageInfo:
 @dataclass
 class NormalizationSpec:
     """图像归一化参数（ImageNet 默认值）。"""
+
     mean: tuple = (0.485, 0.456, 0.406)
     std: tuple = (0.229, 0.224, 0.225)
     scale: float = 1.0 / 255.0  # 像素除以此值（默认 1/255 把 uint8 -> [0,1]）

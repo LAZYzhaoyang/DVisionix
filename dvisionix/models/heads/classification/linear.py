@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """线性分类头（ClsHead / LinearClsHead）。"""
 
-import torch
 import torch.nn as nn
 
-from ...base import BaseModel
 from ....registry import HEADS
+from ...base import BaseModel
 
 
 @HEADS.register()

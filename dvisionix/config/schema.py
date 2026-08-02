@@ -13,21 +13,50 @@
 from typing import Any, Dict, List, Optional
 
 KNOWN_TOP_LEVEL = {
-    "experiment_name", "task_type", "model", "data", "training",
-    "checkpoint", "loss", "metrics", "task", "work_dir", "resume",
+    "experiment_name",
+    "task_type",
+    "model",
+    "data",
+    "training",
+    "checkpoint",
+    "loss",
+    "metrics",
+    "task",
+    "work_dir",
+    "resume",
 }
 
 TRAINING_KEYS = {
-    "num_epochs", "batch_size", "learning_rate", "weight_decay",
-    "optimizer", "scheduler", "device", "num_workers", "seed",
-    "strategy", "devices", "amp", "accumulate_grad_batches",
-    "gradient_clip_val", "log_interval", "early_stopping",
-    "resume_from", "find_unused_parameters",
+    "num_epochs",
+    "batch_size",
+    "learning_rate",
+    "weight_decay",
+    "optimizer",
+    "scheduler",
+    "device",
+    "num_workers",
+    "seed",
+    "strategy",
+    "devices",
+    "amp",
+    "accumulate_grad_batches",
+    "gradient_clip_val",
+    "log_interval",
+    "early_stopping",
+    "resume_from",
+    "find_unused_parameters",
 }
 
 CHECKPOINT_KEYS = {"save_dir", "monitor", "mode", "save_best_only", "save_last"}
 
-EARLY_STOPPING_KEYS = {"enabled", "monitor", "mode", "patience", "min_delta", "restore_best_weights"}
+EARLY_STOPPING_KEYS = {
+    "enabled",
+    "monitor",
+    "mode",
+    "patience",
+    "min_delta",
+    "restore_best_weights",
+}
 
 TASK_TYPES = ("classification", "detection", "segmentation")
 
@@ -88,18 +117,14 @@ def validate_schema(config: Dict[str, Any], task_type: Optional[str] = None) -> 
 
     # 别名提示：learning_rate/weight_decay 与 optimizer.lr/weight_decay 同时存在
     optimizer = training.get("optimizer")
-    if (
-        isinstance(optimizer, dict)
-        and "learning_rate" in training
-        and "lr" in optimizer
-    ):
-        warnings.append("training.learning_rate 与 training.optimizer.lr 同时存在，optimizer.lr 生效（learning_rate 为便捷别名）")
-    if (
-        isinstance(optimizer, dict)
-        and "weight_decay" in training
-        and "weight_decay" in optimizer
-    ):
-        warnings.append("training.weight_decay 与 training.optimizer.weight_decay 同时存在，optimizer.weight_decay 生效（weight_decay 为便捷别名）")
+    if isinstance(optimizer, dict) and "learning_rate" in training and "lr" in optimizer:
+        warnings.append(
+            "training.learning_rate 与 training.optimizer.lr 同时存在，optimizer.lr 生效（learning_rate 为便捷别名）"
+        )
+    if isinstance(optimizer, dict) and "weight_decay" in training and "weight_decay" in optimizer:
+        warnings.append(
+            "training.weight_decay 与 training.optimizer.weight_decay 同时存在，optimizer.weight_decay 生效（weight_decay 为便捷别名）"
+        )
 
     # ---------------- checkpoint ----------------
     checkpoint = config.get("checkpoint", {})

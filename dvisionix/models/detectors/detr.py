@@ -3,9 +3,9 @@
 
 from typing import Any, Dict, Optional
 
+from ...registry import MODELS
 from ..postprocess import detr_decode
 from .base import SingleStageDetector
-from ...registry import MODELS
 
 
 @MODELS.register()
@@ -27,11 +27,16 @@ class DETRDetector(SingleStageDetector):
             head_cfg["num_classes"] = num_classes
         super().__init__(backbone, head_cfg, neck, out_indices)
 
-    def decode(self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5, max_detections=100, topk=300):
+    def decode(
+        self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5, max_detections=100, topk=300
+    ):
         return detr_decode(
-            preds, image_hw,
-            score_threshold=score_threshold, iou_threshold=iou_threshold,
-            max_detections=max_detections, topk=topk,
+            preds,
+            image_hw,
+            score_threshold=score_threshold,
+            iou_threshold=iou_threshold,
+            max_detections=max_detections,
+            topk=topk,
         )
 
 

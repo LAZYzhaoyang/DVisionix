@@ -20,7 +20,6 @@ ame`` 为键。
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Union
 
-
 MetricValue = Union[float, list, Dict[str, Any]]
 
 

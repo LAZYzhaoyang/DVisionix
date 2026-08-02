@@ -11,25 +11,15 @@ import torch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from dvisionix.data.transforms import (
-    BaseTransform,
-    TransformPipeline,
-    build_transform,
-    build_pipeline,
-    ImageResize,
-    RandomHorizontalFlip,
-    RandomCrop,
-    CenterCrop,
-    ColorJitter,
-    ImageNormalize,
-    ToTensor,
-    BoxSyncResize,
-    BoxSyncRandomHorizontalFlip,
-    BoxSyncRandomCrop,
-    BoxSyncPad,
-    LabelToTensor,
-    BoxesToTensor,
-    MaskToTensor,
     AlbumentationsWrapper,
+    BoxSyncRandomHorizontalFlip,
+    BoxSyncResize,
+    ImageNormalize,
+    ImageResize,
+    ToTensor,
+    TransformPipeline,
+    build_pipeline,
+    build_transform,
 )
 from dvisionix.registry import TRANSFORMS
 
@@ -76,7 +66,9 @@ class TestGeometricSync:
         boxes = np.array([[5, 5, 15, 15]], dtype=np.float32)
         mask = np.arange(600, dtype=np.int64).reshape(20, 30)
         np.random.seed(0)
-        out = BoxSyncRandomHorizontalFlip(p=1.0)({"image": img, "boxes": boxes.copy(), "mask": mask})
+        out = BoxSyncRandomHorizontalFlip(p=1.0)(
+            {"image": img, "boxes": boxes.copy(), "mask": mask}
+        )
         np.testing.assert_array_equal(out["boxes"][0, [0, 2]], [30 - 15, 30 - 5])
         np.testing.assert_array_equal(out["mask"], np.fliplr(mask))
 
@@ -97,19 +89,30 @@ class TestPipeline:
         assert len(pipe) == 2
 
     def test_build_from_mixed_specs(self):
-        pipe = build_pipeline([
-            {"type": "image_resize", "size": [16, 16]},
-            "to_tensor",
-        ])
+        pipe = build_pipeline(
+            [
+                {"type": "image_resize", "size": [16, 16]},
+                "to_tensor",
+            ]
+        )
         out = pipe({"image": _img(32, 32)})
         assert out["image"].shape == (3, 16, 16)
 
 
 class TestRegistry:
     def test_atomic_registered(self):
-        for name in ["image_resize", "random_hflip", "to_tensor", "normalize",
-                     "box_sync_resize", "box_sync_random_hflip", "label_to_tensor",
-                     "boxes_to_tensor", "mask_to_tensor", "albumentations"]:
+        for name in [
+            "image_resize",
+            "random_hflip",
+            "to_tensor",
+            "normalize",
+            "box_sync_resize",
+            "box_sync_random_hflip",
+            "label_to_tensor",
+            "boxes_to_tensor",
+            "mask_to_tensor",
+            "albumentations",
+        ]:
             assert name in TRANSFORMS
 
     def test_build_transform_from_str(self):
@@ -121,6 +124,7 @@ class TestThirdParty:
     def test_albumentations_classification(self):
         pytest.importorskip("albumentations")
         import albumentations as A
+
         albu = A.Compose([A.Resize(20, 20), A.HorizontalFlip(p=0.0)])
         t = AlbumentationsWrapper(albu, is_detection=False, is_segmentation=False)
         out = t({"image": _img(64, 64)})

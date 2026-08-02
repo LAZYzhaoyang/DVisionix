@@ -2,26 +2,37 @@
 """检测损失子包。"""
 
 from .assigner import (
-    GridAssigner,
-    FCOSAssigner,
-    MaxIoUAssigner,
     ATSSAssigner,
+    FCOSAssigner,
+    GridAssigner,
+    MaxIoUAssigner,
     TaskAlignedAssigner,
 )
-from .box_loss import GIoULoss, CIoULoss, L1BoxLoss
+from .box_loss import CIoULoss, GIoULoss, L1BoxLoss
 from .losses import (
     DETRLoss,
-    ObjectnessLoss,
-    GridDetectionLoss,
-    SigmoidFocalLoss,
     FCOSDetectionLoss,
+    GridDetectionLoss,
+    ObjectnessLoss,
     RetinaNetLoss,
+    SigmoidFocalLoss,
     YOLOLoss,
 )
 
 __all__ = [
-    "GridAssigner", "FCOSAssigner", "MaxIoUAssigner", "ATSSAssigner", "TaskAlignedAssigner",
-    "GIoULoss", "CIoULoss", "L1BoxLoss",
-    "ObjectnessLoss", "GridDetectionLoss", "SigmoidFocalLoss",
-    "FCOSDetectionLoss", "RetinaNetLoss", "YOLOLoss", "DETRLoss",
+    "GridAssigner",
+    "FCOSAssigner",
+    "MaxIoUAssigner",
+    "ATSSAssigner",
+    "TaskAlignedAssigner",
+    "GIoULoss",
+    "CIoULoss",
+    "L1BoxLoss",
+    "ObjectnessLoss",
+    "GridDetectionLoss",
+    "SigmoidFocalLoss",
+    "FCOSDetectionLoss",
+    "RetinaNetLoss",
+    "YOLOLoss",
+    "DETRLoss",
 ]

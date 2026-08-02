@@ -72,7 +72,9 @@ class ONNXExporter:
         self.normalize = normalize
 
         if dummy_inputs is not None:
-            self.dummy_inputs = dummy_inputs if isinstance(dummy_inputs, (list, tuple)) else (dummy_inputs,)
+            self.dummy_inputs = (
+                dummy_inputs if isinstance(dummy_inputs, (list, tuple)) else (dummy_inputs,)
+            )
         elif input_shapes is not None:
             self.dummy_inputs = tuple(torch.randn(1, *s, device=self.device) for s in input_shapes)
         elif input_shape is not None:
@@ -118,7 +120,9 @@ class ONNXExporter:
         out_tensors, default_output_names = _flatten_outputs(outputs)
 
         n_inputs = len(self.dummy_inputs)
-        input_names = input_names or ([f"input_{i}" for i in range(n_inputs)] if n_inputs > 1 else ["input"])
+        input_names = input_names or (
+            [f"input_{i}" for i in range(n_inputs)] if n_inputs > 1 else ["input"]
+        )
         output_names = output_names or default_output_names
         if len(output_names) != len(out_tensors):
             raise ValueError(
@@ -185,11 +189,17 @@ class ONNXExporter:
         if self.normalize:
             props.update({f"normalize_{k}": json.dumps(v) for k, v in self.normalize.items()})
         if metadata:
-            props.update({str(k): json.dumps(v) if not isinstance(v, str) else v for k, v in metadata.items()})
+            props.update(
+                {
+                    str(k): json.dumps(v) if not isinstance(v, str) else v
+                    for k, v in metadata.items()
+                }
+            )
         if not props:
             return
         try:
             import onnx
+
             model = onnx.load(onnx_path)
             for key, value in props.items():
                 prop = model.metadata_props.add()
@@ -231,7 +241,9 @@ class ONNXExporter:
         try:
             import onnxruntime as ort
         except ImportError:  # pragma: no cover
-            _logger.warning("[WARN] onnxruntime not installed, skip verify. pip install onnxruntime")
+            _logger.warning(
+                "[WARN] onnxruntime not installed, skip verify. pip install onnxruntime"
+            )
             return False
 
         import numpy as np
@@ -250,11 +262,17 @@ class ONNXExporter:
             onnx_outs = session.run(None, feed)
 
             for out_idx, (torch_out, onnx_out) in enumerate(zip(torch_outs, onnx_outs)):
-                onnx_name = onnx_output_names[out_idx] if out_idx < len(onnx_output_names) else f"#{out_idx}"
+                onnx_name = (
+                    onnx_output_names[out_idx]
+                    if out_idx < len(onnx_output_names)
+                    else f"#{out_idx}"
+                )
                 is_close = np.allclose(torch_out.numpy(), onnx_out, rtol=rtol, atol=atol)
                 max_diff = float(np.abs(torch_out.numpy() - onnx_out).max())
                 status = "[OK]" if is_close else "[FAIL]"
-                _logger.info(f"  {status} Sample {sample_idx + 1} output '{onnx_name}': max_diff={max_diff:.2e}")
+                _logger.info(
+                    f"  {status} Sample {sample_idx + 1} output '{onnx_name}': max_diff={max_diff:.2e}"
+                )
                 if not is_close:
                     all_passed = False
 

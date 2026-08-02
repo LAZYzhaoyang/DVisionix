@@ -2,14 +2,19 @@
 """FCOS / RetinaNet 检测器、assigner、检测损失测试（S3）。"""
 
 import pytest
-import torch
 
 torch = pytest.importorskip("torch")
 
-from dvisionix.models import build_model, FCOSDetector, RetinaNetDetector
-from dvisionix.models.detectors import AnchorGenerator
-from dvisionix.models.losses import FCOSAssigner, MaxIoUAssigner, ATSSAssigner, FCOSDetectionLoss, RetinaNetLoss
 from dvisionix.data import detection_collate
+from dvisionix.models import FCOSDetector, RetinaNetDetector, build_model
+from dvisionix.models.detectors import AnchorGenerator
+from dvisionix.models.losses import (
+    ATSSAssigner,
+    FCOSAssigner,
+    FCOSDetectionLoss,
+    MaxIoUAssigner,
+    RetinaNetLoss,
+)
 
 STAGES = [
     {"type": "conv_norm_act", "in_channels": 3, "out_channels": 16, "stride": 2},
@@ -23,28 +28,41 @@ SCALES = (0.0, 24.0, 48.0, 96.0, 1e10)
 
 
 def _fcos_model():
-    return build_model({
-        "type": "fcos", "num_classes": 3, "backbone": BACKBONE, "neck": NECK,
-        "head": {"type": "fcos_head", "num_classes": 3, "strides": list(STRIDES)},
-    })
+    return build_model(
+        {
+            "type": "fcos",
+            "num_classes": 3,
+            "backbone": BACKBONE,
+            "neck": NECK,
+            "head": {"type": "fcos_head", "num_classes": 3, "strides": list(STRIDES)},
+        }
+    )
 
 
 def _retinanet_model():
-    return build_model({
-        "type": "retinanet", "num_classes": 3, "backbone": BACKBONE, "neck": NECK,
-        "head": {"type": "retinanet_head", "num_classes": 3, "num_anchors": 9},
-        "strides": list(STRIDES), "base_sizes": [8, 16, 32],
-    })
+    return build_model(
+        {
+            "type": "retinanet",
+            "num_classes": 3,
+            "backbone": BACKBONE,
+            "neck": NECK,
+            "head": {"type": "retinanet_head", "num_classes": 3, "num_anchors": 9},
+            "strides": list(STRIDES),
+            "base_sizes": [8, 16, 32],
+        }
+    )
 
 
 def _batch(num_classes=3, bs=2, size=128):
     samples = []
     for i in range(bs):
-        samples.append({
-            "image": torch.randn(3, size, size),
-            "boxes": torch.tensor([[20.0, 20.0, 50.0, 50.0], [70.0, 70.0, 100.0, 100.0]]),
-            "labels": torch.tensor([i % num_classes, (i + 1) % num_classes]),
-        })
+        samples.append(
+            {
+                "image": torch.randn(3, size, size),
+                "boxes": torch.tensor([[20.0, 20.0, 50.0, 50.0], [70.0, 70.0, 100.0, 100.0]]),
+                "labels": torch.tensor([i % num_classes, (i + 1) % num_classes]),
+            }
+        )
     return detection_collate(samples)
 
 
@@ -90,7 +108,9 @@ def test_fcos_assigner_basic():
 def test_maxiou_assigner_basic():
     assigner = MaxIoUAssigner(num_classes=3)
     anchors = torch.tensor([[16.0, 16.0, 48.0, 48.0], [100.0, 100.0, 120.0, 120.0]])
-    labels, targets = assigner.assign(anchors, torch.tensor([[20.0, 20.0, 50.0, 50.0]]), torch.tensor([2]), (128, 128))
+    labels, targets = assigner.assign(
+        anchors, torch.tensor([[20.0, 20.0, 50.0, 50.0]]), torch.tensor([2]), (128, 128)
+    )
     assert labels[0] == 3
     assert labels[1] == 0
 
@@ -128,7 +148,9 @@ def test_fcos_loss_decreases():
 def test_retinanet_loss_decreases():
     torch.manual_seed(1)
     model = _retinanet_model()
-    loss_fn = RetinaNetLoss(num_classes=3, strides=STRIDES, base_sizes=(8, 16, 32), assigner="max_iou")
+    loss_fn = RetinaNetLoss(
+        num_classes=3, strides=STRIDES, base_sizes=(8, 16, 32), assigner="max_iou"
+    )
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     batch = _batch()
     first = last = None

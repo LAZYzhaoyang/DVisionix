@@ -15,9 +15,9 @@ from typing import Any, Dict
 
 import numpy as np
 
+from ...registry import TRANSFORMS
 from ..sample import Sample
 from .base import BaseTransform
-from ...registry import TRANSFORMS
 
 
 @TRANSFORMS.register()
@@ -54,7 +54,11 @@ class AlbumentationsWrapper(BaseTransform):
         self.is_segmentation = is_segmentation
         self._bbox_format = bbox_format
 
-        if is_detection and getattr(albu_transforms, "processors", None) is not None                 and "bboxes" not in albu_transforms.processors:
+        if (
+            is_detection
+            and getattr(albu_transforms, "processors", None) is not None
+            and "bboxes" not in albu_transforms.processors
+        ):
             transforms = list(albu_transforms.transforms)
             albu_transforms = A.Compose(
                 transforms,
@@ -66,7 +70,9 @@ class AlbumentationsWrapper(BaseTransform):
         kwargs: Dict[str, Any] = {"image": sample["image"]}
         if self.is_detection and "boxes" in sample and len(sample["boxes"]) > 0:
             kwargs["bboxes"] = sample["boxes"].tolist()
-            kwargs["labels"] = sample.get("labels", np.zeros(len(sample["boxes"]), dtype=np.int64)).tolist()
+            kwargs["labels"] = sample.get(
+                "labels", np.zeros(len(sample["boxes"]), dtype=np.int64)
+            ).tolist()
         if self.is_segmentation and "mask" in sample:
             kwargs["mask"] = sample["mask"]
 

@@ -41,9 +41,16 @@ def test_checkpoint_mode_validation():
 
 
 def test_alias_warning_when_both_set():
-    cfg = Config({**_base_config(), "training": {
-        "num_epochs": 2, "learning_rate": 0.01, "optimizer": {"type": "adam", "lr": 0.001},
-    }})
+    cfg = Config(
+        {
+            **_base_config(),
+            "training": {
+                "num_epochs": 2,
+                "learning_rate": 0.01,
+                "optimizer": {"type": "adam", "lr": 0.001},
+            },
+        }
+    )
     warnings = cfg.validate_schema(cfg.task_type)
     assert any("learning_rate" in w for w in warnings)
 
@@ -56,19 +63,21 @@ def test_unknown_task_type_raises():
 
 def test_cli_parse_list_and_dict():
     assert parse_cli_options(["training.devices=[0,1]"])["training"]["devices"] == [0, 1]
-    assert parse_cli_options(["training.optimizer={type: adam, lr: 0.01}"])["training"]["optimizer"] == {
-        "type": "adam", "lr": 0.01
-    }
+    assert parse_cli_options(["training.optimizer={type: adam, lr: 0.01}"])["training"][
+        "optimizer"
+    ] == {"type": "adam", "lr": 0.01}
 
 
 def test_cli_parse_scalars():
     cfg = Config(_base_config())
-    cfg.update_from_cli([
-        "training.num_epochs=5",
-        "training.amp=true",
-        "training.gradient_clip_val=null",
-        "experiment_name=x",
-    ])
+    cfg.update_from_cli(
+        [
+            "training.num_epochs=5",
+            "training.amp=true",
+            "training.gradient_clip_val=null",
+            "experiment_name=x",
+        ]
+    )
     assert cfg.training.num_epochs == 5
     assert cfg.training.amp is True
     assert cfg.training.gradient_clip_val is None

@@ -10,8 +10,8 @@ from typing import Optional
 import numpy as np
 import torch
 
-from .base import BaseMetric
 from ..registry import METRICS
+from .base import BaseMetric
 
 
 def _to_preds(logits: torch.Tensor) -> torch.Tensor:
@@ -30,7 +30,9 @@ class _ConfusionMatrixMetric(BaseMetric):
         name: 指标名称。
     """
 
-    def __init__(self, num_classes: Optional[int] = None, average: str = "macro", name: str = "metric"):
+    def __init__(
+        self, num_classes: Optional[int] = None, average: str = "macro", name: str = "metric"
+    ):
         self.num_classes = num_classes
         self.average = average
         super().__init__(name)
@@ -54,8 +56,9 @@ class _ConfusionMatrixMetric(BaseMetric):
 
         valid = (targets_np >= 0) & (targets_np < self.num_classes)
         hist = np.bincount(
-            self.num_classes * targets_np[valid].astype(np.int64) + preds_np[valid].astype(np.int64),
-            minlength=self.num_classes ** 2,
+            self.num_classes * targets_np[valid].astype(np.int64)
+            + preds_np[valid].astype(np.int64),
+            minlength=self.num_classes**2,
         ).reshape(self.num_classes, self.num_classes)
         self.confusion_matrix += hist
 
@@ -67,8 +70,10 @@ class _ConfusionMatrixMetric(BaseMetric):
         precision = np.divide(tp, tp + fp, out=np.zeros_like(tp), where=(tp + fp) != 0)
         recall = np.divide(tp, tp + fn, out=np.zeros_like(tp), where=(tp + fn) != 0)
         f1 = np.divide(
-            2 * precision * recall, precision + recall,
-            out=np.zeros_like(tp), where=(precision + recall) != 0,
+            2 * precision * recall,
+            precision + recall,
+            out=np.zeros_like(tp),
+            where=(precision + recall) != 0,
         )
         return precision, recall, f1, tp, fp, fn
 
@@ -150,7 +155,9 @@ class TopKAccuracy(BaseMetric):
 class Precision(_ConfusionMatrixMetric):
     """精确率（Precision）。"""
 
-    def __init__(self, num_classes: Optional[int] = None, average: str = "macro", name: str = "precision"):
+    def __init__(
+        self, num_classes: Optional[int] = None, average: str = "macro", name: str = "precision"
+    ):
         super().__init__(num_classes=num_classes, average=average, name=name)
 
     def compute(self):
@@ -165,7 +172,9 @@ class Precision(_ConfusionMatrixMetric):
 class Recall(_ConfusionMatrixMetric):
     """召回率（Recall）。"""
 
-    def __init__(self, num_classes: Optional[int] = None, average: str = "macro", name: str = "recall"):
+    def __init__(
+        self, num_classes: Optional[int] = None, average: str = "macro", name: str = "recall"
+    ):
         super().__init__(num_classes=num_classes, average=average, name=name)
 
     def compute(self):

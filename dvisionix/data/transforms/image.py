@@ -12,9 +12,9 @@ from typing import Tuple
 import cv2
 import numpy as np
 
+from ...registry import TRANSFORMS
 from ..sample import Sample
 from .base import BaseTransform
-from ...registry import TRANSFORMS
 
 
 @TRANSFORMS.register()
@@ -84,7 +84,7 @@ class RandomCrop(BaseTransform):
             return sample
         y = np.random.randint(0, h - th + 1)
         x = np.random.randint(0, w - tw + 1)
-        sample["image"] = img[y:y + th, x:x + tw]
+        sample["image"] = img[y : y + th, x : x + tw]
         return sample
 
 
@@ -102,7 +102,7 @@ class CenterCrop(BaseTransform):
         th, tw = self.size
         y = (h - th) // 2
         x = (w - tw) // 2
-        sample["image"] = img[y:y + th, x:x + tw]
+        sample["image"] = img[y : y + th, x : x + tw]
         return sample
 
 
@@ -144,9 +144,12 @@ class ImageNormalize(BaseTransform):
     name = "normalize"
     provides_normalization = True
 
-    def __init__(self, mean: Tuple[float, float, float] = (0.485, 0.456, 0.406),
-                 std: Tuple[float, float, float] = (0.229, 0.224, 0.225),
-                 scale: float = 1.0 / 255.0):
+    def __init__(
+        self,
+        mean: Tuple[float, float, float] = (0.485, 0.456, 0.406),
+        std: Tuple[float, float, float] = (0.229, 0.224, 0.225),
+        scale: float = 1.0 / 255.0,
+    ):
         self.mean = np.array(mean, dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array(std, dtype=np.float32).reshape(1, 1, 3)
         self.scale = float(scale)
@@ -169,6 +172,7 @@ class ToTensor(BaseTransform):
 
     def __call__(self, sample: Sample) -> Sample:
         import torch
+
         for k in self.keys:
             if k not in sample:
                 continue

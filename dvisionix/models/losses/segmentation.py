@@ -4,9 +4,9 @@
 import torch
 import torch.nn.functional as F
 
+from ...registry import LOSSES
 from .base import BaseLoss
 from .classification import CrossEntropy
-from ...registry import LOSSES
 
 
 @LOSSES.register()
@@ -65,7 +65,9 @@ class CombinedSegmentationLoss(BaseLoss):
         self.dice = DiceLoss(ignore_index=ignore_index)
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
-        return self.ce_weight * self.ce(logits, targets) + self.dice_weight * self.dice(logits, targets)
+        return self.ce_weight * self.ce(logits, targets) + self.dice_weight * self.dice(
+            logits, targets
+        )
 
 
 __all__ = ["DiceLoss", "CombinedSegmentationLoss", "MaskFormerLoss"]
@@ -106,17 +108,22 @@ class MaskFormerLoss(BaseLoss):
 
     def _match(self, logits, masks, gt_objects):
         """logits (Q, C+1)，masks (Q, H*W)，gt_objects: [(label, binary_mask HW)]。"""
+
         from .detection.matcher import _hungarian
-        import numpy as np
+
         q = logits.shape[0]
         m = len(gt_objects)
         if m == 0:
-            return torch.empty(0, dtype=torch.long, device=logits.device), torch.empty(0, dtype=torch.long, device=logits.device)
+            return torch.empty(0, dtype=torch.long, device=logits.device), torch.empty(
+                0, dtype=torch.long, device=logits.device
+            )
         log_p = torch.log_softmax(logits, dim=-1)  # (Q, C+1)
         cost = torch.zeros((q, m), device=logits.device)
         for j, (label, gt_mask) in enumerate(gt_objects):
             cost[:, j] = -self.cost_class * log_p[:, label]
-            dice = 1.0 - (2.0 * (masks * gt_mask).sum(1) + 1.0) / (masks.sum(1) + gt_mask.sum() + 1.0)
+            dice = 1.0 - (2.0 * (masks * gt_mask).sum(1) + 1.0) / (
+                masks.sum(1) + gt_mask.sum() + 1.0
+            )
             cost[:, j] = cost[:, j] + self.cost_mask * dice
         row, col = _hungarian(cost.detach().cpu().numpy())
         return (
@@ -135,23 +142,34 @@ class MaskFormerLoss(BaseLoss):
         for b in range(len(batch["mask"])):
             gt_mask = batch["mask"][b].to(device).long()  # (H, W)
             if gt_mask.shape[-2:] != masks_all.shape[-2:]:
-                gt_mask = F.interpolate(gt_mask.float().unsqueeze(0).unsqueeze(0),
-                                        size=masks_all.shape[-2:], mode="nearest").long().squeeze(0).squeeze(0)
+                gt_mask = (
+                    F.interpolate(
+                        gt_mask.float().unsqueeze(0).unsqueeze(0),
+                        size=masks_all.shape[-2:],
+                        mode="nearest",
+                    )
+                    .long()
+                    .squeeze(0)
+                    .squeeze(0)
+                )
             logits = logits_all[b]  # (Q, C+1)
             masks = masks_all[b].flatten(1).sigmoid()  # (Q, HW)
-            hw = masks.shape[1]
 
             gt_objects = []
             for c in range(self.num_classes):
-                obj = (gt_mask == c)
+                obj = gt_mask == c
                 if obj.any():
                     gt_objects.append((c, obj.reshape(-1).float()))
 
             pred_idx, gt_idx = self._match(logits, masks, gt_objects)
 
-            targets = torch.full((logits.shape[0],), self.num_classes, dtype=torch.long, device=device)
+            targets = torch.full(
+                (logits.shape[0],), self.num_classes, dtype=torch.long, device=device
+            )
             if gt_idx.numel() > 0:
-                targets[pred_idx] = torch.tensor([gt_objects[i][0] for i in gt_idx.tolist()], device=device)
+                targets[pred_idx] = torch.tensor(
+                    [gt_objects[i][0] for i in gt_idx.tolist()], device=device
+                )
             total_cls = total_cls + F.cross_entropy(logits, targets)
 
             if gt_idx.numel() > 0:
@@ -160,7 +178,14 @@ class MaskFormerLoss(BaseLoss):
                 total_dice = total_dice + _dice_loss(pm, gm)
                 total_bce = total_bce + F.binary_cross_entropy(pm, gm)
 
-        total = (self.cls_weight * total_cls + self.mask_weight * total_bce + self.dice_weight * total_dice)
-        return {"loss": total, "cls_loss": total_cls, "mask_bce_loss": total_bce, "mask_dice_loss": total_dice}
-
-
+        total = (
+            self.cls_weight * total_cls
+            + self.mask_weight * total_bce
+            + self.dice_weight * total_dice
+        )
+        return {
+            "loss": total,
+            "cls_loss": total_cls,
+            "mask_bce_loss": total_bce,
+            "mask_dice_loss": total_dice,
+        }

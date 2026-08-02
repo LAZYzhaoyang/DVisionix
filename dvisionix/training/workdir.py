@@ -15,7 +15,9 @@ import yaml
 
 def default_work_root() -> str:
     """默认工作根目录（代码库外）。优先级：环境变量 > 用户主目录。"""
-    return os.environ.get("DVISIONIX_WORK_DIR") or os.path.join(os.path.expanduser("~"), "dvisionix_runs")
+    return os.environ.get("DVISIONIX_WORK_DIR") or os.path.join(
+        os.path.expanduser("~"), "dvisionix_runs"
+    )
 
 
 def resolve_work_dir(
@@ -63,7 +65,6 @@ def find_latest_run(experiment_dir: str) -> Optional[str]:
     return max(runs, key=os.path.getmtime)
 
 
-
 def _has_last_checkpoint(run_dir: str) -> bool:
     """run 目录下是否存在 last.pt（标准布局 checkpoints/last.pt 或嵌套子目录）。"""
     direct = os.path.join(run_dir, "checkpoints", "last.pt")
@@ -73,6 +74,7 @@ def _has_last_checkpoint(run_dir: str) -> bool:
         if "last.pt" in files:
             return True
     return False
+
 
 def find_checkpoint(work_dir: str, resume: Optional[str]) -> Optional[str]:
     """根据 resume 配置定位检查点路径。

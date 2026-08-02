@@ -6,19 +6,19 @@ import torch
 
 from dvisionix.models.losses import (
     BaseLoss,
+    CIoULoss,
+    CombinedSegmentationLoss,
+    CrossEntropy,
+    DiceLoss,
+    FocalLoss,
+    GIoULoss,
+    GridAssigner,
+    GridDetectionLoss,
+    L1BoxLoss,
     LossComposer,
     build_loss,
     build_losses,
     compute_loss,
-    CrossEntropy,
-    FocalLoss,
-    DiceLoss,
-    CombinedSegmentationLoss,
-    GIoULoss,
-    CIoULoss,
-    L1BoxLoss,
-    GridAssigner,
-    GridDetectionLoss,
 )
 from dvisionix.registry import LOSSES
 
@@ -67,10 +67,12 @@ def test_box_losses_matched_pairs():
 
 
 def test_build_losses_composition_and_weights():
-    composer = build_losses([
-        {"type": "cross_entropy", "weight": 2.0},
-        {"type": "focal", "weight": 0.5},
-    ])
+    composer = build_losses(
+        [
+            {"type": "cross_entropy", "weight": 2.0},
+            {"type": "focal", "weight": 0.5},
+        ]
+    )
     assert isinstance(composer, LossComposer)
     logits = torch.randn(4, 3)
     targets = torch.randint(0, 3, (4,))
@@ -101,7 +103,9 @@ def test_grid_assigner_shapes():
     assigner = GridAssigner(num_classes=3)
     boxes_list = [torch.tensor([[5.0, 5.0, 25.0, 25.0]])]
     labels_list = [torch.tensor([0])]
-    obj, box, cls, num_pos = assigner((1, 8, 8, 8), boxes_list, labels_list, (64, 64), torch.device("cpu"))
+    obj, box, cls, num_pos = assigner(
+        (1, 8, 8, 8), boxes_list, labels_list, (64, 64), torch.device("cpu")
+    )
     assert obj.shape == (1, 8, 8) and box.shape == (1, 4, 8, 8) and cls.shape == (1, 8, 8)
     assert num_pos == 1 and obj.sum().item() == 1
 

@@ -5,9 +5,9 @@
 支持 YAML 加载、配置继承（_base_ 字段）、深度合并、点号访问、验证等功能。
 """
 
-import os
 import copy
-from typing import Any, Dict, Optional, List, Union
+import os
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
@@ -193,9 +193,8 @@ class Config:
             告警字符串列表（未知键、便捷别名提示等）。
         """
         from .schema import validate_schema
+
         return validate_schema(self._config, task_type)
-
-
 
     # ---------------- CLI 覆盖 ----------------
 
@@ -232,8 +231,8 @@ class Config:
 
     def __repr__(self) -> str:
         import json
-        return f"Config({json.dumps(self._config, indent=2, ensure_ascii=False)})"
 
+        return f"Config({json.dumps(self._config, indent=2, ensure_ascii=False)})"
 
 
 def _parse_cli_value(value: str) -> Any:

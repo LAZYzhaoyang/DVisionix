@@ -17,7 +17,6 @@ from dvisionix.data import (
     CustomDataset,
     Sample,
     build_dataset,
-    detection_collate,
     segmentation_collate,
 )
 from dvisionix.registry import DATASETS
@@ -59,7 +58,10 @@ class TestBaseDataset:
 class TestCustomDataset:
     def test_classification_minimal(self):
         with tempfile.TemporaryDirectory() as tmp:
-            samples = [{"image": _write_img(os.path.join(tmp, f"{i}.png")), "label": i % 2} for i in range(3)]
+            samples = [
+                {"image": _write_img(os.path.join(tmp, f"{i}.png")), "label": i % 2}
+                for i in range(3)
+            ]
             ds = CustomDataset(samples=samples, task_type="classification")
             assert len(ds) == 3
             assert "image" in ds[0]
@@ -67,11 +69,17 @@ class TestCustomDataset:
     def test_detection_uses_detection_collate(self):
         with tempfile.TemporaryDirectory() as tmp:
             from dvisionix.data.transforms import ToTensor
-            samples = [{"image": _write_img(os.path.join(tmp, "0.png")),
-                        "boxes": np.array([[0, 0, 10, 10]], dtype=np.float32),
-                        "labels": np.array([0], dtype=np.int64)}]
-            ds = CustomDataset(samples=samples, task_type="detection",
-                               transforms=ToTensor(keys=("image",)))
+
+            samples = [
+                {
+                    "image": _write_img(os.path.join(tmp, "0.png")),
+                    "boxes": np.array([[0, 0, 10, 10]], dtype=np.float32),
+                    "labels": np.array([0], dtype=np.int64),
+                }
+            ]
+            ds = CustomDataset(
+                samples=samples, task_type="detection", transforms=ToTensor(keys=("image",))
+            )
             assert ds.collate_fn is not None
             batch = [ds[0], ds[0]]
             out = ds.collate_fn(batch)
@@ -85,9 +93,20 @@ class TestCustomDataset:
 
 class TestRegistration:
     def test_mainstream_datasets_registered(self):
-        for name in ["cifar10", "cifar100", "imagenet", "imagefolder",
-                     "coco", "coco_detection", "voc_detection", "voc_segmentation",
-                     "cityscapes", "ade20k", "custom", "base_dataset"]:
+        for name in [
+            "cifar10",
+            "cifar100",
+            "imagenet",
+            "imagefolder",
+            "coco",
+            "coco_detection",
+            "voc_detection",
+            "voc_segmentation",
+            "cityscapes",
+            "ade20k",
+            "custom",
+            "base_dataset",
+        ]:
             assert name in DATASETS, name
 
     def test_build_dataset_via_registry(self):

@@ -28,18 +28,24 @@ class MultiLabelTask(BaseTask):
     ):
         super().__init__(optimizer_cfg, scheduler_cfg, loss=loss, metrics=metrics)
         self.num_classes = num_classes
-        self.optimizer_cfg = _merge_legacy_hyperparams(self.optimizer_cfg, learning_rate, weight_decay)
+        self.optimizer_cfg = _merge_legacy_hyperparams(
+            self.optimizer_cfg, learning_rate, weight_decay
+        )
         if self.loss is None:
             self.loss = BinaryCrossEntropy()
 
-    def training_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def training_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         images = batch["image"].to(device)
         labels = batch["label"].to(device).float()
         logits = model(images)
         loss, extras = compute_loss(self.loss, logits, labels)
         return {"loss": loss, **extras}
 
-    def validation_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def validation_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         images = batch["image"].to(device)
         labels = batch["label"].to(device).float()
         with torch.no_grad():

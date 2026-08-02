@@ -4,14 +4,11 @@
 将骨干网络的多尺度特征图融合为统一通道数的金字塔特征，供检测/分割头复用。
 """
 
-from typing import List, Optional
-
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..base import BaseModel
 from ...registry import NECKS
+from ..base import BaseModel
 
 
 @NECKS.register()
@@ -39,11 +36,15 @@ class FPN(BaseModel):
         self.fpn_convs = nn.ModuleList()
         for c in in_channels:
             self.lateral_convs.append(nn.Conv2d(c, out_channels, kernel_size=1, bias=True))
-            self.fpn_convs.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=True))
+            self.fpn_convs.append(
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=True)
+            )
 
         self.extra_convs = nn.ModuleList()
         for _ in range(self.num_outs - len(in_channels)):
-            self.extra_convs.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=True))
+            self.extra_convs.append(
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=True)
+            )
 
     def forward(self, inputs):
         assert isinstance(inputs, (list, tuple)), "FPN expects a list of feature maps"

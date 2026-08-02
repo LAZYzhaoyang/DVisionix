@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 
 from ...registry import LAYERS
-from .builder import build_norm_layer, build_activation_layer
+from .builder import build_activation_layer, build_norm_layer
 
 
 @LAYERS.register()
@@ -52,9 +52,14 @@ class ConvNormAct(nn.Module):
             bias = norm is None
 
         self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size,
-            stride=stride, padding=padding, dilation=dilation,
-            groups=groups, bias=bias,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
         self.norm = build_norm_layer(norm, out_channels)
         self.act = build_activation_layer(act)

@@ -40,10 +40,12 @@ class Callback:
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
         pass
 
-    def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str) -> None:
+    def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str, batch=None) -> None:
         pass
 
-    def on_batch_end(self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str) -> None:
+    def on_batch_end(
+        self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str, batch=None
+    ) -> None:
         pass
 
     # 状态持久化：默认无状态；有内部状态的子类应重写
@@ -84,13 +86,15 @@ class CallbackList:
         for cb in self.callbacks:
             cb.on_epoch_end(trainer, epoch, logs)
 
-    def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str) -> None:
+    def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str, batch=None) -> None:
         for cb in self.callbacks:
-            cb.on_batch_begin(trainer, batch_idx, mode)
+            cb.on_batch_begin(trainer, batch_idx, mode, batch)
 
-    def on_batch_end(self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str) -> None:
+    def on_batch_end(
+        self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str, batch=None
+    ) -> None:
         for cb in self.callbacks:
-            cb.on_batch_end(trainer, batch_idx, logs, mode)
+            cb.on_batch_end(trainer, batch_idx, logs, mode, batch)
 
     def state_dict(self) -> Dict[str, Any]:
         result: Dict[str, Any] = {}

@@ -5,11 +5,11 @@
 """
 
 from .base import Callback, CallbackList
-from .progress import ProgressBar
 from .checkpoint import ModelCheckpoint
+from .distill import DistillCallback
 from .early_stopping import EarlyStopping
 from .ema import EMA
-from .distill import DistillCallback
+from .progress import ProgressBar
 
 __all__ = [
     "Callback",

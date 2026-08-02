@@ -2,15 +2,14 @@
 """分类组合模型 / 分类头 / 检测脚手架测试（S2）。"""
 
 import pytest
-import torch
 
 torch = pytest.importorskip("torch")
 
-from dvisionix.models import build_model, SingleStageDetector
+from dvisionix.models import SingleStageDetector, build_model
 from dvisionix.models.classifiers import LinearClassifier
-from dvisionix.models.heads import ClsHead, ArcFaceHead, MultiLabelHead
+from dvisionix.models.heads import ArcFaceHead, ClsHead, MultiLabelHead
 from dvisionix.models.losses import BinaryCrossEntropy
-from dvisionix.registry import MODELS, HEADS
+from dvisionix.registry import HEADS, MODELS
 
 STAGES = [
     {"type": "conv_norm_act", "in_channels": 3, "out_channels": 16, "stride": 2},
@@ -29,11 +28,13 @@ def test_linear_classifier_default_head():
 
 
 def test_linear_classifier_build_from_registry():
-    m = build_model({
-        "type": "linear_classifier",
-        "backbone": {"type": "sequential_backbone", "stages": STAGES},
-        "num_classes": 7,
-    })
+    m = build_model(
+        {
+            "type": "linear_classifier",
+            "backbone": {"type": "sequential_backbone", "stages": STAGES},
+            "num_classes": 7,
+        }
+    )
     assert m(torch.randn(2, 3, 64, 64)).shape == (2, 7)
 
 

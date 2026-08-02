@@ -12,16 +12,16 @@
 """
 
 from .base import BaseMetric
-from .classification import Accuracy, TopKAccuracy, Precision, Recall, F1Score
-from .segmentation import MeanIoU, PixelAccuracy, DiceScore
-from .detection import MeanAveragePrecision
+from .classification import Accuracy, F1Score, Precision, Recall, TopKAccuracy
 from .collection import MetricCollection, build_single_metric
+from .detection import MeanAveragePrecision
 from .presets import (
-    get_preset_metrics,
     ClassificationMetrics,
-    SegmentationMetrics,
     DetectionMetrics,
+    SegmentationMetrics,
+    get_preset_metrics,
 )
+from .segmentation import DiceScore, MaskAveragePrecision, MeanIoU, PixelAccuracy
 
 __all__ = [
     "BaseMetric",
@@ -32,6 +32,7 @@ __all__ = [
     "F1Score",
     "MeanIoU",
     "PixelAccuracy",
+    "MaskAveragePrecision",
     "DiceScore",
     "MeanAveragePrecision",
     "MetricCollection",
@@ -47,6 +48,7 @@ __all__ = [
 # 注册表集成（配置驱动构建）
 # =============================================================================
 from typing import Any, Dict
+
 from ..registry import METRICS
 
 

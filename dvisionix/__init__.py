@@ -21,15 +21,9 @@ DVisionix: 深度学习算法库
     from dvisionix.training import build_task, Trainer
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
-from . import data
-from . import models
-from . import training
-from . import metrics
-from . import utils
-from . import config
-from . import export
+from . import config, data, export, metrics, models, training, utils
 
 __all__ = [
     "data",
@@ -46,18 +40,40 @@ __all__ = [
 # =============================================================================
 # 注册表与构建入口（配置驱动）
 # =============================================================================
-from .registry import (
-    Registry, build_from_cfg, MODELS, BACKBONES, NECKS, HEADS,
-    DATASETS, TRANSFORMS, TASKS, LOSSES, METRICS,
-)
+from .data import build_dataset
+from .metrics import build_metric
 from .models import build_model
 from .models.losses import build_loss
+from .registry import (
+    BACKBONES,
+    DATASETS,
+    HEADS,
+    LOSSES,
+    METRICS,
+    MODELS,
+    NECKS,
+    TASKS,
+    TRANSFORMS,
+    Registry,
+    build_from_cfg,
+)
 from .training import build_task
-from .metrics import build_metric
-from .data import build_dataset
 
 __all__ = __all__ + [
-    "Registry", "build_from_cfg", "MODELS", "BACKBONES", "NECKS", "HEADS",
-    "DATASETS", "TRANSFORMS", "TASKS", "LOSSES", "METRICS",
-    "build_model", "build_task", "build_loss", "build_metric", "build_dataset",
+    "Registry",
+    "build_from_cfg",
+    "MODELS",
+    "BACKBONES",
+    "NECKS",
+    "HEADS",
+    "DATASETS",
+    "TRANSFORMS",
+    "TASKS",
+    "LOSSES",
+    "METRICS",
+    "build_model",
+    "build_task",
+    "build_loss",
+    "build_metric",
+    "build_dataset",
 ]

@@ -20,11 +20,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
-import torch
 from torch.utils.data import DataLoader
 
 from dvisionix.config import Config
-from dvisionix.data import build_dataset, CustomDataset
+from dvisionix.data import CustomDataset, build_dataset
 from dvisionix.data.transforms import (
     ClassificationTransforms,
     DetectionTransforms,
@@ -34,9 +33,9 @@ from dvisionix.models import build_model
 from dvisionix.training import (
     build_task,
     build_trainer,
-    resolve_work_dir,
-    find_checkpoint,
     dump_config,
+    find_checkpoint,
+    resolve_work_dir,
 )
 from dvisionix.utils import get_logger, set_seed
 
@@ -58,7 +57,9 @@ def build_transforms(task_type, image_size, train):
     raise ValueError(f"Unknown task_type: {task_type}")
 
 
-def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, transforms, cache_dir=None):
+def build_synthetic_dataset(
+    task_type, num_samples, num_classes, image_size, transforms, cache_dir=None
+):
     """生成内存合成数据集（便于无网络环境快速验证）。"""
     import cv2
 
@@ -76,11 +77,15 @@ def build_synthetic_dataset(task_type, num_samples, num_classes, image_size, tra
             x1, y1 = np.random.randint(0, image_size // 2, 2)
             x2 = x1 + np.random.randint(10, image_size // 2)
             y2 = y1 + np.random.randint(10, image_size // 2)
-            samples.append({
-                "image": path,
-                "boxes": np.array([[float(x1), float(y1), float(x2), float(y2)]], dtype=np.float32),
-                "labels": np.array([i % num_classes], dtype=np.int64),
-            })
+            samples.append(
+                {
+                    "image": path,
+                    "boxes": np.array(
+                        [[float(x1), float(y1), float(x2), float(y2)]], dtype=np.float32
+                    ),
+                    "labels": np.array([i % num_classes], dtype=np.int64),
+                }
+            )
         elif task_type == "segmentation":
             mask = (np.random.rand(image_size, image_size) * num_classes).astype(np.uint8)
             mask_path = os.path.join(tmp_dir, f"mask_{i:04d}.png")
@@ -108,14 +113,20 @@ def build_data(cfg, work_dir=None):
         n_train = data_cfg.get("num_samples", 64)
         n_val = data_cfg.get("val_samples", 16)
         cache_dir = os.path.join(work_dir, ".cache", "synthetic", task_type) if work_dir else None
-        train_ds = build_synthetic_dataset(task_type, n_train, num_classes, image_size, train_tf, cache_dir)
-        val_ds = build_synthetic_dataset(task_type, n_val, num_classes, image_size, val_tf, cache_dir)
+        train_ds = build_synthetic_dataset(
+            task_type, n_train, num_classes, image_size, train_tf, cache_dir
+        )
+        val_ds = build_synthetic_dataset(
+            task_type, n_val, num_classes, image_size, val_tf, cache_dir
+        )
     else:
         root = data_cfg.get("root", "./data")
-        train_kwargs = dict(root=root, train=True, transforms=train_tf,
-                            download=data_cfg.get("download", False))
-        val_kwargs = dict(root=root, train=False, transforms=val_tf,
-                          download=data_cfg.get("download", False))
+        train_kwargs = dict(
+            root=root, train=True, transforms=train_tf, download=data_cfg.get("download", False)
+        )
+        val_kwargs = dict(
+            root=root, train=False, transforms=val_tf, download=data_cfg.get("download", False)
+        )
         for extra_key in ("year", "image_set", "split"):
             if extra_key in data_cfg:
                 train_kwargs[extra_key] = data_cfg[extra_key]
@@ -125,10 +136,20 @@ def build_data(cfg, work_dir=None):
 
     batch_size = cfg.training.batch_size
     num_workers = cfg.training.get("num_workers", 0)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
-                              collate_fn=getattr(train_ds, "collate_fn", None))
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
-                            collate_fn=getattr(val_ds, "collate_fn", None))
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=getattr(train_ds, "collate_fn", None),
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=getattr(val_ds, "collate_fn", None),
+    )
     return train_loader, val_loader
 
 
@@ -173,11 +194,18 @@ def parse_devices(value):
 def main():
     parser = argparse.ArgumentParser(description="DVisionix config-driven training")
     parser.add_argument("--config", required=True, help="YAML config path")
-    parser.add_argument("--cfg-options", nargs="*", default=[],
-                        help="override config, e.g. training.learning_rate=0.01")
-    parser.add_argument("--resume", default=None,
-                        help="resume mode: auto / latest / <checkpoint path>")
-    parser.add_argument("--work-dir", default=None, help="explicit work dir (default: ~/dvisionix_runs/<exp>/<ts>)")
+    parser.add_argument(
+        "--cfg-options",
+        nargs="*",
+        default=[],
+        help="override config, e.g. training.learning_rate=0.01",
+    )
+    parser.add_argument(
+        "--resume", default=None, help="resume mode: auto / latest / <checkpoint path>"
+    )
+    parser.add_argument(
+        "--work-dir", default=None, help="explicit work dir (default: ~/dvisionix_runs/<exp>/<ts>)"
+    )
     parser.add_argument("--devices", default=None, help="devices for DDP, e.g. '0,1'")
     parser.add_argument("--strategy", default=None, help="auto / ddp / none")
     parser.add_argument("--force", action="store_true", help="force fresh run (ignore resume)")

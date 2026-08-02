@@ -31,8 +31,8 @@ class DistillCallback(Callback):
         trainer.teacher_logits = None
         trainer.distill_temperature = self.temperature
 
-    def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str) -> None:
-        if mode != "train":
+    def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str, batch=None) -> None:
+        if mode != "train" or batch is None:
             return
         images = batch["image"].to(trainer.device)
         with torch.no_grad():

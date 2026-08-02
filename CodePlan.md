@@ -487,3 +487,31 @@ models/
 ## 五、验证
 - 新增 tests/test_training/test_v05_engineering.py（EMA / history.csv / checkpoint 保留 / 蒸馏 / MaskFormerLoss）。
 - 统一全量测试：200 passed + 2 skipped。
+
+---
+
+# RT-DETR / mask mAP / 本地 lint（v0.7.0）
+
+## 一、DETR 进阶（RT-DETR-lite）
+- `RTDETRHead`：多尺度特征混合编码器（投影+融合）-> 类别分数 top-k query 选择 -> transformer 解码器；
+  输出契约与 DETR 一致（logits/boxes），直接复用 `DETRLoss` 与 `detr_decode`。
+- `RTDETRDetector` 注册为 `rtdetr`；`SingleStageDetector` 支持列表输入头（in_channels_list 自动注入）。
+- 说明：为 compact 实现（conv 融合替代可变形注意力）；真 Deformable DETR 的可变形注意力留作后续。
+
+## 二、实例/语义 mask mAP
+- `MaskAveragePrecision`（metrics/segmentation.py）：COCO 风格 mask mAP（IoU 0.5:0.95，101-point 插值）。
+- `maskformer_decode`（postprocess）：MaskFormerHead full 模式 -> (masks, scores, labels)。
+- `evaluate_mask_ap`（training/evaluation）：端到端评估（目标 mask 自动对齐预测分辨率）。
+
+## 三、本地 lint 工具链落地
+- 安装 ruff 0.16.1 + black 26.5.1 到 dvisionix 环境。
+- ruff：修复 400+ 问题（未用导入/变量、E741、分号、尾随空白、导入排序），per-file ignore 仅限
+  __init__ 的 E402 与 tests 的 E402/E702/E741；最终 `ruff check dvisionix tools tests` 全绿。
+- black：全仓格式化（93 文件），`black --check` 通过，与 CI 一致。
+
+## 四、回调透传 batch
+- `on_batch_begin/end` 增加可选 `batch` 参数（Trainer 传入），DistillCallback 据此计算 teacher logits。
+
+## 五、验证
+- 新增 tests/test_models/test_v07_rtdetr_mask.py（RT-DETR forward/decode/loss 下降、mask mAP 完美/错误、evaluate_mask_ap）。
+- 全量测试 204 passed + 2 skipped；ruff / black 全绿。

@@ -13,9 +13,9 @@ from typing import Optional, Tuple
 import cv2
 import numpy as np
 
+from ...registry import TRANSFORMS
 from ..sample import Sample
 from .base import BaseTransform
-from ...registry import TRANSFORMS
 
 
 def _filter_invalid_boxes(boxes: np.ndarray, labels: Optional[np.ndarray]):
@@ -64,7 +64,9 @@ class BoxSyncResize(BaseTransform):
                 sample["labels"] = labels
 
         if "mask" in sample:
-            sample["mask"] = cv2.resize(sample["mask"].astype(np.int64), (tw, th), interpolation=cv2.INTER_NEAREST)
+            sample["mask"] = cv2.resize(
+                sample["mask"].astype(np.int64), (tw, th), interpolation=cv2.INTER_NEAREST
+            )
 
         meta = sample.get("meta") or {}
         meta["scale"] = (sh, sw)
@@ -116,9 +118,9 @@ class BoxSyncRandomCrop(BaseTransform):
             return sample
         y = np.random.randint(0, h - th + 1)
         x = np.random.randint(0, w - tw + 1)
-        sample["image"] = img[y:y + th, x:x + tw]
+        sample["image"] = img[y : y + th, x : x + tw]
         if "mask" in sample:
-            sample["mask"] = sample["mask"][y:y + th, x:x + tw]
+            sample["mask"] = sample["mask"][y : y + th, x : x + tw]
         if "boxes" in sample and len(sample["boxes"]) > 0:
             boxes = sample["boxes"].astype(np.float32).copy()
             boxes[:, [0, 2]] -= x
@@ -152,7 +154,11 @@ class BoxSyncPad(BaseTransform):
         if h >= th and w >= tw:
             return sample
         pad_h, pad_w = max(0, th - h), max(0, tw - w)
-        sample["image"] = cv2.copyMakeBorder(img, 0, pad_h, 0, pad_w, cv2.BORDER_CONSTANT, value=self.pad_value)
+        sample["image"] = cv2.copyMakeBorder(
+            img, 0, pad_h, 0, pad_w, cv2.BORDER_CONSTANT, value=self.pad_value
+        )
         if "mask" in sample:
-            sample["mask"] = np.pad(sample["mask"], ((0, pad_h), (0, pad_w)), constant_values=self.mask_value)
+            sample["mask"] = np.pad(
+                sample["mask"], ((0, pad_h), (0, pad_w)), constant_values=self.mask_value
+            )
         return sample

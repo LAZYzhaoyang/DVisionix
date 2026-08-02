@@ -42,7 +42,9 @@ class EarlyStopping(Callback):
             self.best_value = current
             self.wait = 0
             if self.restore_best_weights:
-                self.best_weights = {k: v.cpu().clone() for k, v in trainer.model.state_dict().items()}
+                self.best_weights = {
+                    k: v.cpu().clone() for k, v in trainer.model.state_dict().items()
+                }
         else:
             self.wait += 1
             if self.wait >= self.patience:
@@ -54,7 +56,11 @@ class EarlyStopping(Callback):
                     _log(trainer, "info", "Restored best model weights")
 
     def state_dict(self) -> Dict[str, Any]:
-        return {"best_value": self.best_value, "wait": self.wait, "stopped_epoch": self.stopped_epoch}
+        return {
+            "best_value": self.best_value,
+            "wait": self.wait,
+            "stopped_epoch": self.stopped_epoch,
+        }
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
         self.best_value = state.get("best_value", self.best_value)

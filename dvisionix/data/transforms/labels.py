@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """标签字段的张量化与基础转换。"""
 
-import numpy as np
 import torch
 
+from ...registry import TRANSFORMS
 from ..sample import Sample
 from .base import BaseTransform
-from ...registry import TRANSFORMS
 
 
 @TRANSFORMS.register()

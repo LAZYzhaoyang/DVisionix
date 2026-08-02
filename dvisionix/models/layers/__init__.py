@@ -13,9 +13,9 @@
 from typing import Any, Dict
 
 from ...registry import LAYERS
-from .builder import build_norm_layer, build_activation_layer
-from .basic import ConvNormAct, MLP, SEBlock, DropPath
 from .attention import PositionEmbeddingSine
+from .basic import MLP, ConvNormAct, DropPath, SEBlock
+from .builder import build_activation_layer, build_norm_layer
 from .timm_layers import create_timm_layer, list_timm_layers
 
 

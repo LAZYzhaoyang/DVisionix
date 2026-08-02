@@ -4,14 +4,11 @@
 在 FPN 的 top-down 融合之上，增加 bottom-up 路径，利于小目标与大目标间信息传递。
 """
 
-from typing import List, Optional
-
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..base import BaseModel
 from ...registry import NECKS
+from ..base import BaseModel
 
 
 @NECKS.register()
@@ -30,7 +27,9 @@ class PANet(BaseModel):
         self.fpn_convs = nn.ModuleList()
         for c in in_channels:
             self.lateral_convs.append(nn.Conv2d(c, out_channels, kernel_size=1, bias=True))
-            self.fpn_convs.append(nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=True))
+            self.fpn_convs.append(
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=True)
+            )
 
         self.downsample_convs = nn.ModuleList()
         for _ in range(len(in_channels) - 1):

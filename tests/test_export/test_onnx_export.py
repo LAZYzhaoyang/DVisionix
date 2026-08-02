@@ -7,17 +7,19 @@ import pytest
 import torch
 import torch.nn as nn
 
-from dvisionix.models import SimpleCNN, GridDetectionModel
 from dvisionix.export import ONNXExporter
+from dvisionix.models import GridDetectionModel, SimpleCNN
 
 try:
     import onnxruntime  # noqa: F401
+
     HAS_ORT = True
 except ImportError:
     HAS_ORT = False
 
 try:
     import onnx  # noqa: F401
+
     HAS_ONNX = True
 except ImportError:
     HAS_ONNX = False
@@ -73,6 +75,7 @@ def test_dict_output_names_and_verify(tmp_path):
     ex = ONNXExporter(DictOutputModel(), input_shape=(8,), device="cpu")
     ex.export(path)
     import onnxruntime as ort
+
     session = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
     out_names = [o.name for o in session.get_outputs()]
     assert set(out_names) == {"logits", "feat"}  # 按键命名，不再出现 '4'
@@ -110,12 +113,19 @@ def test_dynamo_backend_optional(tmp_path):
 def test_metadata_written(tmp_path):
     path = os.path.join(tmp_path, "meta.onnx")
     ex = ONNXExporter(
-        SimpleCNN(num_classes=4), input_shape=(3, 32, 32), device="cpu",
+        SimpleCNN(num_classes=4),
+        input_shape=(3, 32, 32),
+        device="cpu",
         task_type="classification",
-        normalize={"mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225], "scale": 1.0 / 255.0},
+        normalize={
+            "mean": [0.485, 0.456, 0.406],
+            "std": [0.229, 0.224, 0.225],
+            "scale": 1.0 / 255.0,
+        },
     )
     ex.export(path)
     import onnx
+
     model = onnx.load(path)
     keys = {prop.key for prop in model.metadata_props}
     assert "normalize_mean" in keys and "normalize_std" in keys

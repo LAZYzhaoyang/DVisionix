@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn as nn
 
-from ...models.losses import CrossEntropy, compute_loss
 from ...metrics import get_preset_metrics
+from ...models.losses import CrossEntropy, compute_loss
 from .base import BaseTask, _merge_legacy_hyperparams
 
 
@@ -31,7 +31,9 @@ class ClassificationTask(BaseTask):
     ):
         super().__init__(optimizer_cfg, scheduler_cfg, loss=loss, metrics=metrics)
         self.num_classes = num_classes
-        self.optimizer_cfg = _merge_legacy_hyperparams(self.optimizer_cfg, learning_rate, weight_decay)
+        self.optimizer_cfg = _merge_legacy_hyperparams(
+            self.optimizer_cfg, learning_rate, weight_decay
+        )
         if loss_function is not None and self.loss is None:
             self.loss = loss_function
         if self.loss is None:
@@ -39,7 +41,9 @@ class ClassificationTask(BaseTask):
         if self.metrics is None:
             self.metrics = get_preset_metrics("classification", num_classes)
 
-    def training_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def training_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         images = batch["image"].to(device)
         labels = batch["label"].to(device)
         logits = model(images)
@@ -49,7 +53,9 @@ class ClassificationTask(BaseTask):
             acc = (preds == labels).float().mean()
         return {"loss": loss, "acc": acc, **extras}
 
-    def validation_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def validation_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         images = batch["image"].to(device)
         labels = batch["label"].to(device)
         with torch.no_grad():

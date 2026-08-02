@@ -14,6 +14,12 @@ target-version = "py38"
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# __init__.py 允许 import 非置顶（re-export 风格）
+"**/__init__.py" = ["E402"]
+# 测试文件允许一行多语句与歧义变量名（__main__ 便利块）
+"tests/**" = ["E402", "E702", "E741"]
+
 [tool.mypy]
 python_version = "3.8"
 ignore_missing_imports = true

@@ -11,57 +11,92 @@
 - ``models.losses``：Loss 组件（BaseLoss 继承 + LossComposer 组合 + 检测 assigner/损失）。
 """
 
-from .base import BaseModel, TASK_TYPES
-from .backbones import TimmBackbone, TimmClassifier, list_timm_models, SequentialBackbone
+from . import (
+    losses,  # noqa: F401
+    toy,
+)
+from .backbones import SequentialBackbone, TimmBackbone, TimmClassifier, list_timm_models
+from .base import TASK_TYPES, BaseModel
+from .classifiers import LinearClassifier
+from .detectors import (
+    AnchorGenerator,
+    DETRDetector,
+    FCOSDetector,
+    RetinaNetDetector,
+    SingleStageDetector,
+    YOLODetector,
+)
+from .heads import (
+    AdaFaceHead,
+    ArcFaceHead,
+    ClsHead,
+    CosFaceHead,
+    DeepLabV3Head,
+    DetHead,
+    DETRHead,
+    FCNHead,
+    FCOSHead,
+    MaskFormerHead,
+    MultiLabelHead,
+    RetinaNetHead,
+    SegFormerHead,
+    SegHead,
+    SphereFaceHead,
+    UNetDecoder,
+    YOLOHead,
+)
 from .layers import (
+    MLP,
+    ConvNormAct,
+    DropPath,
+    SEBlock,
+    build_activation_layer,
     build_layer,
     build_norm_layer,
-    build_activation_layer,
-    ConvNormAct,
-    MLP,
-    SEBlock,
-    DropPath,
     create_timm_layer,
     list_timm_layers,
 )
-from .postprocess import nms, batched_nms, box_iou, fcos_decode, retinanet_decode, yolo_decode, detr_decode
-from .classifiers import LinearClassifier
-from .segmenters import SegmentationModel
-from .detectors import SingleStageDetector, AnchorGenerator, FCOSDetector, RetinaNetDetector, YOLODetector, DETRDetector
-from .necks import FPN, PANet
-from .heads import ClsHead, SegHead, FCNHead, DeepLabV3Head, UNetDecoder, SegFormerHead, MaskFormerHead, DetHead, ArcFaceHead, MultiLabelHead, CosFaceHead, SphereFaceHead, AdaFaceHead, FCOSHead, RetinaNetHead, YOLOHead, DETRHead
-from . import toy
-from .toy import SimpleCNN, SimpleSegmentationModel, GridDetectionModel
-from . import losses
 from .losses import (
+    ATSSAssigner,
     BaseLoss,
+    BinaryCrossEntropy,
+    CIoULoss,
+    CombinedSegmentationLoss,
+    CrossEntropy,
+    DETRLoss,
+    DiceLoss,
+    DistillationLoss,
+    FCOSAssigner,
+    FCOSDetectionLoss,
+    FocalLoss,
+    GIoULoss,
+    GridAssigner,
+    GridDetectionLoss,
+    L1BoxLoss,
     LossComposer,
+    MaskFormerLoss,
+    MaxIoUAssigner,
+    ObjectnessLoss,
+    RetinaNetLoss,
+    SigmoidFocalLoss,
+    TaskAlignedAssigner,
+    YOLOLoss,
     build_loss,
     build_losses,
     compute_loss,
-    CrossEntropy,
-    FocalLoss,
-    BinaryCrossEntropy,
-    DistillationLoss,
-    DiceLoss,
-    MaskFormerLoss,
-    CombinedSegmentationLoss,
-    GridAssigner,
-    GridDetectionLoss,
-    ObjectnessLoss,
-    GIoULoss,
-    CIoULoss,
-    L1BoxLoss,
-    FCOSAssigner,
-    MaxIoUAssigner,
-    ATSSAssigner,
-    TaskAlignedAssigner,
-    SigmoidFocalLoss,
-    FCOSDetectionLoss,
-    RetinaNetLoss,
-    DETRLoss,
-    YOLOLoss,
 )
+from .necks import FPN, PANet
+from .postprocess import (
+    batched_nms,
+    box_iou,
+    detr_decode,
+    fcos_decode,
+    nms,
+    retinanet_decode,
+    yolo_decode,
+)
+from .segmenters import SegmentationModel
+from .toy import GridDetectionModel, SimpleCNN, SimpleSegmentationModel
 
 __all__ = [
     "BaseModel",
@@ -86,6 +121,7 @@ __all__ = [
     "retinanet_decode",
     "yolo_decode",
     "detr_decode",
+    "maskformer_decode",
     "LinearClassifier",
     "SegmentationModel",
     "SingleStageDetector",
@@ -94,6 +130,7 @@ __all__ = [
     "RetinaNetDetector",
     "YOLODetector",
     "DETRDetector",
+    "RTDETRDetector",
     "FPN",
     "PANet",
     "ClsHead",
@@ -113,6 +150,7 @@ __all__ = [
     "RetinaNetHead",
     "YOLOHead",
     "DETRHead",
+    "RTDETRHead",
     "toy",
     # 教学级模型（re-export，兼容旧导入）
     "SimpleCNN",
@@ -152,7 +190,8 @@ __all__ = [
 # 注册表集成（配置驱动构建）
 # =============================================================================
 from typing import Any, Dict
-from ..registry import MODELS, NECKS, HEADS, LAYERS
+
+from ..registry import HEADS, LAYERS, MODELS, NECKS
 
 
 def build_neck(cfg: Dict[str, Any]):
@@ -170,4 +209,12 @@ def build_model(cfg: Dict[str, Any]):
     return MODELS.build(dict(cfg))
 
 
-__all__ = __all__ + ["MODELS", "NECKS", "HEADS", "LAYERS", "build_model", "build_neck", "build_head"]
+__all__ = __all__ + [
+    "MODELS",
+    "NECKS",
+    "HEADS",
+    "LAYERS",
+    "build_model",
+    "build_neck",
+    "build_head",
+]

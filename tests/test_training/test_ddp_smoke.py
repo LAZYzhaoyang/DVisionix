@@ -18,8 +18,9 @@ pytestmark = pytest.mark.skipif(
 
 def test_ddp_smoke_train_and_metrics():
     from torch.utils.data import DataLoader
-    from dvisionix.training import Trainer, ClassificationTask
+
     from dvisionix.models import SimpleCNN
+    from dvisionix.training import ClassificationTask, Trainer
 
     if not dist.is_initialized():
         dist.init_process_group(backend="nccl")

@@ -46,7 +46,7 @@ class Registry:
     def get(self, key: str) -> Callable[..., Any]:
         if key not in self._registry:
             raise KeyError(
-                f"\"{key}\" is not registered in registry \"{self._name}\". "
+                f'"{key}" is not registered in registry "{self._name}". '
                 f"Available: {sorted(self._registry.keys())}"
             )
         return self._registry[key]
@@ -73,9 +73,7 @@ class Registry:
             if key is None:
                 raise ValueError("Cannot infer a name for the registered object.")
             if key in self._registry and not force:
-                raise KeyError(
-                    f"\"{key}\" is already registered in registry \"{self._name}\"."
-                )
+                raise KeyError(f'"{key}" is already registered in registry "{self._name}".')
             self._registry[key] = target
             return target
 
@@ -86,16 +84,16 @@ class Registry:
     def build(self, cfg: Dict[str, Any], **default_kwargs: Any) -> Any:
         """从配置字典构建实例。
 
-        配置必须包含 `type` 字段（或 
-ame`）指定注册名称，
-        其余字段作为构造参数传入。`default_kwargs` 会被配置覆盖。
+                配置必须包含 `type` 字段（或
+        ame`）指定注册名称，
+                其余字段作为构造参数传入。`default_kwargs` 会被配置覆盖。
         """
         if not isinstance(cfg, dict):
             raise TypeError(f"cfg must be a dict, got {type(cfg)}")
         cfg = dict(cfg)
         obj_type = cfg.pop("type", None) or cfg.pop("name", None)
         if obj_type is None:
-            raise KeyError("cfg must contain a \"type\" (or \"name\") field.")
+            raise KeyError('cfg must contain a "type" (or "name") field.')
         if isinstance(obj_type, str):
             builder = self.get(obj_type)
         elif callable(obj_type):

@@ -26,7 +26,9 @@ class EMA(Callback):
         state = trainer.model.state_dict()
         self.shadow = {k: v.detach().clone().float() for k, v in state.items()}
 
-    def on_batch_end(self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str) -> None:
+    def on_batch_end(
+        self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str, batch=None
+    ) -> None:
         if mode != "train":
             return
         with torch.no_grad():

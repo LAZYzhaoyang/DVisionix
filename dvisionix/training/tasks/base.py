@@ -13,8 +13,8 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn as nn
 
-from ...models.losses import build_losses
 from ...metrics import MetricCollection
+from ...models.losses import build_losses
 from ..optim import build_optimizer, build_scheduler
 
 
@@ -66,10 +66,14 @@ class BaseTask(ABC):
         loss: Any = None,
         metrics: Any = None,
     ) -> None:
-        self.optimizer_cfg: Dict[str, Any] = dict(optimizer_cfg) if optimizer_cfg else {"type": "adam", "lr": 1e-3}
-        self.scheduler_cfg: Dict[str, Any] = dict(scheduler_cfg) if scheduler_cfg else {
-            "type": "reduce_on_plateau", "monitor": "val_loss"
-        }
+        self.optimizer_cfg: Dict[str, Any] = (
+            dict(optimizer_cfg) if optimizer_cfg else {"type": "adam", "lr": 1e-3}
+        )
+        self.scheduler_cfg: Dict[str, Any] = (
+            dict(scheduler_cfg)
+            if scheduler_cfg
+            else {"type": "reduce_on_plateau", "monitor": "val_loss"}
+        )
         self.loss = build_losses(loss)
         self.metrics: Optional[MetricCollection] = None
         if metrics is not None:
@@ -103,12 +107,16 @@ class BaseTask(ABC):
     # 训练/验证步（子类必须实现）
     # ------------------------------------------------------------------
     @abstractmethod
-    def training_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def training_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         """单步训练逻辑。必须返回含 ``loss`` 的字典。"""
         raise NotImplementedError
 
     @abstractmethod
-    def validation_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def validation_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         """单步验证逻辑。建议返回 ``{"loss": ..., "preds": ..., "targets": ...}``。"""
         raise NotImplementedError
 

@@ -9,9 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import pytest
 import torch
 
-from dvisionix.models import SequentialBackbone, build_model
+from dvisionix.models import SequentialBackbone
 from dvisionix.registry import BACKBONES
-
 
 STAGES = [
     {"type": "conv_norm_act", "in_channels": 3, "out_channels": 32, "stride": 2},
@@ -54,7 +53,9 @@ class TestSequentialBackbone:
         assert len(feats) == 2
 
     def test_registry_build(self):
-        backbone = BACKBONES.build({"type": "sequential_backbone", "stages": STAGES, "features_only": True})
+        backbone = BACKBONES.build(
+            {"type": "sequential_backbone", "stages": STAGES, "features_only": True}
+        )
         assert backbone.out_channels == [32, 64]
 
     def test_empty_stages_raises(self):
@@ -64,6 +65,7 @@ class TestSequentialBackbone:
     def test_classification_composition(self):
         """SequentialBackbone + ClsHead 手工组合（组件即插即用）。"""
         from dvisionix.models.heads import ClsHead
+
         backbone = SequentialBackbone(STAGES, features_only=False)
         head = ClsHead(in_channels=64, num_classes=10)
         logits = head(backbone(torch.randn(2, 3, 64, 64)))

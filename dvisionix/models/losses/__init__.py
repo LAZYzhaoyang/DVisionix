@@ -8,25 +8,25 @@
 """
 
 from .base import BaseLoss, LossComposer, build_loss, build_losses, compute_loss
-from .classification import CrossEntropy, FocalLoss, BinaryCrossEntropy, DistillationLoss
-from .segmentation import DiceLoss, CombinedSegmentationLoss, MaskFormerLoss
+from .classification import BinaryCrossEntropy, CrossEntropy, DistillationLoss, FocalLoss
 from .detection import (
+    ATSSAssigner,
+    CIoULoss,
+    DETRLoss,
+    FCOSAssigner,
+    FCOSDetectionLoss,
+    GIoULoss,
     GridAssigner,
     GridDetectionLoss,
-    ObjectnessLoss,
-    GIoULoss,
-    CIoULoss,
     L1BoxLoss,
-    FCOSAssigner,
     MaxIoUAssigner,
-    ATSSAssigner,
-    TaskAlignedAssigner,
-    SigmoidFocalLoss,
-    FCOSDetectionLoss,
+    ObjectnessLoss,
     RetinaNetLoss,
-    DETRLoss,
+    SigmoidFocalLoss,
+    TaskAlignedAssigner,
     YOLOLoss,
 )
+from .segmentation import CombinedSegmentationLoss, DiceLoss, MaskFormerLoss
 
 __all__ = [
     "BaseLoss",

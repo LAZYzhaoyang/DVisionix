@@ -3,7 +3,7 @@
 
 import pytest
 
-from dvisionix.registry import Registry, build_from_cfg, MODELS, TASKS, LOSSES, METRICS
+from dvisionix.registry import LOSSES, METRICS, MODELS, TASKS, Registry, build_from_cfg
 
 
 def test_register_and_build():

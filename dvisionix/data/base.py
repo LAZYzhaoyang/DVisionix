@@ -21,10 +21,9 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from ..registry import DATASETS
 from .sample import Sample
 from .transforms import TransformPipeline
-from ..registry import DATASETS
-
 
 # collate_fn 可选：默认 None，DataLoader 会用 PyTorch 默认 collate；
 # 检测/分割如需变长 pad，dataset 自己在 ``collate_fn`` 属性上挂。
@@ -88,6 +87,7 @@ class BaseDataset(Dataset):
             return arr
         if isinstance(img, str):
             import cv2
+
             bgr = cv2.imread(img, cv2.IMREAD_COLOR)
             if bgr is None:
                 raise FileNotFoundError(f"Failed to read image: {img}")
@@ -103,6 +103,7 @@ class BaseDataset(Dataset):
             return mask.detach().cpu().numpy()
         if isinstance(mask, str):
             import cv2
+
             arr = cv2.imread(mask, cv2.IMREAD_GRAYSCALE)
             if arr is None:
                 raise FileNotFoundError(f"Failed to read mask: {mask}")

@@ -13,10 +13,9 @@
 
 from typing import Any, Dict, Optional
 
-from ..base import BaseModel
+from ...registry import MODELS
 from ..postprocess import fcos_decode
 from .base import SingleStageDetector
-from ...registry import MODELS
 
 
 @MODELS.register()
@@ -39,12 +38,23 @@ class FCOSDetector(SingleStageDetector):
         super().__init__(backbone, head_cfg, neck, out_indices)
         self.strides = list(getattr(self.head, "strides", (8, 16, 32, 64, 128)))
 
-    def decode(self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5,
-               max_detections=100, topk_per_level=1000):
+    def decode(
+        self,
+        preds,
+        image_hw,
+        score_threshold=0.05,
+        iou_threshold=0.5,
+        max_detections=100,
+        topk_per_level=1000,
+    ):
         return fcos_decode(
-            preds, image_hw, self.strides,
-            score_threshold=score_threshold, iou_threshold=iou_threshold,
-            max_detections=max_detections, topk_per_level=topk_per_level,
+            preds,
+            image_hw,
+            self.strides,
+            score_threshold=score_threshold,
+            iou_threshold=iou_threshold,
+            max_detections=max_detections,
+            topk_per_level=topk_per_level,
         )
 
 

@@ -14,10 +14,10 @@
 
 from typing import Any, Dict, Optional
 
+from ...registry import MODELS
 from ..postprocess import retinanet_decode
 from .anchors import AnchorGenerator
 from .base import SingleStageDetector
-from ...registry import MODELS
 
 
 @MODELS.register()
@@ -47,12 +47,23 @@ class RetinaNetDetector(SingleStageDetector):
                 f"anchor 生成器 ({self.anchor_gen.num_anchors}) 不一致"
             )
 
-    def decode(self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5,
-               max_detections=100, topk_per_level=1000):
+    def decode(
+        self,
+        preds,
+        image_hw,
+        score_threshold=0.05,
+        iou_threshold=0.5,
+        max_detections=100,
+        topk_per_level=1000,
+    ):
         return retinanet_decode(
-            preds, image_hw, self.anchor_gen,
-            score_threshold=score_threshold, iou_threshold=iou_threshold,
-            max_detections=max_detections, topk_per_level=topk_per_level,
+            preds,
+            image_hw,
+            self.anchor_gen,
+            score_threshold=score_threshold,
+            iou_threshold=iou_threshold,
+            max_detections=max_detections,
+            topk_per_level=topk_per_level,
         )
 
 

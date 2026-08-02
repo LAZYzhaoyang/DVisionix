@@ -14,24 +14,24 @@
 
 from ...registry import TRANSFORMS
 from .base import BaseTransform, TransformPipeline
-from .builder import build_transform, build_pipeline
+from .builder import build_pipeline, build_transform
+from .geometric import (
+    BoxSyncPad,
+    BoxSyncRandomCrop,
+    BoxSyncRandomHorizontalFlip,
+    BoxSyncResize,
+)
 from .image import (
-    ImageResize,
-    RandomHorizontalFlip,
-    RandomVerticalFlip,
-    RandomCrop,
     CenterCrop,
     ColorJitter,
     ImageNormalize,
+    ImageResize,
+    RandomCrop,
+    RandomHorizontalFlip,
+    RandomVerticalFlip,
     ToTensor,
 )
-from .geometric import (
-    BoxSyncResize,
-    BoxSyncRandomHorizontalFlip,
-    BoxSyncRandomCrop,
-    BoxSyncPad,
-)
-from .labels import LabelToTensor, BoxesToTensor, MaskToTensor
+from .labels import BoxesToTensor, LabelToTensor, MaskToTensor
 from .third_party import AlbumentationsWrapper
 
 __all__ = [
@@ -72,7 +72,11 @@ def _build_classification_pipeline(image_size, mean, std, train):
             ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
             ImageNormalize(mean, std),
         ]
-    return [ImageResize((image_size, image_size)), CenterCrop((image_size, image_size)), ImageNormalize(mean, std)]
+    return [
+        ImageResize((image_size, image_size)),
+        CenterCrop((image_size, image_size)),
+        ImageNormalize(mean, std),
+    ]
 
 
 @TRANSFORMS.register()

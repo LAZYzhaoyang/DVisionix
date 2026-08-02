@@ -10,15 +10,17 @@
 
 from typing import Any, Dict, List, Optional
 
-from .base import BaseMetric
-from .collection import MetricCollection
-from .classification import Accuracy, Precision, Recall, F1Score
-from .segmentation import MeanIoU, PixelAccuracy
-from .detection import MeanAveragePrecision
 from ..registry import METRICS
+from .base import BaseMetric
+from .classification import Accuracy, F1Score, Precision, Recall
+from .collection import MetricCollection
+from .detection import MeanAveragePrecision
+from .segmentation import MeanIoU, PixelAccuracy
 
 
-def _classification_metrics(num_classes: Optional[int] = None, average: str = "macro") -> List[BaseMetric]:
+def _classification_metrics(
+    num_classes: Optional[int] = None, average: str = "macro"
+) -> List[BaseMetric]:
     return [
         Accuracy(),
         Precision(num_classes=num_classes, average=average),
@@ -38,7 +40,9 @@ def _detection_metrics(num_classes: int, **kwargs: Any) -> List[BaseMetric]:
     return [MeanAveragePrecision(num_classes=num_classes, **kwargs)]
 
 
-def get_preset_metrics(task_type: str, num_classes: Optional[int] = None, **kwargs: Any) -> MetricCollection:
+def get_preset_metrics(
+    task_type: str, num_classes: Optional[int] = None, **kwargs: Any
+) -> MetricCollection:
     """返回某任务的默认指标组合（MetricCollection）。
 
     Args:
@@ -87,7 +91,12 @@ class ClassificationMetrics(_PresetMetric):
     也是自定义组合指标的范例：继承 _PresetMetric，传入原子指标列表即可。
     """
 
-    def __init__(self, num_classes: Optional[int] = None, average: str = "macro", name: str = "classification"):
+    def __init__(
+        self,
+        num_classes: Optional[int] = None,
+        average: str = "macro",
+        name: str = "classification",
+    ):
         super().__init__(name, _classification_metrics(num_classes, average))
 
 
@@ -96,7 +105,13 @@ class ClassificationMetrics(_PresetMetric):
 class SegmentationMetrics(_PresetMetric):
     """分割默认指标组合：mIoU / pixel_accuracy。"""
 
-    def __init__(self, num_classes: int, ignore_index: Optional[int] = 255, name: str = "segmentation", **kwargs: Any):
+    def __init__(
+        self,
+        num_classes: int,
+        ignore_index: Optional[int] = 255,
+        name: str = "segmentation",
+        **kwargs: Any,
+    ):
         super().__init__(name, _segmentation_metrics(num_classes, ignore_index))
 
 

@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn as nn
 
-from ...models.losses import CrossEntropy, compute_loss
 from ...metrics import get_preset_metrics
+from ...models.losses import CrossEntropy, compute_loss
 from .base import BaseTask, _merge_legacy_hyperparams
 
 
@@ -32,13 +32,19 @@ class SegmentationTask(BaseTask):
         super().__init__(optimizer_cfg, scheduler_cfg, loss=loss, metrics=metrics)
         self.num_classes = num_classes
         self.ignore_index = ignore_index
-        self.optimizer_cfg = _merge_legacy_hyperparams(self.optimizer_cfg, learning_rate, weight_decay)
+        self.optimizer_cfg = _merge_legacy_hyperparams(
+            self.optimizer_cfg, learning_rate, weight_decay
+        )
         if self.loss is None:
             self.loss = CrossEntropy(ignore_index=ignore_index)
         if self.metrics is None:
-            self.metrics = get_preset_metrics("segmentation", num_classes, ignore_index=ignore_index)
+            self.metrics = get_preset_metrics(
+                "segmentation", num_classes, ignore_index=ignore_index
+            )
 
-    def training_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def training_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         images = batch["image"].to(device)
         masks = batch["mask"].to(device)
         logits = model(images)
@@ -46,10 +52,16 @@ class SegmentationTask(BaseTask):
         with torch.no_grad():
             preds = logits.argmax(dim=1)
             valid = masks != self.ignore_index
-            acc = (preds[valid] == masks[valid]).float().mean() if valid.sum() > 0 else torch.tensor(0.0, device=device)
+            acc = (
+                (preds[valid] == masks[valid]).float().mean()
+                if valid.sum() > 0
+                else torch.tensor(0.0, device=device)
+            )
         return {"loss": loss, "acc": acc, **extras}
 
-    def validation_step(self, model: nn.Module, batch: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
+    def validation_step(
+        self, model: nn.Module, batch: Dict[str, Any], device: torch.device
+    ) -> Dict[str, Any]:
         images = batch["image"].to(device)
         masks = batch["mask"].to(device)
         with torch.no_grad():

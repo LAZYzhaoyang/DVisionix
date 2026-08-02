@@ -9,18 +9,18 @@
 支持 timm 中的 ResNet、ViT、Swin 等大量预训练模型，也支持自定义骨干名称。
 """
 
-from typing import List, Optional, Union
+from typing import List
 
-import torch
 import torch.nn as nn
 
-from ..base import BaseModel
 from ...registry import BACKBONES
+from ..base import BaseModel
 
 
 def _require_timm():
     try:
         import timm  # noqa: F401
+
         return timm
     except ImportError as exc:  # pragma: no cover
         raise ImportError(
@@ -54,16 +54,27 @@ class TimmBackbone(BaseModel):
         >>> backbone.out_channels  # [C1, C2, C3, C4]
     """
 
-    def __init__(self, name="resnet50", pretrained=False, in_channels=3,
-                 features_only=False, out_indices=None, global_pool="avg", drop_rate=0.0):
+    def __init__(
+        self,
+        name="resnet50",
+        pretrained=False,
+        in_channels=3,
+        features_only=False,
+        out_indices=None,
+        global_pool="avg",
+        drop_rate=0.0,
+    ):
         super().__init__()
         timm = _require_timm()
         self.name = name
         self.features_only = features_only
         if features_only:
             self.model = timm.create_model(
-                name, pretrained=pretrained, in_chans=in_channels,
-                features_only=True, out_indices=out_indices,
+                name,
+                pretrained=pretrained,
+                in_chans=in_channels,
+                features_only=True,
+                out_indices=out_indices,
             )
             try:
                 self.out_channels = list(self.model.feature_info.channels())
@@ -72,8 +83,12 @@ class TimmBackbone(BaseModel):
             self.num_features = self.out_channels[-1] if self.out_channels else 0
         else:
             self.model = timm.create_model(
-                name, pretrained=pretrained, num_classes=0, in_chans=in_channels,
-                global_pool=global_pool, drop_rate=drop_rate,
+                name,
+                pretrained=pretrained,
+                num_classes=0,
+                in_chans=in_channels,
+                global_pool=global_pool,
+                drop_rate=drop_rate,
             )
             self.num_features = int(self.model.num_features)
             self.out_channels = [self.num_features]
@@ -100,13 +115,18 @@ class TimmClassifier(BaseModel):
         >>> logits.shape  # (2, 10)
     """
 
-    def __init__(self, name="resnet50", num_classes=1000, pretrained=False, in_channels=3, drop_rate=0.0):
+    def __init__(
+        self, name="resnet50", num_classes=1000, pretrained=False, in_channels=3, drop_rate=0.0
+    ):
         super().__init__(task_type="classification")
         self.name = name
         self.num_classes = num_classes
         self.backbone = TimmBackbone(
-            name=name, pretrained=pretrained, in_channels=in_channels,
-            global_pool="avg", drop_rate=drop_rate,
+            name=name,
+            pretrained=pretrained,
+            in_channels=in_channels,
+            global_pool="avg",
+            drop_rate=drop_rate,
         )
         self.head = nn.Linear(self.backbone.num_features, num_classes)
 

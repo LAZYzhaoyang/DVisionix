@@ -13,34 +13,34 @@
 顶层 API 保持不变：from dvisionix.training import Trainer, ClassificationTask, build_task, ...
 """
 
-from .trainer import Trainer
+from .builder import build_callbacks, build_trainer
+from .callbacks import (
+    EMA,
+    Callback,
+    CallbackList,
+    DistillCallback,
+    EarlyStopping,
+    ModelCheckpoint,
+    ProgressBar,
+)
+from .evaluation import evaluate_detection, evaluate_mask_ap
+from .optim import OPTIMIZERS, SCHEDULERS, build_optimizer, build_scheduler
 from .tasks import (
     BaseTask,
     ClassificationTask,
     DetectionTask,
-    SegmentationTask,
     MultiLabelTask,
+    SegmentationTask,
     build_task,
 )
-from .callbacks import (
-    Callback,
-    CallbackList,
-    ProgressBar,
-    ModelCheckpoint,
-    EarlyStopping,
-    EMA,
-    DistillCallback,
-)
-from .optim import OPTIMIZERS, build_optimizer, SCHEDULERS, build_scheduler
-from .evaluation import evaluate_detection
+from .trainer import Trainer
 from .workdir import (
     default_work_root,
-    resolve_work_dir,
-    find_latest_run,
-    find_checkpoint,
     dump_config,
+    find_checkpoint,
+    find_latest_run,
+    resolve_work_dir,
 )
-from .builder import build_callbacks, build_trainer
 
 __all__ = [
     "Trainer",
@@ -48,6 +48,7 @@ __all__ = [
     "ClassificationTask",
     "DetectionTask",
     "SegmentationTask",
+    "MultiLabelTask",
     "build_task",
     "Callback",
     "CallbackList",
@@ -61,6 +62,7 @@ __all__ = [
     "SCHEDULERS",
     "build_scheduler",
     "evaluate_detection",
+    "evaluate_mask_ap",
     "default_work_root",
     "resolve_work_dir",
     "find_latest_run",

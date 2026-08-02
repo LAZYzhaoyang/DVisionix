@@ -6,16 +6,14 @@ import tempfile
 
 import pytest
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 
+from dvisionix.models import SimpleCNN
 from dvisionix.training import (
-    Trainer,
     ClassificationTask,
     EarlyStopping,
-    ModelCheckpoint,
+    Trainer,
 )
-from dvisionix.models import SimpleCNN
 
 
 class _TinyDataset(torch.utils.data.Dataset):

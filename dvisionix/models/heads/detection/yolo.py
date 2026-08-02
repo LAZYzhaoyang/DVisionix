@@ -4,8 +4,8 @@
 import torch
 import torch.nn as nn
 
-from ...base import BaseModel
 from ....registry import HEADS
+from ...base import BaseModel
 
 
 @HEADS.register()
@@ -27,7 +27,11 @@ class YOLOHead(BaseModel):
             layers = []
             cin = in_channels
             for _ in range(num_convs):
-                layers += [nn.Conv2d(cin, in_channels, 3, padding=1), nn.BatchNorm2d(in_channels), nn.SiLU(inplace=True)]
+                layers += [
+                    nn.Conv2d(cin, in_channels, 3, padding=1),
+                    nn.BatchNorm2d(in_channels),
+                    nn.SiLU(inplace=True),
+                ]
                 cin = in_channels
             return nn.Sequential(*layers)
 

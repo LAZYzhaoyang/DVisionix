@@ -50,7 +50,9 @@ class ModelCheckpoint(Callback):
             trainer.save_checkpoint(str(self.save_dir / "last.pt"))
 
         if self.filename is not None:
-            name = self.filename.format(epoch=epoch + 1, **{k: v for k, v in logs.items() if isinstance(v, (int, float))})
+            name = self.filename.format(
+                epoch=epoch + 1, **{k: v for k, v in logs.items() if isinstance(v, (int, float))}
+            )
             trainer.save_checkpoint(str(self.save_dir / name))
 
         if self.save_every_n_epochs and (epoch + 1) % self.save_every_n_epochs == 0:

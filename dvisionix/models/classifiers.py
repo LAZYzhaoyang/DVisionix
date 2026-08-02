@@ -4,10 +4,9 @@
 from typing import Any, Dict, Optional
 
 import torch
-import torch.nn as nn
 
+from ..registry import BACKBONES, HEADS, MODELS
 from .base import BaseModel
-from ..registry import MODELS, BACKBONES, HEADS
 
 
 @MODELS.register()
@@ -42,7 +41,9 @@ class LinearClassifier(BaseModel):
         if head is None:
             if num_classes is None:
                 raise ValueError("head 未提供时必须给出 num_classes")
-            self.head = HEADS.build({"type": "cls_head", "in_channels": self.num_features, "num_classes": num_classes})
+            self.head = HEADS.build(
+                {"type": "cls_head", "in_channels": self.num_features, "num_classes": num_classes}
+            )
         else:
             head_cfg = dict(head)
             head_cfg.setdefault("in_channels", self.num_features)

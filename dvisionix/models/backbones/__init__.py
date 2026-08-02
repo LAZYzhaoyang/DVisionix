@@ -6,7 +6,7 @@
 以及开箱即用的 timm 分类模型。
 """
 
-from .timm_backbone import TimmBackbone, TimmClassifier, list_timm_models
 from .sequential import SequentialBackbone
+from .timm_backbone import TimmBackbone, TimmClassifier, list_timm_models
 
 __all__ = ["TimmBackbone", "TimmClassifier", "list_timm_models", "SequentialBackbone"]

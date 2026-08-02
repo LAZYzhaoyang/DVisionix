@@ -12,7 +12,6 @@ import sys
 from datetime import datetime
 from typing import Dict, Optional
 
-
 _LEVELS = {
     "debug": logging.DEBUG,
     "info": logging.INFO,

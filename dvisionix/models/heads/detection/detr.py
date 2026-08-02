@@ -4,8 +4,8 @@
 import torch
 import torch.nn as nn
 
-from ...base import BaseModel
 from ....registry import HEADS
+from ...base import BaseModel
 from ...layers import PositionEmbeddingSine
 
 
@@ -50,8 +50,10 @@ class DETRHead(BaseModel):
 
         self.class_embed = nn.Linear(d_model, num_classes + 1)
         self.bbox_embed = nn.Sequential(
-            nn.Linear(d_model, d_model), nn.ReLU(inplace=True),
-            nn.Linear(d_model, d_model), nn.ReLU(inplace=True),
+            nn.Linear(d_model, d_model),
+            nn.ReLU(inplace=True),
+            nn.Linear(d_model, d_model),
+            nn.ReLU(inplace=True),
             nn.Linear(d_model, 4),
         )
 

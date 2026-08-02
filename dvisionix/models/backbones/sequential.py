@@ -16,9 +16,9 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 import torch
 import torch.nn as nn
 
+from ...registry import BACKBONES
 from ..base import BaseModel
 from ..layers import build_layer
-from ...registry import BACKBONES
 
 StageCfg = Union[Dict[str, Any], Sequence[Dict[str, Any]]]
 

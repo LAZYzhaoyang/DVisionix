@@ -40,7 +40,9 @@ class GridAssigner:
 
         obj_target = torch.zeros((len(boxes_list), grid_h, grid_w), device=device)
         box_target = torch.zeros((len(boxes_list), 4, grid_h, grid_w), device=device)
-        cls_target = torch.full((len(boxes_list), grid_h, grid_w), -1, dtype=torch.long, device=device)
+        cls_target = torch.full(
+            (len(boxes_list), grid_h, grid_w), -1, dtype=torch.long, device=device
+        )
 
         num_pos = 0
         for b in range(len(boxes_list)):
@@ -63,9 +65,6 @@ class GridAssigner:
                 num_pos += 1
 
         return obj_target, box_target, cls_target, num_pos
-
-
-
 
 
 def _box_iou_matrix(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
@@ -150,19 +149,21 @@ class FCOSAssigner:
                 if not (area_min <= area < area_max):
                     continue
 
-                l = centers[:, 0] - x1
-                t = centers[:, 1] - y1
-                r = x2 - centers[:, 0]
-                b = y2 - centers[:, 1]
-                dist = torch.stack([l, t, r, b], dim=1)  # (N,4)
+                left = centers[:, 0] - x1
+                top = centers[:, 1] - y1
+                right = x2 - centers[:, 0]
+                bottom = y2 - centers[:, 1]
+                dist = torch.stack([left, top, right, bottom], dim=1)  # (N,4)
                 inside = (dist > 0).all(dim=1)
 
                 if self.center_sampling:
                     radius = self.center_sample_radius * stride
                     gcx, gcy = (x1 + x2) / 2, (y1 + y2) / 2
                     center_ok = (
-                        (centers[:, 0] >= gcx - radius) & (centers[:, 0] <= gcx + radius)
-                        & (centers[:, 1] >= gcy - radius) & (centers[:, 1] <= gcy + radius)
+                        (centers[:, 0] >= gcx - radius)
+                        & (centers[:, 0] <= gcx + radius)
+                        & (centers[:, 1] >= gcy - radius)
+                        & (centers[:, 1] <= gcy + radius)
                     )
                     candidate = inside & center_ok
                 else:
@@ -190,10 +191,16 @@ class FCOSAssigner:
                         labels[best] = gt_labels[j] + 1
                         bbox_targets[best] = gt_boxes[j]
                         x1, y1, x2, y2 = gt_boxes[j].unbind()
-                        dist = torch.stack([
-                            centers[best, 0] - x1, centers[best, 1] - y1,
-                            x2 - centers[best, 0], y2 - centers[best, 1],
-                        ]).clamp(min=1e-6)  # 框外回退位置需保证距离非负
+                        dist = torch.stack(
+                            [
+                                centers[best, 0] - x1,
+                                centers[best, 1] - y1,
+                                x2 - centers[best, 0],
+                                y2 - centers[best, 1],
+                            ]
+                        ).clamp(
+                            min=1e-6
+                        )  # 框外回退位置需保证距离非负
                         reg_targets[best] = torch.log(dist / stride)
                         centerness[best] = 1.0
 
@@ -210,7 +217,9 @@ class MaxIoUAssigner:
         self.pos_iou_thr = pos_iou_thr
         self.neg_iou_thr = neg_iou_thr
 
-    def assign(self, anchors: torch.Tensor, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, image_hw):
+    def assign(
+        self, anchors: torch.Tensor, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, image_hw
+    ):
         """anchors: (N, 4) 全部层展平。
 
         Returns:
@@ -231,8 +240,10 @@ class MaxIoUAssigner:
         iou = _box_iou_matrix(anchors, gt_boxes)
         max_iou, argmax_gt = iou.max(dim=1)
         inside = (
-            (anchors[:, 0] >= 0) & (anchors[:, 1] >= 0)
-            & (anchors[:, 2] <= img_w) & (anchors[:, 3] <= img_h)
+            (anchors[:, 0] >= 0)
+            & (anchors[:, 1] >= 0)
+            & (anchors[:, 2] <= img_w)
+            & (anchors[:, 3] <= img_h)
         )
         labels[max_iou < self.neg_iou_thr] = 0
         pos = (max_iou >= self.pos_iou_thr) & inside
@@ -256,7 +267,9 @@ class ATSSAssigner:
         self.num_anchors = num_anchors
         self.topk = topk
 
-    def assign(self, anchors_per_level, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, strides, image_hw):
+    def assign(
+        self, anchors_per_level, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, strides, image_hw
+    ):
         """anchors_per_level: 每层 (Ni, 4)。
 
         Returns:
@@ -352,12 +365,14 @@ class TaskAlignedAssigner:
         for j in range(gt_boxes.shape[0]):
             box = gt_boxes[j]
             inside = (
-                (all_centers[:, 0] >= box[0]) & (all_centers[:, 0] <= box[2])
-                & (all_centers[:, 1] >= box[1]) & (all_centers[:, 1] <= box[3])
+                (all_centers[:, 0] >= box[0])
+                & (all_centers[:, 0] <= box[2])
+                & (all_centers[:, 1] >= box[1])
+                & (all_centers[:, 1] <= box[3])
             )
             iou = _box_iou_matrix(all_boxes, box[None])[:, 0]
             cls_score = torch.sigmoid(all_scores[:, gt_labels[j]])
-            align = (cls_score ** self.alpha) * (iou ** self.beta)
+            align = (cls_score**self.alpha) * (iou**self.beta)
             align = torch.where(inside & (iou > 0), align, torch.full_like(align, -1e9))
 
             k = min(self.topk, int((inside & (iou > 0)).sum().item()))

@@ -2,12 +2,11 @@
 """SegmentationModel 与分割头测试（S4）。"""
 
 import pytest
-import torch
 
 torch = pytest.importorskip("torch")
 
-from dvisionix.models import build_model, SegmentationModel
-from dvisionix.registry import MODELS, HEADS
+from dvisionix.models import build_model
+from dvisionix.registry import HEADS, MODELS
 
 STAGES = [
     {"type": "conv_norm_act", "in_channels": 3, "out_channels": 16, "stride": 2},
@@ -18,9 +17,14 @@ BACKBONE = {"type": "sequential_backbone", "stages": STAGES, "features_only": Tr
 
 
 def _seg_model(head):
-    return build_model({
-        "type": "segmentation_model", "num_classes": 4, "backbone": BACKBONE, "head": head,
-    })
+    return build_model(
+        {
+            "type": "segmentation_model",
+            "num_classes": 4,
+            "backbone": BACKBONE,
+            "head": head,
+        }
+    )
 
 
 def test_deeplabv3_head_forward():
@@ -55,6 +59,7 @@ def test_segmentation_registry():
 
 def test_segmentation_task_integration():
     from dvisionix.training import SegmentationTask
+
     task = SegmentationTask(num_classes=4)
     model = _seg_model({"type": "deeplabv3_head", "num_classes": 4})
     batch = {

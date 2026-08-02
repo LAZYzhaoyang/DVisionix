@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...base import BaseModel
 from ....registry import HEADS
+from ...base import BaseModel
 
 
 @HEADS.register()

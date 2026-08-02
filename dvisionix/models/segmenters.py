@@ -6,10 +6,17 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn.functional as F
 
+from ..registry import BACKBONES, HEADS, MODELS, NECKS
 from .base import BaseModel
-from ..registry import MODELS, BACKBONES, NECKS, HEADS
 
-_LIST_INPUT_HEADS = ("unet_decoder", "UNetDecoder", "segformer_head", "SegFormerHead", "maskformer_head", "MaskFormerHead")
+_LIST_INPUT_HEADS = (
+    "unet_decoder",
+    "UNetDecoder",
+    "segformer_head",
+    "SegFormerHead",
+    "maskformer_head",
+    "MaskFormerHead",
+)
 
 
 @MODELS.register()
@@ -52,8 +59,13 @@ class SegmentationModel(BaseModel):
             self.neck = NECKS.build(neck_cfg)
             neck_out = getattr(self.neck, "out_channels", None)
             self.in_channels = (
-                neck_out if isinstance(neck_out, int)
-                else (neck_out[-1] if isinstance(neck_out, (list, tuple)) else self.backbone.out_channels[-1])
+                neck_out
+                if isinstance(neck_out, int)
+                else (
+                    neck_out[-1]
+                    if isinstance(neck_out, (list, tuple))
+                    else self.backbone.out_channels[-1]
+                )
             )
         else:
             self.neck = None

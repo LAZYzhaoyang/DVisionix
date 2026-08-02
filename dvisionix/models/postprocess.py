@@ -5,8 +5,6 @@
 提供纯 PyTorch 实现的单类与多类 NMS，避免依赖 torchvision.ops。
 """
 
-from typing import Tuple
-
 import torch
 
 
@@ -117,9 +115,17 @@ def fcos_decode(
             xs = (torch.arange(w, device=device) + 0.5) * stride
             cx, cy = torch.meshgrid(xs, ys, indexing="xy")
             dist = torch.exp(reg) * stride
-            boxes = torch.stack([
-                cx - dist[0], cy - dist[1], cx + dist[2], cy + dist[3],
-            ], dim=-1).reshape(-1, 4)  # (H*W, 4)
+            boxes = torch.stack(
+                [
+                    cx - dist[0],
+                    cy - dist[1],
+                    cx + dist[2],
+                    cy + dist[3],
+                ],
+                dim=-1,
+            ).reshape(
+                -1, 4
+            )  # (H*W, 4)
 
             cls_prob = torch.sigmoid(cls).reshape(num_classes, -1).t()  # (N, C)
             center_prob = torch.sigmoid(center).reshape(-1)
@@ -183,7 +189,9 @@ def retinanet_decode(
             n_loc = h * w
             anchors = anchors_per_level[lvl]  # (n_loc*A, 4)
 
-            cls_flat = cls.reshape(A, num_classes, h, w).permute(2, 3, 0, 1).reshape(-1, num_classes)  # (n_loc*A, C)
+            cls_flat = (
+                cls.reshape(A, num_classes, h, w).permute(2, 3, 0, 1).reshape(-1, num_classes)
+            )  # (n_loc*A, C)
             reg_flat = reg.reshape(A, 4, h, w).permute(2, 3, 0, 1).reshape(-1, 4)
             boxes = delta2bbox(reg_flat, anchors)
 
@@ -245,9 +253,15 @@ def yolo_decode(
             xs = (torch.arange(w, device=device) + 0.5) * stride
             cx, cy = torch.meshgrid(xs, ys, indexing="xy")
             ltrb = reg * stride
-            boxes = torch.stack([
-                cx - ltrb[0], cy - ltrb[1], cx + ltrb[2], cy + ltrb[3],
-            ], dim=-1).reshape(-1, 4)
+            boxes = torch.stack(
+                [
+                    cx - ltrb[0],
+                    cy - ltrb[1],
+                    cx + ltrb[2],
+                    cy + ltrb[3],
+                ],
+                dim=-1,
+            ).reshape(-1, 4)
 
             cls_prob = torch.sigmoid(cls).reshape(num_classes, -1).t()  # (N, C)
             scores = cls_prob.reshape(-1)
@@ -323,4 +337,46 @@ def detr_decode(
         labels_list.append(lb)
     return boxes_list, scores_list, labels_list
 
-__all__ = ["nms", "batched_nms", "box_iou", "fcos_decode", "retinanet_decode", "yolo_decode", "detr_decode"]
+
+__all__ = [
+    "nms",
+    "batched_nms",
+    "box_iou",
+    "fcos_decode",
+    "retinanet_decode",
+    "yolo_decode",
+    "detr_decode",
+]
+
+
+def maskformer_decode(
+    preds,
+    image_hw,
+    score_threshold: float = 0.3,
+    mask_threshold: float = 0.5,
+    max_detections: int = 100,
+):
+    """MaskFormerHead full 模式解码：逐 query mask + 类别 + 分数。
+
+    Returns:
+        (masks_list, scores_list, labels_list)：每张图 (K, H, W) bool / (K,) / (K,)。
+    """
+    logits, masks = preds["pred_logits"], preds["pred_masks"]  # (B,Q,C+1), (B,Q,H,W)
+    img_h, img_w = image_hw
+    masks = masks.sigmoid()
+    probs = torch.softmax(logits, dim=-1)[..., :-1]  # (B, Q, C)
+    scores, labels = probs.max(dim=-1)
+    masks_list, scores_list, labels_list = [], [], []
+    for b in range(scores.shape[0]):
+        keep = scores[b] >= score_threshold
+        m = masks[b][keep] > mask_threshold
+        s = scores[b][keep]
+        lb = labels[b][keep]
+        # 限制检测数
+        if m.shape[0] > max_detections:
+            _, idx = s.topk(max_detections)
+            m, s, lb = m[idx], s[idx], lb[idx]
+        masks_list.append(m)
+        scores_list.append(s)
+        labels_list.append(lb)
+    return masks_list, scores_list, labels_list

@@ -10,7 +10,9 @@ from dvisionix.utils.logging import TrainingLogger
 
 def test_training_logger_jsonl_and_log():
     with tempfile.TemporaryDirectory() as tmpdir:
-        logger = TrainingLogger("test_tl", log_dir=tmpdir, tb_dir=os.path.join(tmpdir, "tb"), console=False)
+        logger = TrainingLogger(
+            "test_tl", log_dir=tmpdir, tb_dir=os.path.join(tmpdir, "tb"), console=False
+        )
         logger.log_metrics(step=1, mode="train", metrics={"loss": 0.5, "acc": 0.9})
         logger.log_event("train_end", epochs=2, global_step=10)
         logger.close()

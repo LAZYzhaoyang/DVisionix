@@ -9,42 +9,42 @@
 - ``collate``：检测 / 分割任务的变长 collate。
 """
 
-from .sample import Sample, ImageInfo, ImageMode, NormalizationSpec
+from . import (
+    presets,  # 注册到 DATASETS
+    transforms,
+)
 from .base import BaseDataset
 from .collate import detection_collate, segmentation_collate
 from .datasets.custom import CustomDataset
-from . import transforms
+from .sample import ImageInfo, ImageMode, NormalizationSpec, Sample
 from .transforms import (  # noqa: E402  预设 pipeline 别名
-    ClassificationTransforms,
-    DetectionTransforms,
-    SegmentationTransforms,
-)
-from . import presets  # 注册到 DATASETS
-from .transforms import (
-    BaseTransform,
-    TransformPipeline,
-    build_transform,
-    build_pipeline,
-    # 原子 image
-    ImageResize,
-    RandomHorizontalFlip,
-    RandomVerticalFlip,
-    RandomCrop,
-    CenterCrop,
-    ColorJitter,
-    ImageNormalize,
-    ToTensor,
-    # 几何同步
-    BoxSyncResize,
-    BoxSyncRandomHorizontalFlip,
-    BoxSyncRandomCrop,
-    BoxSyncPad,
-    # 标签
-    LabelToTensor,
-    BoxesToTensor,
-    MaskToTensor,
     # 第三方
     AlbumentationsWrapper,
+    BaseTransform,
+    BoxesToTensor,
+    BoxSyncPad,
+    BoxSyncRandomCrop,
+    BoxSyncRandomHorizontalFlip,
+    # 几何同步
+    BoxSyncResize,
+    CenterCrop,
+    ClassificationTransforms,
+    ColorJitter,
+    DetectionTransforms,
+    ImageNormalize,
+    # 原子 image
+    ImageResize,
+    # 标签
+    LabelToTensor,
+    MaskToTensor,
+    RandomCrop,
+    RandomHorizontalFlip,
+    RandomVerticalFlip,
+    SegmentationTransforms,
+    ToTensor,
+    TransformPipeline,
+    build_pipeline,
+    build_transform,
 )
 
 __all__ = [
@@ -97,6 +97,7 @@ __all__ = [
 # 注册表集成（配置驱动构建）
 # =============================================================================
 from typing import Any, Dict
+
 from ..registry import DATASETS
 
 

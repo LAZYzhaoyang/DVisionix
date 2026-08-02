@@ -9,7 +9,7 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-from .logger import get_logger, format_metrics
+from .logger import format_metrics, get_logger
 from .tensorboard import TensorBoardWriter
 
 
@@ -57,17 +57,21 @@ class TrainingLogger:
     # ------------------------------------------------------------------
     # 指标
     # ------------------------------------------------------------------
-    def log_metrics(self, step: int, mode: str, metrics: Dict[str, float], precision: int = 4) -> None:
+    def log_metrics(
+        self, step: int, mode: str, metrics: Dict[str, float], precision: int = 4
+    ) -> None:
         """记录一组指标：console 摘要 + JSONL 事件 + TensorBoard 标量。"""
         self.logger.info(f"[{mode}][step {step}] {format_metrics(metrics, precision)}")
 
         if self.jsonl_path is not None:
-            self._write_jsonl({
-                "event": "metrics",
-                "step": step,
-                "mode": mode,
-                "metrics": {k: round(float(v), 8) for k, v in metrics.items()},
-            })
+            self._write_jsonl(
+                {
+                    "event": "metrics",
+                    "step": step,
+                    "mode": mode,
+                    "metrics": {k: round(float(v), 8) for k, v in metrics.items()},
+                }
+            )
 
         if self.tb.enabled:
             for k, v in metrics.items():

@@ -5,10 +5,9 @@
 供自定义 layer 与 model 复用，避免到处 ``if name == ...`` 的分支。
 """
 
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Union
 
 import torch.nn as nn
-
 
 _NORM_LAYERS = {
     "bn": nn.BatchNorm2d,
@@ -73,9 +72,7 @@ def build_norm_layer(
 
     key = name.lower()
     if key not in _NORM_LAYERS:
-        raise KeyError(
-            f"Unknown norm '{name}'. Available: {sorted(_NORM_LAYERS)}"
-        )
+        raise KeyError(f"Unknown norm '{name}'. Available: {sorted(_NORM_LAYERS)}")
     layer_cls = _NORM_LAYERS[key]
 
     if layer_cls is nn.GroupNorm:
@@ -118,9 +115,7 @@ def build_activation_layer(
 
     key = name.lower()
     if key not in _ACT_LAYERS:
-        raise KeyError(
-            f"Unknown activation '{name}'. Available: {sorted(_ACT_LAYERS)}"
-        )
+        raise KeyError(f"Unknown activation '{name}'. Available: {sorted(_ACT_LAYERS)}")
     layer_cls = _ACT_LAYERS[key]
     # inplace 对支持的激活默认开启，减小显存
     if layer_cls in (nn.ReLU, nn.ReLU6, nn.LeakyReLU, nn.ELU, nn.SiLU) and "inplace" not in extra:

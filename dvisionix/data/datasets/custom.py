@@ -7,11 +7,9 @@
 
 from typing import Any, Callable, Dict, List, Optional
 
-import numpy as np
-
+from ...registry import DATASETS
 from ..base import BaseDataset
 from ..collate import detection_collate, segmentation_collate
-from ...registry import DATASETS
 
 
 @DATASETS.register()

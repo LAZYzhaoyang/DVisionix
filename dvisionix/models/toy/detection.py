@@ -50,7 +50,6 @@ class GridDetectionModel(BaseModel):
         """网格输出 -> (boxes_list, scores_list, labels_list)（含 NMS）。"""
         B, C, GH, GW = preds.shape
         img_h, img_w = image_hw
-        device = preds.device
 
         obj = torch.sigmoid(preds[:, 0, :, :])
         box = torch.sigmoid(preds[:, 1:5, :, :])

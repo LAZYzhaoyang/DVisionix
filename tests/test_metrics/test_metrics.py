@@ -6,15 +6,25 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-import numpy as np
 import pytest
 import torch
 
 from dvisionix.metrics import (
-    Accuracy, TopKAccuracy, Precision, Recall, F1Score,
-    MeanIoU, PixelAccuracy, DiceScore, MeanAveragePrecision,
-    MetricCollection, get_preset_metrics, build_metric,
-    ClassificationMetrics, SegmentationMetrics, DetectionMetrics, BaseMetric,
+    Accuracy,
+    BaseMetric,
+    ClassificationMetrics,
+    DetectionMetrics,
+    DiceScore,
+    F1Score,
+    MeanAveragePrecision,
+    MeanIoU,
+    MetricCollection,
+    PixelAccuracy,
+    Precision,
+    Recall,
+    TopKAccuracy,
+    build_metric,
+    get_preset_metrics,
 )
 from dvisionix.registry import METRICS
 
@@ -27,9 +37,16 @@ def _cls_logits():
 
 
 def _seg_logits():
-    target = torch.tensor([[
-        [0, 0, 1, 1], [0, 0, 1, 1], [2, 2, 0, 0], [2, 2, 0, 0],
-    ]])
+    target = torch.tensor(
+        [
+            [
+                [0, 0, 1, 1],
+                [0, 0, 1, 1],
+                [2, 2, 0, 0],
+                [2, 2, 0, 0],
+            ]
+        ]
+    )
     logits = torch.zeros(1, 3, 4, 4)
     for c in range(3):
         logits[0, c] = (target[0] == c).float() * 10
@@ -101,19 +118,26 @@ class TestAtomicDetection:
 
     def test_empty(self):
         m = MeanAveragePrecision(num_classes=2, iou_thresholds=[0.5])
-        m.update([torch.zeros((0, 4))], [torch.zeros(0)], [torch.zeros(0, dtype=torch.long)],
-                 [torch.zeros((0, 4))], [torch.zeros(0, dtype=torch.long)])
+        m.update(
+            [torch.zeros((0, 4))],
+            [torch.zeros(0)],
+            [torch.zeros(0, dtype=torch.long)],
+            [torch.zeros((0, 4))],
+            [torch.zeros(0, dtype=torch.long)],
+        )
         assert float(m.compute()["mAP"]) == 0.0
 
 
 class TestMetricCollection:
     def test_mixed_specs(self):
         logits, targets = _cls_logits()
-        mc = MetricCollection([
-            "accuracy",
-            {"type": "f1_score", "average": "macro", "num_classes": 5},
-            TopKAccuracy(k=2),
-        ])
+        mc = MetricCollection(
+            [
+                "accuracy",
+                {"type": "f1_score", "average": "macro", "num_classes": 5},
+                TopKAccuracy(k=2),
+            ]
+        )
         mc.update(logits, targets)
         res = mc.compute()
         assert set(["accuracy", "f1", "top2_acc"]).issubset(res.keys())

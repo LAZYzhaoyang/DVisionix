@@ -11,13 +11,13 @@ import torch
 import torch.nn as nn
 
 from dvisionix.models import (
+    MLP,
+    ConvNormAct,
+    DropPath,
+    SEBlock,
+    build_activation_layer,
     build_layer,
     build_norm_layer,
-    build_activation_layer,
-    ConvNormAct,
-    MLP,
-    SEBlock,
-    DropPath,
 )
 from dvisionix.registry import LAYERS
 
@@ -96,6 +96,7 @@ class TestTimmLayers:
     def test_create_timm_layer(self):
         pytest.importorskip("timm")
         from dvisionix.models import create_timm_layer
+
         se = create_timm_layer("SqueezeExcite", 16)
         out = se(torch.randn(2, 16, 8, 8))
         assert out.shape == (2, 16, 8, 8)
@@ -109,6 +110,7 @@ class TestTimmLayers:
     def test_list_timm_layers(self):
         pytest.importorskip("timm")
         from dvisionix.models import list_timm_layers
+
         names = list_timm_layers()
         assert "SqueezeExcite" in names
 

@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """Grid 风格单层检测头（DetHead）。"""
 
-import torch
 import torch.nn as nn
 
-from ...base import BaseModel
 from ....registry import HEADS
+from ...base import BaseModel
 
 
 @HEADS.register()
