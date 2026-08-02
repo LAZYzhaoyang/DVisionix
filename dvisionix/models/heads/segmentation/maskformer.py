@@ -29,12 +29,14 @@ class MaskFormerHead(BaseModel):
         num_queries: int = 50,
         num_decoder_layers: int = 2,
         num_heads: int = 4,
+        output_mode: str = "semantic",
     ):
         super().__init__(task_type="segmentation")
         self.in_channels_list = list(in_channels_list)
         self.num_classes = num_classes
         self.d_model = d_model
         self.num_queries = num_queries
+        self.output_mode = output_mode  # "semantic"（张量）| "full"（dict，含 pred_logits/pred_masks）
 
         self.pixel_decoder = nn.ModuleList([nn.Conv2d(c, d_model, 1) for c in in_channels_list])
         self.query_embed = nn.Embedding(num_queries, d_model)
@@ -68,6 +70,8 @@ class MaskFormerHead(BaseModel):
 
         probs = torch.softmax(class_logits, dim=-1)[:, :, : self.num_classes]  # (B, Q, C)
         semantic = torch.einsum("bqc,bqhw->bchw", probs, masks)
+        if self.output_mode == "full":
+            return {"pred_logits": class_logits, "pred_masks": masks, "semantic_logits": semantic}
         return semantic
 
 

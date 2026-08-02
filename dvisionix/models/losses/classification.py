@@ -101,4 +101,35 @@ class BinaryCrossEntropy(BaseLoss):
         return F.binary_cross_entropy_with_logits(logits, targets.float(), reduction=self.reduction)
 
 
-__all__ = ["CrossEntropy", "FocalLoss", "BinaryCrossEntropy"]
+__all__ = ["CrossEntropy", "FocalLoss", "BinaryCrossEntropy", "DistillationLoss"]
+
+
+@LOSSES.register()
+@LOSSES.register(name="distillation")
+class DistillationLoss(BaseLoss):
+    """知识蒸馏损失：CE(硬标签) + alpha * KL(学生, 教师 soft targets)。
+
+    用法：自定义 Task 的 training_step 中调用
+    ``compute_loss(self.loss, student_logits, labels, teacher_logits=teacher_out)``。
+    """
+
+    name = "distillation"
+
+    def __init__(self, weight: float = 1.0, alpha: float = 0.5, temperature: float = 4.0):
+        super().__init__(weight)
+        self.alpha = float(alpha)
+        self.temperature = float(temperature)
+
+    def forward(self, logits, targets, teacher_logits=None, **kwargs):
+        t = self.temperature
+        ce = F.cross_entropy(logits, targets)
+        if teacher_logits is None:
+            return ce
+        kd = F.kl_div(
+            F.log_softmax(logits / t, dim=-1),
+            F.softmax(teacher_logits / t, dim=-1),
+            reduction="batchmean",
+        ) * (t * t)
+        return (1.0 - self.alpha) * ce + self.alpha * kd
+
+

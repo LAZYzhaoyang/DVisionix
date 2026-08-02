@@ -8,8 +8,8 @@
 """
 
 from .base import BaseLoss, LossComposer, build_loss, build_losses, compute_loss
-from .classification import CrossEntropy, FocalLoss, BinaryCrossEntropy
-from .segmentation import DiceLoss, CombinedSegmentationLoss
+from .classification import CrossEntropy, FocalLoss, BinaryCrossEntropy, DistillationLoss
+from .segmentation import DiceLoss, CombinedSegmentationLoss, MaskFormerLoss
 from .detection import (
     GridAssigner,
     GridDetectionLoss,
@@ -37,7 +37,9 @@ __all__ = [
     "CrossEntropy",
     "FocalLoss",
     "BinaryCrossEntropy",
+    "DistillationLoss",
     "DiceLoss",
+    "MaskFormerLoss",
     "CombinedSegmentationLoss",
     "GridAssigner",
     "GridDetectionLoss",

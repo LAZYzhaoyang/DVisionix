@@ -11,7 +11,8 @@
 - 数据集按 task 在 sample 中放额外字段：分类放 ``label``，检测放 ``boxes``+``labels``，
   分割放 ``mask``，自定义任务自由扩展。
 - ``BaseDataset`` 通过 ``@DATASETS.register()`` 注册到全局 ``DATASETS`` 注册表；
-  也可通过 ``task_type`` / ``name`` 等装饰器参数指定多个注册名。
+  也可通过 ``task_type`` / `
+ame`` 等装饰器参数指定多个注册名。
 """
 
 from typing import Any, Callable, Dict, List, Optional, Sequence, Union

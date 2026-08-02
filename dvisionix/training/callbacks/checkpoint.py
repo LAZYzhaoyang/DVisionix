@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """模型检查点保存回调（best.pt / last.pt / 可选 epoch 存档）。"""
 
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -18,6 +19,8 @@ class ModelCheckpoint(Callback):
         save_best_only: bool = True,
         save_last: bool = True,
         filename: Optional[str] = None,
+        save_every_n_epochs: Optional[int] = None,
+        max_epoch_checkpoints: Optional[int] = None,
     ):
         self.save_dir = Path(save_dir)
         self.monitor = monitor
@@ -25,6 +28,9 @@ class ModelCheckpoint(Callback):
         self.save_best_only = save_best_only
         self.save_last = save_last
         self.filename = filename  # 可选模板，如 "{epoch:03d}-{val_loss:.4f}.pt"
+        self.save_every_n_epochs = save_every_n_epochs
+        self.max_epoch_checkpoints = max_epoch_checkpoints
+        self.epoch_checkpoints: list = []
 
         self.best_value = float("inf") if mode == "min" else float("-inf")
         self.is_better = (lambda x, best: x < best) if mode == "min" else (lambda x, best: x > best)
@@ -46,6 +52,21 @@ class ModelCheckpoint(Callback):
         if self.filename is not None:
             name = self.filename.format(epoch=epoch + 1, **{k: v for k, v in logs.items() if isinstance(v, (int, float))})
             trainer.save_checkpoint(str(self.save_dir / name))
+
+        if self.save_every_n_epochs and (epoch + 1) % self.save_every_n_epochs == 0:
+            self._save_epoch_checkpoint(trainer, epoch + 1)
+
+    def _save_epoch_checkpoint(self, trainer: Any, epoch: int) -> None:
+        name = f"epoch={epoch}.pt"
+        path = str(self.save_dir / name)
+        trainer.save_checkpoint(path)
+        self.epoch_checkpoints.append(path)
+        if self.max_epoch_checkpoints and len(self.epoch_checkpoints) > self.max_epoch_checkpoints:
+            old = self.epoch_checkpoints.pop(0)
+            try:
+                os.remove(old)
+            except OSError:
+                pass
 
     def state_dict(self) -> Dict[str, Any]:
         return {"best_value": self.best_value}

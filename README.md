@@ -346,6 +346,13 @@ MIT License
   `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
 - **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
 
+### 0.6.0（训练工程与 Mask2Former 完整版）
+- MaskFormer 完整版：mask 监督（匈牙利 mask 匹配 + CE/Dice/BCE，`MaskFormerLoss`）；
+- 训练工程：`EMA` 回调、`DistillCallback` + `DistillationLoss`、ModelCheckpoint 保留策略
+  （`save_every_n_epochs` / `max_epoch_checkpoints`）、`history.csv` 导出；
+- CI：GitHub Actions（ruff / black / pytest，CPU 矩阵 3.10/3.11）；
+- 回调新增 `on_validation_begin/end` 钩子；YOLO 配置示例。
+
 ### 0.5.0（前沿检测与分割）
 - 检测：新增 `YOLODetector`（YOLOv8 风格，TaskAlignedAssigner）与 `DETRDetector`（transformer + HungarianMatcher）；
 - 分割：新增 `SegFormerHead`（MLP 解码）与 `MaskFormerHead`（query 掩码解码，compact）；

@@ -33,7 +33,8 @@ def create_timm_layer(name: str, *args: Any, **kwargs: Any):
         *args, **kwargs: 传给该类/函数的参数。
 
     Returns:
-        实例化后的 ``nn.Module`` 或工厂函数的返回值。
+        实例化后的 `
+n.Module`` 或工厂函数的返回值。
 
     Examples:
         >>> se = create_timm_layer("SqueezeExcite", 64, rd_ratio=0.25)

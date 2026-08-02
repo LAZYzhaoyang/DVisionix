@@ -29,6 +29,14 @@ class Callback:
     def on_epoch_begin(self, trainer: Any, epoch: int) -> None:
         pass
 
+    def on_validation_begin(self, trainer: Any) -> None:
+        """验证开始前调用（EMA 等在此换权重）。"""
+        pass
+
+    def on_validation_end(self, trainer: Any) -> None:
+        """验证结束后调用（EMA 等在此恢复权重）。"""
+        pass
+
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
         pass
 
@@ -63,6 +71,14 @@ class CallbackList:
     def on_epoch_begin(self, trainer: Any, epoch: int) -> None:
         for cb in self.callbacks:
             cb.on_epoch_begin(trainer, epoch)
+
+    def on_validation_begin(self, trainer: Any) -> None:
+        for cb in self.callbacks:
+            cb.on_validation_begin(trainer)
+
+    def on_validation_end(self, trainer: Any) -> None:
+        for cb in self.callbacks:
+            cb.on_validation_end(trainer)
 
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
         for cb in self.callbacks:

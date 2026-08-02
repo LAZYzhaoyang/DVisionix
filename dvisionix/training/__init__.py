@@ -28,6 +28,8 @@ from .callbacks import (
     ProgressBar,
     ModelCheckpoint,
     EarlyStopping,
+    EMA,
+    DistillCallback,
 )
 from .optim import OPTIMIZERS, build_optimizer, SCHEDULERS, build_scheduler
 from .evaluation import evaluate_detection
@@ -52,6 +54,8 @@ __all__ = [
     "ProgressBar",
     "ModelCheckpoint",
     "EarlyStopping",
+    "EMA",
+    "DistillCallback",
     "OPTIMIZERS",
     "build_optimizer",
     "SCHEDULERS",

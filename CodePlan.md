@@ -453,3 +453,37 @@ models/
 - YOLO 配置示例（configs/detection/yolo_synthetic.yaml）可按需补充。
 - 知识蒸馏回调（DistillCallback）可选。
 - DETR 系列进阶：Deformable DETR / RT-DETR。
+
+---
+
+# 训练工程与 Mask2Former 完整版（v0.6.0）
+
+## 一、训练工程
+- Callback 新增 `on_validation_begin / on_validation_end` 钩子（EMA 等换权重用）。
+- `EMA` 回调：影子权重 + 验证换入/恢复，随 checkpoint 保存 shadow。
+- `DistillCallback` + `DistillationLoss`（CE + alpha*KL，温度缩放）；teacher logits 挂 `trainer.teacher_logits`。
+- ModelCheckpoint 保留策略：`save_every_n_epochs` 周期存档 + `max_epoch_checkpoints` 上限清理。
+- Trainer 训练结束导出 `work_dir/history.csv`。
+
+## 二、Mask2Former 完整版
+- MaskFormerHead 支持 `output_mode="full"`：返回 `pred_logits / pred_masks / semantic_logits`。
+- `MaskFormerLoss`：匈牙利匹配（类别 + Dice 代价）+ CE + mask BCE + Dice。
+- SegmentationModel 对 dict 输出透传；语义版（默认）仍可直接用 SegmentationTask。
+- 实例/全景分割评估（COCO mask mAP）仍为后续计划。
+
+## 三、CI
+- `.github/workflows/ci.yml`：push/PR 触发，Python 3.10/3.11 CPU 矩阵，ruff + black + pytest。
+- 本机未安装 ruff/black，CI 需在 GitHub 上跑通（本地仅保证代码可测）。
+
+## 四、多卡验证（实现但不验证，隔离）
+- DDP 代码路径已隔离：`strategy='auto'` 在无多卡时自动降级 `none`；`strategy='ddp'` 且无 CUDA 时明确报错；
+  `tests/test_training/test_ddp_smoke.py` 无多卡自动 skip，不影响正常测试（200 passed + 2 skipped）。
+- 多卡验证步骤（待用户多卡机器执行）：
+  ```
+  torchrun --nproc_per_node=2 tools/train.py --config configs/classification/demo_synthetic.yaml --devices 0,1
+  torchrun --nproc_per_node=2 -m pytest tests/test_training/test_ddp_smoke.py -q
+  ```
+
+## 五、验证
+- 新增 tests/test_training/test_v05_engineering.py（EMA / history.csv / checkpoint 保留 / 蒸馏 / MaskFormerLoss）。
+- 统一全量测试：200 passed + 2 skipped。

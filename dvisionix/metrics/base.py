@@ -10,7 +10,8 @@
 约定：
 - 原子指标的 ``compute()`` 返回标量 ``float``（per-class 模式可返回 ``list``）。
 - 组合/预设指标的 ``compute()`` 返回 ``dict``（key 为各指标名）。
-- ``MetricCollection`` 汇总时：成员返回 dict 则合并其键，返回标量则以成员 ``name`` 为键。
+- ``MetricCollection`` 汇总时：成员返回 dict 则合并其键，返回标量则以成员 `
+ame`` 为键。
 
 为什么用累积式而非"逐 batch 求平均"：mIoU / mAP / macro-F1 等指标
 ``mean(每个 batch 的值) != 全局值``，必须先累积混淆矩阵 / TP-FP 再计算。

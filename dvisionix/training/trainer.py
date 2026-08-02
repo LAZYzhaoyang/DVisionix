@@ -163,6 +163,7 @@ class Trainer:
         self.global_step = 0
         self.stop_training = False
         self.history: List[Dict[str, float]] = []
+        self.teacher_logits = None  # DistillCallback 使用
 
     # ------------------------------------------------------------------
     # 分布式
@@ -308,6 +309,7 @@ class Trainer:
             self.callbacks.on_epoch_end(self, epoch, epoch_logs)
 
         self.callbacks.on_train_end(self)
+        self._write_history_csv()
         self.logger.info("Training finished!")
         if self._is_rank0():
             self.logger.log_event("train_end", epochs=self.current_epoch, global_step=self.global_step)
@@ -340,6 +342,7 @@ class Trainer:
         else:
             self.model.eval()
             loader = self.val_loader
+            self.callbacks.on_validation_begin(self)
 
         metric_sums: Dict[str, float] = {}
         metric_counts: Dict[str, int] = {}
@@ -389,6 +392,8 @@ class Trainer:
 
             self.callbacks.on_batch_end(self, batch_idx, step_logs, mode)
 
+        if mode == "val":
+            self.callbacks.on_validation_end(self)
         avg_metrics = {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
         return avg_metrics
 
@@ -530,5 +535,21 @@ class Trainer:
         self.logger.info(f"Checkpoint loaded from: {path}")
         self.logger.info(f"Resuming from epoch {self.current_epoch}, step {self.global_step}")
 
+    def _write_history_csv(self) -> None:
+        """将训练 history 导出到 work_dir/history.csv（可选，无 work_dir 时跳过）。"""
+        if not self.work_dir or not self.history:
+            return
+        try:
+            import csv
+            keys = sorted({k for epoch in self.history for k in epoch.keys()})
+            path = os.path.join(self.work_dir, "history.csv")
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=keys)
+                writer.writeheader()
+                for epoch in self.history:
+                    writer.writerow({k: epoch.get(k, "") for k in keys})
+            self.logger.info(f"History exported to: {path}")
+        except Exception as exc:  # pragma: no cover
+            self.logger.warning(f"Failed to export history.csv: {exc}")
 
 __all__ = ["Trainer"]

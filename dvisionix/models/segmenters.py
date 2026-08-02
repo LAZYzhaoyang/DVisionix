@@ -83,6 +83,8 @@ class SegmentationModel(BaseModel):
         else:
             feat = feats[-1] if isinstance(feats, (list, tuple)) else feats
             out = self.head(feat)
+        if isinstance(out, dict):
+            return out  # 多输出 head（如 MaskFormerHead full 模式）透传
         if self.upsample and out.shape[-2:] != x.shape[-2:]:
             out = F.interpolate(out, size=x.shape[-2:], mode="bilinear", align_corners=False)
         return out

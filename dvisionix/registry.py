@@ -86,7 +86,8 @@ class Registry:
     def build(self, cfg: Dict[str, Any], **default_kwargs: Any) -> Any:
         """从配置字典构建实例。
 
-        配置必须包含 `type` 字段（或 `name`）指定注册名称，
+        配置必须包含 `type` 字段（或 
+ame`）指定注册名称，
         其余字段作为构造参数传入。`default_kwargs` 会被配置覆盖。
         """
         if not isinstance(cfg, dict):

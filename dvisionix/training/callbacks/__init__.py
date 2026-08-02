@@ -8,6 +8,8 @@ from .base import Callback, CallbackList
 from .progress import ProgressBar
 from .checkpoint import ModelCheckpoint
 from .early_stopping import EarlyStopping
+from .ema import EMA
+from .distill import DistillCallback
 
 __all__ = [
     "Callback",
@@ -15,4 +17,6 @@ __all__ = [
     "ProgressBar",
     "ModelCheckpoint",
     "EarlyStopping",
+    "EMA",
+    "DistillCallback",
 ]
