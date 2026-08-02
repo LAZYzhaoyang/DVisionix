@@ -2,16 +2,16 @@
 """
 模型模块
 
-提供模型基类和各种任务的示例模型，以及 backbone/neck/head 组件化架构。
-Loss 组件位于 ``models/losses``（模型层的一部分），统一通过 LOSSES 注册表构建。
+组件化架构：backbones / necks / heads / detectors / losses / postprocess。
+
+- ``models.toy``：教学级模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel），
+  仅用于演示与快速验证，生产请用组件化模型。
+- ``models.detectors``：SingleStageDetector 脚手架 + FCOSDetector（anchor-free）+
+  RetinaNetDetector（anchor-based）+ AnchorGenerator。
+- ``models.losses``：Loss 组件（BaseLoss 继承 + LossComposer 组合 + 检测 assigner/损失）。
 """
 
-from .base import (
-    BaseModel,
-    SimpleCNN,
-    SimpleSegmentationModel,
-    TASK_TYPES,
-)
+from .base import BaseModel, TASK_TYPES
 from .backbones import TimmBackbone, TimmClassifier, list_timm_models, SequentialBackbone
 from .layers import (
     build_layer,
@@ -24,11 +24,14 @@ from .layers import (
     create_timm_layer,
     list_timm_layers,
 )
-from .detection import GridDetectionModel
-from .postprocess import nms, batched_nms, box_iou
-from .necks import FPN
-from .heads import ClsHead, SegHead, DetHead
-from .detectors import GeneralizedModel
+from .postprocess import nms, batched_nms, box_iou, fcos_decode, retinanet_decode
+from .classifiers import LinearClassifier
+from .segmenters import SegmentationModel
+from .detectors import SingleStageDetector, AnchorGenerator, FCOSDetector, RetinaNetDetector
+from .necks import FPN, PANet
+from .heads import ClsHead, SegHead, FCNHead, DeepLabV3Head, UNetDecoder, DetHead, ArcFaceHead, MultiLabelHead, FCOSHead, RetinaNetHead
+from . import toy
+from .toy import SimpleCNN, SimpleSegmentationModel, GridDetectionModel
 from . import losses
 from .losses import (
     BaseLoss,
@@ -38,6 +41,7 @@ from .losses import (
     compute_loss,
     CrossEntropy,
     FocalLoss,
+    BinaryCrossEntropy,
     DiceLoss,
     CombinedSegmentationLoss,
     GridAssigner,
@@ -46,12 +50,16 @@ from .losses import (
     GIoULoss,
     CIoULoss,
     L1BoxLoss,
+    FCOSAssigner,
+    MaxIoUAssigner,
+    ATSSAssigner,
+    SigmoidFocalLoss,
+    FCOSDetectionLoss,
+    RetinaNetLoss,
 )
 
 __all__ = [
     "BaseModel",
-    "SimpleCNN",
-    "SimpleSegmentationModel",
     "TASK_TYPES",
     "TimmBackbone",
     "TimmClassifier",
@@ -66,15 +74,34 @@ __all__ = [
     "DropPath",
     "create_timm_layer",
     "list_timm_layers",
-    "GridDetectionModel",
     "nms",
     "batched_nms",
     "box_iou",
+    "fcos_decode",
+    "retinanet_decode",
+    "LinearClassifier",
+    "SegmentationModel",
+    "SingleStageDetector",
+    "AnchorGenerator",
+    "FCOSDetector",
+    "RetinaNetDetector",
     "FPN",
+    "PANet",
     "ClsHead",
     "SegHead",
+    "FCNHead",
+    "DeepLabV3Head",
+    "UNetDecoder",
     "DetHead",
-    "GeneralizedModel",
+    "ArcFaceHead",
+    "MultiLabelHead",
+    "FCOSHead",
+    "RetinaNetHead",
+    "toy",
+    # 教学级模型（re-export，兼容旧导入）
+    "SimpleCNN",
+    "SimpleSegmentationModel",
+    "GridDetectionModel",
     # losses
     "BaseLoss",
     "LossComposer",
@@ -83,6 +110,7 @@ __all__ = [
     "compute_loss",
     "CrossEntropy",
     "FocalLoss",
+    "BinaryCrossEntropy",
     "DiceLoss",
     "CombinedSegmentationLoss",
     "GridAssigner",
@@ -91,6 +119,12 @@ __all__ = [
     "GIoULoss",
     "CIoULoss",
     "L1BoxLoss",
+    "FCOSAssigner",
+    "MaxIoUAssigner",
+    "ATSSAssigner",
+    "SigmoidFocalLoss",
+    "FCOSDetectionLoss",
+    "RetinaNetLoss",
 ]
 
 # =============================================================================
@@ -98,30 +132,6 @@ __all__ = [
 # =============================================================================
 from typing import Any, Dict
 from ..registry import MODELS, NECKS, HEADS, LAYERS
-
-_MODEL_ALIASES = {
-    SimpleCNN: "simple_cnn",
-    SimpleSegmentationModel: "simple_segmentation",
-    GridDetectionModel: "grid_detection",
-    TimmClassifier: "timm_classifier",
-}
-# 新增组件注册
-for _cls in (FPN,):
-    if _cls.__name__ not in NECKS:
-        NECKS.register(_cls)
-for _cls in (ClsHead, SegHead, DetHead):
-    if _cls.__name__ not in HEADS:
-        HEADS.register(_cls)
-if GeneralizedModel.__name__ not in MODELS:
-    MODELS.register(GeneralizedModel)
-if "generalized" not in MODELS:
-    MODELS.register(GeneralizedModel, name="generalized")
-for _cls in (SimpleCNN, SimpleSegmentationModel, GridDetectionModel, TimmClassifier):
-    if _cls.__name__ not in MODELS:
-        MODELS.register(_cls)
-for _cls, _alias in _MODEL_ALIASES.items():
-    if _alias not in MODELS:
-        MODELS.register(_cls, name=_alias)
 
 
 def build_neck(cfg: Dict[str, Any]):
@@ -135,13 +145,7 @@ def build_head(cfg: Dict[str, Any]):
 
 
 def build_model(cfg: Dict[str, Any]):
-    """从配置构建模型。
-
-    例如::
-
-        build_model({"type": "SimpleCNN", "num_classes": 10})
-        build_model({"type": "TimmClassifier", "name": "resnet18", "num_classes": 10})
-    """
+    """从配置构建模型。"""
     return MODELS.build(dict(cfg))
 
 

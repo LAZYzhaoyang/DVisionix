@@ -46,16 +46,18 @@ dvisionix/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath）
 │   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
-│   ├── necks/           # FPN
-│   ├── heads/           # ClsHead / SegHead / DetHead
-│   ├── detectors/       # GeneralizedModel（backbone+neck+head 组合）
-│   └── losses/          # Loss 组件（BaseLoss 继承 + LossComposer 自由组合，接入任意 Task）
+│   ├── necks/           # FPN / PANet
+│   ├── heads/           # 分类（Cls/ArcFace/MultiLabel）· 分割（Seg/FCN/DeepLabV3/UNet）· 检测（Det/FCOS/RetinaNet）
+│   ├── detectors/       # SingleStageDetector + FCOS（anchor-free）+ RetinaNet（anchor-based）
+│   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
+│   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
+│   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
+│   └── losses/          # BaseLoss + LossComposer + 检测 assigner/损失（即插即用）
 ├── training/
 │   ├── trainer.py       # 统一 Trainer（Task 驱动 / DDP / AMP / 梯度累积 / resume / work_dir）
-│   ├── task.py          # BaseTask + 分类/检测/分割任务（optimizer/loss/metrics 全配置化）
-│   ├── callbacks.py     # ProgressBar / ModelCheckpoint / EarlyStopping
-│   ├── optimizers.py    # OPTIMIZERS 注册表（adam/adamw/sgd/rmsprop）
-│   ├── schedulers.py    # SCHEDULERS 注册表（cosine/plateau/step/multi_step）
+│   ├── tasks/           # BaseTask + 分类/检测/分割任务（optimizer/loss/metrics 全配置化）—— 主扩展点
+│   ├── callbacks/       # CallbackList + ProgressBar/ModelCheckpoint/EarlyStopping —— 主扩展点
+│   ├── optim/           # OPTIMIZERS / SCHEDULERS 注册表 + build_optimizer / build_scheduler
 │   ├── workdir.py       # 工作目录隔离 + resume 三态 + config dump
 │   └── builder.py       # build_callbacks / build_trainer
 ├── data/
@@ -344,7 +346,15 @@ MIT License
   `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
 - **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
 
-### 0.3.1（结构 / 配置 / 导出优化）
+### 0.4.0（模型模块丰富）
+- 删除 GeneralizedModel（三任务万能模型，契约弱、检测半成品），替换为具体模型 + 共享脚手架；
+- 检测：`FCOSDetector`（anchor-free）与 `RetinaNetDetector`（anchor-based）并存，
+  assigner 即插即用（FCOS / MaxIoU / ATSS），decode 进 postprocess；
+- 分割：`SegmentationModel` + `DeepLabV3Head`(ASPP) / `UNetDecoder` / `FCNHead`；
+- 分类：`LinearClassifier` + `ArcFaceHead` / `MultiLabelHead`（+ BCE 多标签损失）；
+- 颈部：新增 `PANet`（FPN + 自底向上路径）；
+- 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）迁入 `models.toy`；
+- 配置系统支持 `_delete_: true` 替换语义（解决继承时类型专属参数残留）。
 - `training/` 重组为 `tasks/` `callbacks/` `optim/` 子包（顶层 API 不变）；
 - Config 新增 schema 校验（未知键告警 / 类型校验），CLI 支持 list/dict；
 - `ONNXExporter` 支持多输入 / 多输出 / dict 输出 / `backend=trace|dynamo` / 归一化元数据。

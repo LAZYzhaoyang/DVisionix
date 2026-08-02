@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""模型组件化架构测试：backbone / neck / head / GeneralizedModel。"""
+"""模型组件化架构测试：backbone / neck / head 组件与构建入口。"""
 
 import pytest
 
@@ -33,30 +33,18 @@ def test_registries_contain_components():
     assert "cls_head" in HEADS
     assert "seg_head" in HEADS
     assert "det_head" in HEADS
-    assert "generalized" in MODELS
+    # 教学模型注册
+    assert "SimpleCNN" in MODELS and "simple_cnn" in MODELS
+    assert "GridDetectionModel" in MODELS
 
 
-def test_generalized_classification():
-    pytest.importorskip("timm")
-    m = build_model({
-        "type": "generalized", "task_type": "classification",
-        "backbone": {"type": "timm_backbone", "name": "resnet18", "pretrained": False},
-        "head": {"type": "cls_head", "num_classes": 7},
-    })
-    out = m(torch.randn(1, 3, 64, 64))
-    assert out.shape == (1, 7)
+def test_toy_models_build_and_forward():
+    cls_model = build_model({"type": "simple_cnn", "num_classes": 7})
+    assert cls_model(torch.randn(2, 3, 32, 32)).shape == (2, 7)
 
-
-def test_generalized_segmentation():
-    pytest.importorskip("timm")
-    m = build_model({
-        "type": "generalized", "task_type": "segmentation",
-        "backbone": {"type": "timm_backbone", "name": "resnet18", "features_only": True,
-                     "out_indices": [4], "pretrained": False},
-        "head": {"type": "seg_head", "num_classes": 4},
-    })
-    out = m(torch.randn(1, 3, 64, 64))
-    assert out.shape == (1, 4, 64, 64)
+    det_model = build_model({"type": "grid_detection", "num_classes": 3})
+    out = det_model(torch.randn(2, 3, 64, 64))
+    assert out.shape[1] == 5 + 3
 
 
 def test_base_model_contract():

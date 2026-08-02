@@ -1,0 +1,51 @@
+# RetinaNet（anchor-based）端到端 demo 配置
+_base_: "../../dvisionix/config/defaults/detection.yaml"
+
+experiment_name: "demo_retinanet_synthetic"
+
+model:
+  _delete_: true
+  type: "retinanet"
+  num_classes: 3
+  backbone:
+    type: "timm_backbone"
+    name: "resnet18"
+    pretrained: false
+    features_only: true
+    out_indices: [1, 2, 3, 4]
+  neck:
+    type: "fpn"
+    out_channels: 64
+  head:
+    type: "retinanet_head"
+    num_classes: 3
+    num_anchors: 9
+  strides: [4, 8, 16, 32]
+  base_sizes: [16, 32, 64, 128]
+
+loss:
+  _delete_: true
+  type: "retinanet_detection"
+  assigner: "max_iou"
+  strides: [4, 8, 16, 32]
+  base_sizes: [16, 32, 64, 128]
+
+data:
+  dataset: "synthetic"
+  image_size: 64
+  num_samples: 64
+  val_samples: 16
+  max_boxes: 3
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  optimizer: {type: adam, lr: 0.001, weight_decay: 0.0001}
+  device: "auto"
+  num_workers: 0
+  early_stopping: {enabled: false}
+
+checkpoint:
+  save_dir: "checkpoints"
+  monitor: "val_loss"
+  mode: "min"

@@ -1,8 +1,27 @@
 # -*- coding: utf-8 -*-
 """检测损失子包。"""
 
-from .assigner import GridAssigner
+from .assigner import GridAssigner, FCOSAssigner, MaxIoUAssigner, ATSSAssigner
 from .box_loss import GIoULoss, CIoULoss, L1BoxLoss
-from .losses import ObjectnessLoss, GridDetectionLoss
+from .losses import (
+    ObjectnessLoss,
+    GridDetectionLoss,
+    SigmoidFocalLoss,
+    FCOSDetectionLoss,
+    RetinaNetLoss,
+)
 
-__all__ = ["GridAssigner", "GIoULoss", "CIoULoss", "L1BoxLoss", "ObjectnessLoss", "GridDetectionLoss"]
+__all__ = [
+    "GridAssigner",
+    "FCOSAssigner",
+    "MaxIoUAssigner",
+    "ATSSAssigner",
+    "GIoULoss",
+    "CIoULoss",
+    "L1BoxLoss",
+    "ObjectnessLoss",
+    "GridDetectionLoss",
+    "SigmoidFocalLoss",
+    "FCOSDetectionLoss",
+    "RetinaNetLoss",
+]

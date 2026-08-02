@@ -84,4 +84,21 @@ class FocalLoss(BaseLoss):
         return loss.mean() if self.reduction == "mean" else loss.sum()
 
 
-__all__ = ["CrossEntropy", "FocalLoss"]
+
+
+@LOSSES.register()
+@LOSSES.register(name="binary_cross_entropy")
+class BinaryCrossEntropy(BaseLoss):
+    """多标签分类损失（BCE with logits，逐标签二分类）。"""
+
+    name = "binary_cross_entropy"
+
+    def __init__(self, weight: float = 1.0, reduction: str = "mean"):
+        super().__init__(weight)
+        self.reduction = reduction
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        return F.binary_cross_entropy_with_logits(logits, targets.float(), reduction=self.reduction)
+
+
+__all__ = ["CrossEntropy", "FocalLoss", "BinaryCrossEntropy"]

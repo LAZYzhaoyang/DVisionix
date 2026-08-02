@@ -66,3 +66,248 @@ class GridAssigner:
 
 
 __all__ = ["GridAssigner"]
+
+
+def _box_iou_matrix(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    """两组框的 IoU 矩阵：boxes1 (N,4) x boxes2 (M,4) -> (N,M)。"""
+    area1 = (boxes1[:, 2] - boxes1[:, 0]).clamp(min=0) * (boxes1[:, 3] - boxes1[:, 1]).clamp(min=0)
+    area2 = (boxes2[:, 2] - boxes2[:, 0]).clamp(min=0) * (boxes2[:, 3] - boxes2[:, 1]).clamp(min=0)
+    lt = torch.max(boxes1[:, None, :2], boxes2[None, :, :2])
+    rb = torch.min(boxes1[:, None, 2:], boxes2[None, :, 2:])
+    wh = (rb - lt).clamp(min=0)
+    inter = wh[:, :, 0] * wh[:, :, 1]
+    union = area1[:, None] + area2[None, :] - inter + 1e-8
+    return inter / union
+
+
+class FCOSAssigner:
+    """FCOS 目标分配器（中心采样 + 尺度约束 + 至少一个正样本回退）。
+
+    标签语义：-1 忽略，0 背景，1..num_classes 为类别（class c -> c+1）。
+    """
+
+    def __init__(
+        self,
+        num_classes: int,
+        strides=(8, 16, 32, 64, 128),
+        scales=(0.0, 64.0, 128.0, 256.0, 512.0, 1e10),
+        center_sampling: bool = True,
+        center_sample_radius: float = 1.5,
+        min_pos: int = 1,
+    ):
+        self.num_classes = num_classes
+        self.strides = list(strides)
+        self.scales = list(scales)
+        self.center_sampling = center_sampling
+        self.center_sample_radius = center_sample_radius
+        self.min_pos = min_pos
+
+    def assign(self, feature_shapes, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, image_hw):
+        """为单张图生成各层目标。
+
+        Args:
+            feature_shapes: 每层 (H, W) 列表。
+            gt_boxes: (M, 4) 像素 xyxy。
+            gt_labels: (M,) 类别索引。
+
+        Returns:
+            每层 (labels, bbox_targets, reg_targets, centerness)：
+            - labels: (N,) long
+            - bbox_targets: (N, 4) 像素 xyxy
+            - reg_targets: (N, 4) log(距离/stride)
+            - centerness: (N,)
+        """
+        img_h, img_w = image_hw
+        results = []
+        for lvl, (h, w) in enumerate(feature_shapes):
+            stride = self.strides[lvl]
+            device = gt_boxes.device if gt_boxes.numel() else gt_labels.device
+            ys = (torch.arange(h, device=device) + 0.5) * stride
+            xs = (torch.arange(w, device=device) + 0.5) * stride
+            cx, cy = torch.meshgrid(xs, ys, indexing="xy")
+            centers = torch.stack([cx.reshape(-1), cy.reshape(-1)], dim=1)
+
+            labels = torch.full((h * w,), -1, dtype=torch.long, device=device)
+            bbox_targets = torch.zeros((h * w, 4), device=device)
+            reg_targets = torch.zeros((h * w, 4), device=device)
+            centerness = torch.zeros((h * w,), device=device)
+
+            if gt_boxes.numel() == 0:
+                labels[:] = 0
+                results.append((labels, bbox_targets, reg_targets, centerness))
+                continue
+
+            gt_boxes = gt_boxes.to(device).float()
+            gt_labels = gt_labels.to(device).long()
+            area_min, area_max = self.scales[lvl], self.scales[lvl + 1]
+
+            for j in range(gt_boxes.shape[0]):
+                x1, y1, x2, y2 = gt_boxes[j].unbind()
+                gw, gh = x2 - x1, y2 - y1
+                if gw <= 0 or gh <= 0:
+                    continue
+                area = gw * gh
+                if not (area_min <= area < area_max):
+                    continue
+
+                l = centers[:, 0] - x1
+                t = centers[:, 1] - y1
+                r = x2 - centers[:, 0]
+                b = y2 - centers[:, 1]
+                dist = torch.stack([l, t, r, b], dim=1)  # (N,4)
+                inside = (dist > 0).all(dim=1)
+
+                if self.center_sampling:
+                    radius = self.center_sample_radius * stride
+                    gcx, gcy = (x1 + x2) / 2, (y1 + y2) / 2
+                    center_ok = (
+                        (centers[:, 0] >= gcx - radius) & (centers[:, 0] <= gcx + radius)
+                        & (centers[:, 1] >= gcy - radius) & (centers[:, 1] <= gcy + radius)
+                    )
+                    candidate = inside & center_ok
+                else:
+                    candidate = inside
+
+                if candidate.any():
+                    labels[candidate] = gt_labels[j] + 1
+                    bbox_targets[candidate] = gt_boxes[j]
+                    reg_targets[candidate] = torch.log(dist[candidate] / stride + 1e-8)
+                    lrtb = dist[candidate].clamp(min=0)
+                    min_lr = torch.min(lrtb[:, 0], lrtb[:, 2])
+                    max_lr = torch.max(lrtb[:, 0], lrtb[:, 2])
+                    min_tb = torch.min(lrtb[:, 1], lrtb[:, 3])
+                    max_tb = torch.max(lrtb[:, 1], lrtb[:, 3])
+                    centerness[candidate] = torch.sqrt(min_lr * min_tb / (max_lr * max_tb + 1e-8))
+
+            # min_pos 回退：保证每个 gt 至少一个正样本
+            if self.min_pos > 0:
+                for j in range(gt_boxes.shape[0]):
+                    if not (labels == (gt_labels[j] + 1)).any():
+                        gcx = (gt_boxes[j, 0] + gt_boxes[j, 2]) / 2
+                        gcy = (gt_boxes[j, 1] + gt_boxes[j, 3]) / 2
+                        d2 = (centers[:, 0] - gcx) ** 2 + (centers[:, 1] - gcy) ** 2
+                        best = d2.argmin()
+                        labels[best] = gt_labels[j] + 1
+                        bbox_targets[best] = gt_boxes[j]
+                        x1, y1, x2, y2 = gt_boxes[j].unbind()
+                        dist = torch.stack([
+                            centers[best, 0] - x1, centers[best, 1] - y1,
+                            x2 - centers[best, 0], y2 - centers[best, 1],
+                        ]).clamp(min=1e-6)  # 框外回退位置需保证距离非负
+                        reg_targets[best] = torch.log(dist / stride)
+                        centerness[best] = 1.0
+
+            labels[labels == -1] = 0
+            results.append((labels, bbox_targets, reg_targets, centerness))
+        return results
+
+
+class MaxIoUAssigner:
+    """RetinaNet 默认分配器：按最大 IoU 分配 anchor（>=pos 正样本，<neg 负样本，中间忽略）。"""
+
+    def __init__(self, num_classes: int, pos_iou_thr: float = 0.5, neg_iou_thr: float = 0.4):
+        self.num_classes = num_classes
+        self.pos_iou_thr = pos_iou_thr
+        self.neg_iou_thr = neg_iou_thr
+
+    def assign(self, anchors: torch.Tensor, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, image_hw):
+        """anchors: (N, 4) 全部层展平。
+
+        Returns:
+            (labels (N,) [-1,0..C], bbox_targets (N,4) 像素 xyxy)
+        """
+        img_h, img_w = image_hw
+        device = anchors.device
+        n = anchors.shape[0]
+        labels = torch.full((n,), -1, dtype=torch.long, device=device)
+        bbox_targets = torch.zeros_like(anchors)
+
+        if gt_boxes.numel() == 0:
+            labels[:] = 0
+            return labels, bbox_targets
+
+        gt_boxes = gt_boxes.to(device).float()
+        gt_labels = gt_labels.to(device).long()
+        iou = _box_iou_matrix(anchors, gt_boxes)
+        max_iou, argmax_gt = iou.max(dim=1)
+        inside = (
+            (anchors[:, 0] >= 0) & (anchors[:, 1] >= 0)
+            & (anchors[:, 2] <= img_w) & (anchors[:, 3] <= img_h)
+        )
+        labels[max_iou < self.neg_iou_thr] = 0
+        pos = (max_iou >= self.pos_iou_thr) & inside
+        labels[pos] = gt_labels[argmax_gt[pos]] + 1
+        bbox_targets[pos] = gt_boxes[argmax_gt[pos]]
+
+        # 每个 gt 至少分配一个最佳 anchor
+        best_per_gt = iou.max(dim=0).indices
+        labels[best_per_gt] = gt_labels + 1
+        bbox_targets[best_per_gt] = gt_boxes
+
+        labels[labels == -1] = 0
+        return labels, bbox_targets
+
+
+class ATSSAssigner:
+    """自适应训练样本选择（ATSS）：按中心距离每层取 top-k，IoU mean+std 阈值选正样本。"""
+
+    def __init__(self, num_classes: int, num_anchors: int = 9, topk: int = 9):
+        self.num_classes = num_classes
+        self.num_anchors = num_anchors
+        self.topk = topk
+
+    def assign(self, anchors_per_level, gt_boxes: torch.Tensor, gt_labels: torch.Tensor, strides, image_hw):
+        """anchors_per_level: 每层 (Ni, 4)。
+
+        Returns:
+            (labels (N,) [-1,0..C], bbox_targets (N,4) 像素 xyxy)
+        """
+        device = anchors_per_level[0].device
+        all_anchors = torch.cat(anchors_per_level, dim=0)
+        n = all_anchors.shape[0]
+        labels = torch.zeros((n,), dtype=torch.long, device=device)
+        bbox_targets = torch.zeros_like(all_anchors)
+
+        if gt_boxes.numel() == 0:
+            return labels, bbox_targets
+
+        gt_boxes = gt_boxes.to(device).float()
+        gt_labels = gt_labels.to(device).long()
+        acx = (all_anchors[:, 0] + all_anchors[:, 2]) / 2
+        acy = (all_anchors[:, 1] + all_anchors[:, 3]) / 2
+        iou_all = _box_iou_matrix(all_anchors, gt_boxes)  # (N, M)
+
+        cand = torch.zeros((n,), dtype=torch.bool, device=device)
+        starts = [0]
+        for a in anchors_per_level:
+            starts.append(starts[-1] + a.shape[0])
+
+        for j in range(gt_boxes.shape[0]):
+            gcx = (gt_boxes[j, 0] + gt_boxes[j, 2]) / 2
+            gcy = (gt_boxes[j, 1] + gt_boxes[j, 3]) / 2
+            dist = (acx - gcx) ** 2 + (acy - gcy) ** 2
+            level_cand = torch.zeros((n,), dtype=torch.bool, device=device)
+            for lvl, stride in enumerate(strides):
+                s, e = starts[lvl], starts[lvl + 1]
+                cnt = e - s
+                k = min(self.topk, cnt)
+                if k <= 0:
+                    continue
+                topk_idx = dist[s:e].topk(k, largest=False).indices + s
+                level_cand[topk_idx] = True
+            if not level_cand.any():
+                continue
+            iou_cand = iou_all[level_cand, j]
+            thr = iou_cand.mean() + iou_cand.std()
+            cand |= level_cand & (iou_all[:, j] >= thr)
+
+        if cand.any():
+            best_gt = iou_all[cand].argmax(dim=1)
+            labels[cand] = gt_labels[best_gt] + 1
+            bbox_targets[cand] = gt_boxes[best_gt]
+
+        labels[labels == 0] = 0  # 未选中的为背景
+        return labels, bbox_targets
+
+
+__all__ = ["GridAssigner", "FCOSAssigner", "MaxIoUAssigner", "ATSSAssigner"]

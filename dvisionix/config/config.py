@@ -84,16 +84,23 @@ class Config:
 
     @staticmethod
     def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """深度合并两个字典，override 优先。"""
+        """深度合并两个字典，override 优先。
+
+        支持 mmcv 风格 ``_delete_: true`` 标记：override 段声明后表示**整体替换**
+        而非逐字段合并（用于清除父配置中已不适用的类型专属参数）。
+        """
         result = copy.deepcopy(base)
         for key, value in override.items():
             if (
                 key in result
                 and isinstance(result[key], dict)
                 and isinstance(value, dict)
+                and not value.get("_delete_", False)
             ):
                 result[key] = Config._deep_merge(result[key], value)
             else:
+                if isinstance(value, dict):
+                    value = {k: v for k, v in value.items() if k != "_delete_"}
                 result[key] = copy.deepcopy(value)
         return result
 

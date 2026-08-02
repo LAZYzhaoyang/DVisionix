@@ -1,16 +1,14 @@
-﻿# D:\\ZhaoyangProject\\DVisionix\\dvisionix\\models\\base.py
+# -*- coding: utf-8 -*-
+"""模型基类与任务类型契约。
 
+教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）已迁移到
+``dvisionix.models.toy``，本文件只保留 ``BaseModel`` 契约。
 """
-模型基类和示例模型
 
-提供统一的模型接口和简单的示例模型，用于快速验证数据流程。
-"""
+from typing import Optional
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Tuple, Optional, Dict, Any
-
 
 # 合法任务类型集合，用于校验 BaseModel.task_type
 TASK_TYPES = {"classification", "detection", "segmentation"}
@@ -20,7 +18,7 @@ class BaseModel(nn.Module):
     """所有模型的基类。
 
     契约:
-        - ``forward`` 只返回 **原始预测**（logits / raw 张量），不包含 NMS / decode
+        - ``forward`` 只返回 **原始预测**（logits / raw 张量 / dict），不包含 NMS / decode
           等后处理；后处理统一放在 ``dvisionix.models.postprocess`` 或独立解码器中。
         - ``task_type`` 应取 ``TASK_TYPES`` 之一。
         - 可选实现 ``init_weights`` 做权重初始化，``from_config`` 支持配置化构建。
@@ -28,7 +26,7 @@ class BaseModel(nn.Module):
     提供 freeze/unfreeze、参数统计、设备查询等通用能力。
     """
 
-    def __init__(self, task_type=None):
+    def __init__(self, task_type: Optional[str] = None):
         super().__init__()
         if task_type is not None and task_type not in TASK_TYPES:
             raise ValueError(
@@ -48,150 +46,24 @@ class BaseModel(nn.Module):
     def from_config(cls, cfg):
         """从配置字典构建模型。子类可覆盖以定制构建逻辑。"""
         return cls(**dict(cfg))
-    
+
     def count_parameters(self) -> int:
         """统计可训练参数数量"""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-    
+
     def freeze(self) -> None:
         """冻结所有参数"""
         for param in self.parameters():
             param.requires_grad = False
-    
+
     def unfreeze(self) -> None:
         """解冻所有参数"""
         for param in self.parameters():
             param.requires_grad = True
-    
+
     def get_device(self) -> torch.device:
         """获取模型所在的设备"""
         return next(self.parameters()).device
 
 
-class SimpleCNN(BaseModel):
-    """
-    简单的 CNN 分类模型（用于演示和测试）
-    
-    适用于 CIFAR-10 等小尺寸图像的分类任务。
-    """
-    
-    def __init__(self, num_classes: int = 10, in_channels: int = 3, **kwargs):
-        """
-        Args:
-            num_classes: 分类类别数
-            in_channels: 输入图像通道数
-        """
-        super().__init__()
-        self.task_type = "classification"
-        self.num_classes = num_classes
-        
-        # 简单的 CNN 架构
-        self.features = nn.Sequential(
-            # Block 1
-            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 32x32 -> 16x16
-            
-            # Block 2
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 16x16 -> 8x8
-            
-            # Block 3
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),  # 8x8 -> 4x4
-        )
-        
-        # 分类头
-        self.classifier = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(128 * 4 * 4, 512),
-            nn.ReLU(inplace=True),
-            nn.Linear(512, num_classes),
-        )
-    
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        前向传播
-        
-        Args:
-            x: 输入图像 (batch_size, 3, height, width)
-            
-        Returns:
-            分类 logits (batch_size, num_classes)
-        """
-        x = self.features(x)
-        x = x.flatten(1)  # 展平
-        x = self.classifier(x)
-        return x
-
-
-class SimpleSegmentationModel(BaseModel):
-    """
-    简单的分割模型（用于演示和测试）
-    
-    基于全卷积网络，输出与输入相同尺寸的分割图。
-    """
-    
-    def __init__(self, num_classes: int = 21, in_channels: int = 3, **kwargs):
-        """
-        Args:
-            num_classes: 分割类别数
-            in_channels: 输入图像通道数
-        """
-        super().__init__()
-        self.task_type = "segmentation"
-        self.num_classes = num_classes
-        
-        # 编码器 (下采样)
-        self.encoder1 = self._make_block(in_channels, 64)
-        self.encoder2 = self._make_block(64, 128)
-        self.encoder3 = self._make_block(128, 256)
-        
-        # 解码器 (上采样)
-        self.decoder3 = self._make_block(256, 128)
-        self.decoder2 = self._make_block(128, 64)
-        self.decoder1 = self._make_block(64, 32)
-        
-        # 分类头
-        self.final_conv = nn.Conv2d(32, num_classes, kernel_size=1)
-    
-    def _make_block(self, in_channels: int, out_channels: int) -> nn.Sequential:
-        return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-        )
-    
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        前向传播
-        
-        Args:
-            x: 输入图像 (batch_size, 3, height, width)
-            
-        Returns:
-            分割 logits (batch_size, num_classes, height, width)
-        """
-        input_size = x.shape[2:]
-        
-        # 编码
-        x1 = F.max_pool2d(self.encoder1(x), 2)  # 1/2
-        x2 = F.max_pool2d(self.encoder2(x1), 2)  # 1/4
-        x3 = F.max_pool2d(self.encoder3(x2), 2)  # 1/8
-        
-        # 解码
-        x = F.interpolate(self.decoder3(x3), scale_factor=2, mode="bilinear", align_corners=True)
-        x = F.interpolate(self.decoder2(x), scale_factor=2, mode="bilinear", align_corners=True)
-        x = F.interpolate(self.decoder1(x), scale_factor=2, mode="bilinear", align_corners=True)
-        
-        # 确保输出尺寸与输入一致
-        if x.shape[2:] != input_size:
-            x = F.interpolate(x, size=input_size, mode="bilinear", align_corners=True)
-        
-        x = self.final_conv(x)
-        return x
+__all__ = ["BaseModel", "TASK_TYPES"]

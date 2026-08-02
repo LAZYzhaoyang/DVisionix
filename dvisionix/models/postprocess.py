@@ -85,3 +85,137 @@ def batched_nms(
     offsets = labels.to(boxes) * (max_coord + 1)
     boxes_offset = boxes + offsets[:, None]
     return nms(boxes_offset, scores, iou_threshold)
+
+
+def fcos_decode(
+    preds,
+    image_hw,
+    strides,
+    score_threshold: float = 0.05,
+    iou_threshold: float = 0.5,
+    max_detections: int = 100,
+    topk_per_level: int = 1000,
+):
+    """FCOS 原始输出解码 -> (boxes_list, scores_list, labels_list)（含 NMS）。
+
+    preds: {"cls": [...], "reg": [...], "center": [...]} 各层张量。
+    """
+    cls_outs, reg_outs, center_outs = preds["cls"], preds["reg"], preds["center"]
+    img_h, img_w = image_hw
+    B = cls_outs[0].shape[0]
+    boxes_list, scores_list, labels_list = [], [], []
+    for b in range(B):
+        per_image_boxes, per_image_scores, per_image_labels = [], [], []
+        for lvl, stride in enumerate(strides):
+            cls = cls_outs[lvl][b]
+            reg = reg_outs[lvl][b]
+            center = center_outs[lvl][b]
+            num_classes, h, w = cls.shape
+            device = cls.device
+
+            ys = (torch.arange(h, device=device) + 0.5) * stride
+            xs = (torch.arange(w, device=device) + 0.5) * stride
+            cx, cy = torch.meshgrid(xs, ys, indexing="xy")
+            dist = torch.exp(reg) * stride
+            boxes = torch.stack([
+                cx - dist[0], cy - dist[1], cx + dist[2], cy + dist[3],
+            ], dim=-1).reshape(-1, 4)  # (H*W, 4)
+
+            cls_prob = torch.sigmoid(cls).reshape(num_classes, -1).t()  # (N, C)
+            center_prob = torch.sigmoid(center).reshape(-1)
+            scores = (cls_prob * center_prob[:, None]).reshape(-1)  # (N*C,)
+            n_loc = boxes.shape[0]
+            topk = min(topk_per_level, scores.numel())
+            top_scores, top_idx = scores.topk(topk)
+            keep = top_scores >= score_threshold
+            top_scores, top_idx = top_scores[keep], top_idx[keep]
+            if top_idx.numel() == 0:
+                continue
+            labels = top_idx // n_loc
+            loc_idx = top_idx % n_loc
+            per_image_boxes.append(boxes[loc_idx])
+            per_image_scores.append(top_scores)
+            per_image_labels.append(labels)
+
+        if not per_image_boxes:
+            boxes_list.append(torch.zeros((0, 4), device=cls_outs[0].device))
+            scores_list.append(torch.zeros((0,), device=cls_outs[0].device))
+            labels_list.append(torch.zeros((0,), dtype=torch.long, device=cls_outs[0].device))
+            continue
+
+        boxes = torch.cat(per_image_boxes, dim=0)
+        scores = torch.cat(per_image_scores, dim=0)
+        labels = torch.cat(per_image_labels, dim=0)
+        boxes[:, 0::2] = boxes[:, 0::2].clamp(0, img_w)
+        boxes[:, 1::2] = boxes[:, 1::2].clamp(0, img_h)
+        keep = batched_nms(boxes, scores, labels, iou_threshold)[:max_detections]
+        boxes_list.append(boxes[keep])
+        scores_list.append(scores[keep])
+        labels_list.append(labels[keep])
+    return boxes_list, scores_list, labels_list
+
+
+def retinanet_decode(
+    preds,
+    image_hw,
+    anchor_gen,
+    score_threshold: float = 0.05,
+    iou_threshold: float = 0.5,
+    max_detections: int = 100,
+    topk_per_level: int = 1000,
+):
+    """RetinaNet 原始输出解码 -> (boxes_list, scores_list, labels_list)（含 NMS）。"""
+    from .detectors.anchors import delta2bbox  # 惰性导入避免循环依赖
+
+    cls_outs, reg_outs = preds["cls"], preds["reg"]
+    img_h, img_w = image_hw
+    B = cls_outs[0].shape[0]
+    anchors_per_level = anchor_gen.grid_anchors(cls_outs)
+    boxes_list, scores_list, labels_list = [], [], []
+    for b in range(B):
+        per_image_boxes, per_image_scores, per_image_labels = [], [], []
+        for lvl in range(len(cls_outs)):
+            cls = cls_outs[lvl][b]
+            reg = reg_outs[lvl][b]
+            A = anchor_gen.num_anchors
+            num_classes = cls.shape[0] // A
+            _, h, w = cls.shape
+            n_loc = h * w
+            anchors = anchors_per_level[lvl]  # (n_loc*A, 4)
+
+            cls_flat = cls.reshape(A, num_classes, h, w).permute(2, 3, 0, 1).reshape(-1, num_classes)  # (n_loc*A, C)
+            reg_flat = reg.reshape(A, 4, h, w).permute(2, 3, 0, 1).reshape(-1, 4)
+            boxes = delta2bbox(reg_flat, anchors)
+
+            scores = torch.sigmoid(cls_flat).reshape(-1)  # (n_loc*A*C,)
+            topk = min(topk_per_level, scores.numel())
+            top_scores, top_idx = scores.topk(topk)
+            keep = top_scores >= score_threshold
+            top_scores, top_idx = top_scores[keep], top_idx[keep]
+            if top_idx.numel() == 0:
+                continue
+            n_anchor = n_loc * A
+            labels = top_idx // n_anchor
+            anchor_idx = top_idx % n_anchor
+            per_image_boxes.append(boxes[anchor_idx])
+            per_image_scores.append(top_scores)
+            per_image_labels.append(labels)
+
+        if not per_image_boxes:
+            boxes_list.append(torch.zeros((0, 4), device=cls_outs[0].device))
+            scores_list.append(torch.zeros((0,), device=cls_outs[0].device))
+            labels_list.append(torch.zeros((0,), dtype=torch.long, device=cls_outs[0].device))
+            continue
+
+        boxes = torch.cat(per_image_boxes, dim=0)
+        scores = torch.cat(per_image_scores, dim=0)
+        labels = torch.cat(per_image_labels, dim=0)
+        boxes[:, 0::2] = boxes[:, 0::2].clamp(0, img_w)
+        boxes[:, 1::2] = boxes[:, 1::2].clamp(0, img_h)
+        keep = batched_nms(boxes, scores, labels, iou_threshold)[:max_detections]
+        boxes_list.append(boxes[keep])
+        scores_list.append(scores[keep])
+        labels_list.append(labels[keep])
+    return boxes_list, scores_list, labels_list
+
+__all__ = ["nms", "batched_nms", "box_iou", "fcos_decode", "retinanet_decode"]

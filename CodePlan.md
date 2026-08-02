@@ -363,3 +363,64 @@ dvisionix/
 ## 四、验证
 - 全量测试 161 passed + 2 skipped（DDP/dynamo 环境跳过）。
 - `demos/export_onnx_demo.py` 端到端通过（导出 + onnxruntime verify，max_diff ~1e-8）。
+
+---
+
+# 模型模块丰富（v0.4.0）
+
+> 用户决策：删除 GeneralizedModel（三合一万能模型，检测分支半成品），拆分为具体模型 + 共享脚手架；
+> FCOS 与 RetinaNet 两种检测结构都保留（anchor-free / anchor-based）；ATSS assigner 一并实现（即插即用）；
+> 分割做 DeepLabV3 / UNet / FCN；分类加 LinearClassifier / ArcFace / MultiLabel；教学模型迁入 models.toy。
+
+## 一、目录结构（models）
+```
+models/
+  base.py            # BaseModel（仅契约）
+  classifiers.py     # LinearClassifier（backbone + 分类头组合）
+  segmenters.py      # SegmentationModel（backbone + 分割头组合）
+  toy/               # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
+  backbones/  necks/  heads/  layers/  losses/  postprocess.py
+  detectors/
+    base.py          # SingleStageDetector（装配脚手架）
+    anchors.py       # AnchorGenerator + bbox delta 编解码
+    fcos.py          # FCOSDetector（anchor-free）
+    retinanet.py     # RetinaNetDetector（anchor-based）
+  heads/
+    cls_head.py      # ClsHead / ArcFaceHead / MultiLabelHead
+    seg_head.py      # SegHead / FCNHead / DeepLabV3Head(ASPP) / UNetDecoder
+    det_head.py      # DetHead / FCOSHead / RetinaNetHead
+  losses/detection/
+    assigner.py      # GridAssigner / FCOSAssigner / MaxIoUAssigner / ATSSAssigner
+    losses.py        # Objectness / GridDetection / SigmoidFocal / FCOSDetection / RetinaNetLoss
+    box_loss.py      # GIoU / CIoU / L1Box
+```
+
+## 二、关键设计
+1. **检测即插即用**：detector（forward 原始多尺度输出 + decode）+ assigner（可换）+ loss（可换）三者解耦；
+   DetectionTask 统一契约（`model.decode` + `loss(preds, batch, image_hw, device)`），FCOS / RetinaNet / Grid 无缝接入。
+2. **assigner 族**：FCOSAssigner（中心采样+尺度约束+min_pos 回退）、MaxIoUAssigner（RetinaNet 默认）、
+   ATSSAssigner（自适应 top-k + mean/std 阈值，FCOS/RetinaNet 通用）。
+3. **分割头族**：SegHead(1x1) / FCNHead / DeepLabV3Head(ASPP) / UNetDecoder（多尺度跳跃连接），
+   SegmentationModel 自动根据 head 类型注入 in_channels 或 in_channels_list。
+4. **教学模型独立**：toy 子包；顶层 re-export 兼容旧导入（dvisionix.models.SimpleCNN 仍可用）。
+5. **配置 `_delete_` 语义**：父配置类型专属参数残留问题，用 `_delete_: true` 整体替换（mmcv 风格）。
+
+## 三、新增配置示例
+- configs/detection/fcos_synthetic.yaml（timm resnet18 + FPN + FCOSHead，loss fcos_detection）
+- configs/detection/retinanet_synthetic.yaml（retinanet_head + AnchorGenerator，loss retinanet_detection / assigner max_iou）
+- configs/segmentation/deeplabv3_synthetic.yaml（segmentation_model + deeplabv3_head）
+- 三者均已端到端跑通（FCOS/RetinaNet 验证日志输出 mAP，DeepLabV3 输出 mIoU）。
+
+## 四、修复的问题
+- FCOS reg_loss NaN：min_pos 回退把框外位置选为正样本导致 log(负数)；修复为 clamp 非负 + exp 输出 clamp。
+- 配置继承键残留：父配置 model/loss 段类型专属参数被合并进子配置（如 grid_detection 的 width 传入 fcos）；
+  引入 `_delete_: true` 解决。
+
+## 五、验证
+- 全量测试：见最终结果（新增 test_detectors / test_segmenters / test_panet / test_classifiers / test_delete_marker）。
+
+## 六、遗留 / 下一步
+- DETR 系列（DETR / Deformable DETR / RT-DETR）与 YOLO 系列（YOLOv8 风格）作为下一步计划。
+- 更多分割头：Mask2Former / SegFormer（语义+实例分割统一）。
+- 更多分类头：度量学习变体（CosFace / SphereFace）、多标签任务化。
+- GeneralizedModel 相关文档/测试引用清理已完成；README 版本演进已补充。

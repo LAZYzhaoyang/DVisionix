@@ -61,15 +61,13 @@ class TestSequentialBackbone:
         with pytest.raises(ValueError):
             SequentialBackbone([])
 
-    def test_generalized_classification(self):
-        model = build_model({
-            "type": "GeneralizedModel",
-            "task_type": "classification",
-            "backbone": {"type": "sequential_backbone", "stages": STAGES},
-            "head": {"type": "cls_head", "num_classes": 10},
-        })
-        out = model(torch.randn(2, 3, 64, 64))
-        assert out.shape == (2, 10)
+    def test_classification_composition(self):
+        """SequentialBackbone + ClsHead 手工组合（组件即插即用）。"""
+        from dvisionix.models.heads import ClsHead
+        backbone = SequentialBackbone(STAGES, features_only=False)
+        head = ClsHead(in_channels=64, num_classes=10)
+        logits = head(backbone(torch.randn(2, 3, 64, 64)))
+        assert logits.shape == (2, 10)
 
 
 if __name__ == "__main__":

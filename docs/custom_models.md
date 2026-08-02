@@ -161,24 +161,22 @@ model = build_model({"type": "my_cnn", "num_classes": 10})
 
 ### 2.3 组件化组装（backbone + neck + head）
 
-复杂模型推荐用 `GeneralizedModel` 把 backbone / neck / head 组合起来，各组件都可用配置指定：
+复杂模型推荐用组件化模型把 backbone / neck / head 组合起来（分类 `linear_classifier`、分割 `segmentation_model`、检测 `fcos` / `retinanet`），各组件都可用配置指定：
 
 ```python
 from dvisionix.models import build_model
 
 model = build_model({
-    "type": "GeneralizedModel",
-    "task_type": "segmentation",
+    "type": "segmentation_model",
     "backbone": {"type": "TimmBackbone", "name": "resnet18",
-                 "features_only": True, "out_indices": (1, 2, 3, 4)},
-    "neck": {"type": "FPN", "in_channels": [64, 128, 256, 512], "out_channels": 128},
-    "head": {"type": "SegHead", "in_channels": 128, "num_classes": 19},
+                 "features_only": True, "out_indices": [4]},
+    "head": {"type": "DeepLabV3Head", "num_classes": 19},
 })
 ```
 
 ### 2.4 组件接口契约（backbone / neck / head）
 
-`GeneralizedModel` 按 `backbone -> neck -> head` 组装组件，并在组件间自动传递通道数。自定义这些组件时，除了继承 `BaseModel`、实现 `forward` 外，还需暴露以下属性/接口：
+组件化模型（`SingleStageDetector` / `SegmentationModel` / `LinearClassifier`）按 `backbone -> neck -> head` 组装组件，并在组件间自动传递通道数。自定义这些组件时，除了继承 `BaseModel`、实现 `forward` 外，还需暴露以下属性/接口：
 
 | 组件 | 构造参数（至少） | 必须暴露的属性 | `forward` 输入 → 输出 |
 | --- | --- | --- | --- |
@@ -186,12 +184,12 @@ model = build_model({
 | neck | `in_channels: List[int]`（由 backbone 注入） | `out_channels`（int 或 `List[int]`） | `List[Tensor]` → `List[Tensor]` |
 | head | `in_channels`（由上游注入）、`num_classes` | — | 分类：`(B, in_channels)` → `(B, num_classes)`；分割/检测：`(B, C, H, W)` → 原始预测图 |
 
-通道自动传递规则（见 `dvisionix/models/detectors/generalized.py`）：
+通道自动传递规则（见 `dvisionix/models/detectors/base.py`）：
 - `backbone.out_channels` → `neck.in_channels`；
 - 有 neck 时 `neck.out_channels`（取最后一层）→ `head.in_channels`；无 neck 时分类用 `backbone.num_features`、检测/分割用 `backbone.out_channels[-1]` → `head.in_channels`；
 - 非分类任务会自动给 backbone 设置 `features_only=True`（可在配置中显式覆盖）。
 
-> 提示：`in_channels` 由 `GeneralizedModel` 注入到 head 配置中，因此 head 的构造函数必须接受 `in_channels` 参数。
+> 提示：`in_channels` 由组件化模型自动注入到 head 配置中，因此 head 的构造函数必须接受 `in_channels` 参数（UNetDecoder 例外：注入 `in_channels_list`）。
 
 ### 2.5 用 layers 拼装自定义 backbone（SequentialBackbone）
 
@@ -221,16 +219,15 @@ backbone = SequentialBackbone(stages, features_only=False)
 vec = backbone(torch.randn(2, 3, 64, 64))     # (2, 128)
 ```
 
-配合 `GeneralizedModel` 纯配置组装分类模型：
+配合 `LinearClassifier` 纯配置组装分类模型：
 
 ```python
 from dvisionix.models import build_model
 
 model = build_model({
-    "type": "GeneralizedModel",
-    "task_type": "classification",
+    "type": "linear_classifier",
     "backbone": {"type": "sequential_backbone", "stages": stages},
-    "head": {"type": "cls_head", "num_classes": 10},
+    "num_classes": 10,
 })
 out = model(torch.randn(2, 3, 64, 64))        # (2, 10)
 ```
@@ -245,15 +242,14 @@ out = model(torch.randn(2, 3, 64, 64))        # (2, 10)
 
 ```yaml
 model:
-  type: GeneralizedModel
-  task_type: classification
+  type: linear_classifier
+  num_classes: 10
   backbone:
     type: TimmBackbone
     name: resnet18
     features_only: false
   head:
     type: ClsHead
-    in_channels: 512
     num_classes: 10
 ```
 

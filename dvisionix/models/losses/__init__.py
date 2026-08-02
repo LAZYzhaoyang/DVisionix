@@ -8,7 +8,7 @@
 """
 
 from .base import BaseLoss, LossComposer, build_loss, build_losses, compute_loss
-from .classification import CrossEntropy, FocalLoss
+from .classification import CrossEntropy, FocalLoss, BinaryCrossEntropy
 from .segmentation import DiceLoss, CombinedSegmentationLoss
 from .detection import (
     GridAssigner,
@@ -17,6 +17,12 @@ from .detection import (
     GIoULoss,
     CIoULoss,
     L1BoxLoss,
+    FCOSAssigner,
+    MaxIoUAssigner,
+    ATSSAssigner,
+    SigmoidFocalLoss,
+    FCOSDetectionLoss,
+    RetinaNetLoss,
 )
 
 __all__ = [
@@ -27,6 +33,7 @@ __all__ = [
     "compute_loss",
     "CrossEntropy",
     "FocalLoss",
+    "BinaryCrossEntropy",
     "DiceLoss",
     "CombinedSegmentationLoss",
     "GridAssigner",
@@ -35,4 +42,10 @@ __all__ = [
     "GIoULoss",
     "CIoULoss",
     "L1BoxLoss",
+    "FCOSAssigner",
+    "MaxIoUAssigner",
+    "ATSSAssigner",
+    "SigmoidFocalLoss",
+    "FCOSDetectionLoss",
+    "RetinaNetLoss",
 ]

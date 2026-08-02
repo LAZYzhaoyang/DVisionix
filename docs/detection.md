@@ -96,6 +96,6 @@ print(metrics)   # {"mAP": ..., "mAP_50": ..., "mAP_75": ...}
 ## 真实数据与进阶
 - 真实数据集：`build_dataset({"type": "coco_detection", ...})`，
   或用 `CustomDataset` 提供你自己的标注。
-- 该检测器为教学级实现（单元格单框、无多尺度/anchor）。若在合成数据上追求高 mAP，
+- 教学级 `GridDetectionModel` 为单元格单框实现；若追求更好的检测能力，可直接使用组件化检测器 `FCOSDetector`（anchor-free）或 `RetinaNetDetector`（anchor-based，assigner 可选 max_iou / atss）。若在合成数据上追求高 mAP，
   可增大训练轮数使框回归充分收敛；生产级检测建议接入成熟框架，
   或扩展 `GridDetectionModel` 的多框预测与更强的目标分配策略。
