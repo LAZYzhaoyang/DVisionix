@@ -11,6 +11,7 @@ from ...base import BaseModel
 
 @HEADS.register()
 @HEADS.register(name="cosface")
+@HEADS.register(name="cosface_head")
 class CosFaceHead(BaseModel):
     """CosFace：logits = s * (cos(theta) - m)（目标类），其余 s * cos(theta)。"""
 

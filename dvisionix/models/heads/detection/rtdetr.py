@@ -16,6 +16,8 @@ class RTDETRHead(BaseModel):
     transformer 解码器 -> (logits, boxes)。输出契约与 DETRHead 一致，可复用 DETRLoss / detr_decode。
     """
 
+    input_style = "multi_scale"  # 多尺度输入（装配器注入 in_channels_list）
+
     def __init__(
         self,
         in_channels_list,

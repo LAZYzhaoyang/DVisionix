@@ -190,7 +190,9 @@ model = build_model({
 - 非分类任务会自动给 backbone 设置 `features_only=True`（可在配置中显式覆盖）。
 
 > 提示：`in_channels` 由组件化模型自动注入到 head 配置中，因此 head 的构造函数必须接受 `in_channels` 参数；
-> 多尺度头（`UNetDecoder` / `SegFormerHead` / `MaskFormerHead` / `RTDETRHead`）例外：注入 `in_channels_list`。
+> 多尺度头例外：注入 `in_channels_list`。多尺度头通过类属性 `input_style = "multi_scale"` 自声明
+> （已内置：`UNetDecoder` / `SegFormerHead` / `MaskFormerHead` / `RTDETRHead`），装配器据此自动注入，
+> 新增多尺度头只需声明该属性即可，无需改装配器。
 
 > 自定义检测器 / 分割头时，专属 decode（预测 → boxes/scores/labels 或 masks）建议写在模型/head 同文件中
 > （如 `detectors/fcos.py` 的 `fcos_decode`），`postprocess.py` 只保留共享原语 `nms / batched_nms / box_iou`。

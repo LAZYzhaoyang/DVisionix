@@ -551,12 +551,9 @@ models/
 
 ## 三、已知边界与后续优化
 
-- RT-DETR 目前直连骨干多尺度特征（hybrid encoder 承担特征融合），暂不支持 neck——属设计选择，已在文档明确。
-- 多尺度头识别目前靠装配器内硬编码名单（_LIST_INPUT_HEADS / rtdetr_head 特判），新增头易遗漏；
-  建议后续改为 head 类属性自声明（如 `input_style="multi_scale"`），装配器统一读取。
-- head 注册名风格不统一：检测头用 `fcos_head / retinanet_head / yolo_head / detr_head / rtdetr_head`，
-  分类头用 `arcface / cosface / sphereface / adaface / multi_label / cls_head`；建议统一命名规范
-  （小写 snake_case + 任务后缀）。
+- ~~RT-DETR 暂不支持 neck~~ ✅ 已解决（阶段 A：支持 neck，多尺度通道自动对齐 neck 输出）。
+- ~~多尺度头识别靠装配器硬编码名单~~ ✅ 已解决（阶段 A：head 类属性 `input_style="multi_scale"` 自声明，装配器统一读取）。
+- ~~head 注册名风格不统一~~ ✅ 已解决（阶段 A：分类头补 `_head` 后缀别名 `arcface_head / cosface_head / sphereface_head / adaface_head / multi_label_head`，旧名保留兼容）。
 
 ## 四、验证
 
@@ -564,10 +561,35 @@ models/
 - decode 函数位置断言：detr/fcos/retinanet/yolo/maskformer decode 均从对应模型文件导出。
 
 ## 五、下一步计划
+## 六、阶段 A 实施记录（已完成）
+
+> 用户确认后实施：A1 统一 decode 契约 / A2 input_style 自声明 / A3 RT-DETR neck + 注册名统一。
+
+### A1：统一 `.decode()` 契约
+- `MaskFormerHead` 新增 `decode()` 实例方法（委托模块级 `maskformer_decode`，纯函数实现 + 实例桥接）。
+- `SegmentationModel` 新增 `decode()` 透传（head 支持解码时委托；否则 `NotImplementedError` 清晰报错）。
+- `evaluate_mask_ap` 优先复用 `model.decode()`（`getattr(model, "decode", None) or maskformer_decode` 兜底）。
+
+### A2：多尺度头 input_style 自声明机制
+- `UNetDecoder / SegFormerHead / MaskFormerHead / RTDETRHead` 增加类属性 `input_style = "multi_scale"`。
+- `SingleStageDetector` / `SegmentationModel` 装配器统一读取该属性决定注入 `in_channels_list` / `in_channels`，
+  删除 `_LIST_INPUT_HEADS` 硬编码名单与 `rtdetr_head` 特判；`SegmentationModel.forward` 的多尺度分发同样改为读取属性。
+- 效果：新增多尺度头只需声明 `input_style`，注册即用、零装配器改动。
+
+### A3：RT-DETR 可选 neck + 注册名统一
+- RT-DETR 现可接 FPN / PANet：装配器按 neck 输出通道自动推导 `in_channels_list`
+  （int 通道 × num_outs；列表通道直接用），修复了此前 RT-DETR + neck 的通道错配隐患。
+- 分类头补 `_head` 后缀别名（`arcface_head` 等 5 个），旧名（`arcface` 等）保留兼容，现有配置不受影响。
+
+### 验证
+- 新增 `tests/test_models/test_v071_phase_a.py`（6 项）：input_style 属性、neck 注入、maskformer 经模型 decode、
+  单尺度头 decode 报错、RT-DETR + FPN、分类头别名。
+- 组合冒烟补充：RT-DETR + PANet、MaskFormer + FPN 通过（neck 通道自动对齐）。
+- 全量测试 210 passed + 2 skipped；ruff / black 全绿。
+
 
 - 多卡实机验证：`torchrun --nproc_per_node=2 tools/train.py --config ... --devices 0,1` + test_ddp_smoke.py（DDP 已隔离实现）。
 - DETR 系列：Deformable DETR（可变形注意力）、RT-DETR 完整版（neck 对齐 / 更强编码器）。
 - 分割：Mask2Former 实例/全景分割评估打通（mask 监督已就绪）；更多分割头（按任务目录每头一文件扩展）。
 - 检测：YOLO 系列扩展（YOLOv5 / v7 / v9 风格变体）、更多 anchor-free 检测器。
-- 组合性增强：多尺度头自声明机制、RT-DETR 可选 neck、head 注册名统一。
 - 指标：分类 / 分割指标全面迁移 torchmetrics（可选后端）。

@@ -11,6 +11,7 @@ from ...base import BaseModel
 
 @HEADS.register()
 @HEADS.register(name="adaface")
+@HEADS.register(name="adaface_head")
 class AdaFaceHead(BaseModel):
     """AdaFace：margin 随特征范数自适应（低质量样本用小 margin）。"""
 

@@ -14,6 +14,8 @@ from ...base import BaseModel
 class UNetDecoder(BaseModel):
     """U-Net 风格解码器：多尺度特征（高->低）上采样 + 跳跃连接 -> logits。"""
 
+    input_style = "multi_scale"  # 多尺度输入（装配器注入 in_channels_list）
+
     def __init__(self, in_channels_list, num_classes, base_channels=64, output_size=None):
         super().__init__(task_type="segmentation")
         self.in_channels_list = list(in_channels_list)

@@ -343,6 +343,9 @@ MIT License
 - heads 与 backbone/neck 组合性冒烟验证 27 组全部通过（FCOS/RetinaNet/YOLO/DETR/RT-DETR × Sequential/Timm × 无 neck/FPN/PANet，
   分割 6 头、分类 6 头同样验证）；
 - 文档同步：CodePlan 增补 v0.7.1 章节；docs/detection.md 重写为组件化检测器；segmentation/custom_models/docs 索引更新。
+- 阶段 A 收口：`MaskFormerHead` / `SegmentationModel` 新增 `.decode()`（统一解码契约）；多尺度头
+  `input_style="multi_scale"` 自声明（装配器统一注入，删除硬编码名单）；RT-DETR 支持 FPN/PANet neck；
+  分类头补 `_head` 注册别名（旧名兼容）；新增 6 项测试，全量 210 passed + 2 skipped。
 
 ### 0.7.0（RT-DETR / mask mAP / 本地 lint 工具链）
 - 检测：新增 `RTDETRDetector`（RT-DETR-lite：混合编码器 + query 选择 + 解码器，复用 DETRLoss/decode）；

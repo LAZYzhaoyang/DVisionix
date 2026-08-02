@@ -79,7 +79,8 @@ def evaluate_mask_ap(
             raise ValueError(
                 "evaluate_mask_ap 需要模型输出 dict（MaskFormerHead output_mode='full'）"
             )
-        masks_list, scores_list, labels_list = maskformer_decode(
+        decode_fn = getattr(model, "decode", None) or maskformer_decode
+        masks_list, scores_list, labels_list = decode_fn(
             preds,
             (images.shape[2], images.shape[3]),
             score_threshold=score_threshold,

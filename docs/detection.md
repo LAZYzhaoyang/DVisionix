@@ -108,9 +108,9 @@ keep = batched_nms(boxes, scores, labels, iou_threshold=0.5)  # 多类（类间�
 ## 组合性说明
 
 - **backbone**：`timm_backbone`（ResNet 等任意 timm 模型，`pretrained` 可选）或 `sequential_backbone`（自拼层）。
-- **neck**：`fpn` / `panet`（可选）；DETR 单尺度头可用可不用 neck；RT-DETR 直连骨干多尺度（hybrid encoder 负责融合），暂不接 neck。
+- **neck**：`fpn` / `panet`（可选）；DETR 单尺度头可用可不用 neck；RT-DETR 亦可接 neck（按 neck 输出通道自动对齐）。
 - **head**：`fcos_head` / `retinanet_head` / `yolo_head` / `detr_head` / `rtdetr_head` 均与任意 backbone / neck 组合；
-  多尺度头自动注入 `in_channels_list`，单尺度头注入 `in_channels`，无需手动对齐通道数。
+  多尺度头（`input_style="multi_scale"` 自声明）自动注入 `in_channels_list`，单尺度头注入 `in_channels`，无需手动对齐通道数。
 
 ## mAP 评估
 

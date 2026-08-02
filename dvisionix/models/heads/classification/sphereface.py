@@ -11,6 +11,7 @@ from ...base import BaseModel
 
 @HEADS.register()
 @HEADS.register(name="sphereface")
+@HEADS.register(name="sphereface_head")
 class SphereFaceHead(BaseModel):
     """SphereFace：目标类角度乘以 margin（cos(m*theta)）。"""
 

@@ -13,6 +13,7 @@ from ...base import BaseModel
 
 @HEADS.register()
 @HEADS.register(name="arcface")
+@HEADS.register(name="arcface_head")
 class ArcFaceHead(BaseModel):
     """ArcFace 度量学习头：特征与类中心 L2 归一化，输出 s*cos(theta)。
 

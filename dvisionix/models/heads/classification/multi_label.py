@@ -9,6 +9,7 @@ from ...base import BaseModel
 
 @HEADS.register()
 @HEADS.register(name="multi_label")
+@HEADS.register(name="multi_label_head")
 class MultiLabelHead(BaseModel):
     """多标签分类头：逐标签 logits（配合 BCEWithLogits 损失）。"""
 

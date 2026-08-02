@@ -21,6 +21,8 @@ class MaskFormerHead(BaseModel):
     完整 Mask2Former（mask 分类损失 + 实例/全景评估）列为后续计划。
     """
 
+    input_style = "multi_scale"  # 多尺度输入（装配器注入 in_channels_list）
+
     def __init__(
         self,
         in_channels_list,
@@ -75,6 +77,19 @@ class MaskFormerHead(BaseModel):
         if self.output_mode == "full":
             return {"pred_logits": class_logits, "pred_masks": masks, "semantic_logits": semantic}
         return semantic
+
+    def decode(self, preds, image_hw, score_threshold=0.3, mask_threshold=0.5, max_detections=100):
+        """full 模式推理解码 -> (masks_list, scores_list, labels_list)。
+
+        委托给模块级 maskformer_decode（纯函数实现 + 实例桥接，与检测器 decode() 契约一致）。
+        """
+        return maskformer_decode(
+            preds,
+            image_hw,
+            score_threshold=score_threshold,
+            mask_threshold=mask_threshold,
+            max_detections=max_detections,
+        )
 
 
 __all__ = ["MaskFormerHead", "maskformer_decode"]

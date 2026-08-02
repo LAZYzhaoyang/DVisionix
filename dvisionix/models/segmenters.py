@@ -9,14 +9,7 @@ import torch.nn.functional as F
 from ..registry import BACKBONES, HEADS, MODELS, NECKS
 from .base import BaseModel
 
-_LIST_INPUT_HEADS = (
-    "unet_decoder",
-    "UNetDecoder",
-    "segformer_head",
-    "SegFormerHead",
-    "maskformer_head",
-    "MaskFormerHead",
-)
+# 多尺度头由 head 类属性 input_style="multi_scale" 自声明（装配器统一读取，无需硬编码名单）。
 
 
 @MODELS.register()
@@ -72,8 +65,12 @@ class SegmentationModel(BaseModel):
             self.in_channels = self.backbone.out_channels[-1]
 
         head_cfg = dict(head)
-        if head_type in _LIST_INPUT_HEADS:
-            head_cfg.setdefault("in_channels_list", list(self.backbone.out_channels))
+        head_cls = (
+            HEADS.get(head_type) if isinstance(head_type, str) and head_type in HEADS else None
+        )
+        is_multi = getattr(head_cls, "input_style", "single_scale") == "multi_scale"
+        if is_multi:
+            head_cfg.setdefault("in_channels_list", self._head_input_channels())
         else:
             head_cfg.setdefault("in_channels", self.in_channels)
         if "num_classes" not in head_cfg and num_classes is not None:
@@ -88,9 +85,30 @@ class SegmentationModel(BaseModel):
             feats = self.neck(feats)
         return feats
 
+    def _head_input_channels(self):
+        """多尺度头输入通道：有 neck 时取 neck 输出通道列表，否则取 backbone 多尺度。"""
+        if self.neck is not None:
+            neck_out = getattr(self.neck, "out_channels", None)
+            if isinstance(neck_out, (list, tuple)):
+                return list(neck_out)
+            if neck_out is not None:
+                num_outs = getattr(self.neck, "num_outs", None) or len(self.backbone.out_channels)
+                return [neck_out] * int(num_outs)
+        return list(self.backbone.out_channels)
+
+    def decode(self, preds, image_hw, **kwargs):
+        """委托给支持解码的 head（如 MaskFormerHead full 模式 -> masks/scores/labels）。"""
+        decode_fn = getattr(self.head, "decode", None)
+        if decode_fn is None:
+            raise NotImplementedError(
+                f"head {type(self.head).__name__} 不支持 decode()"
+                "（仅 MaskFormerHead full 模式等可解码输出提供）"
+            )
+        return decode_fn(preds, image_hw, **kwargs)
+
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         feats = self.extract_features(x)
-        if type(self.head).__name__ in ("UNetDecoder", "SegFormerHead", "MaskFormerHead"):
+        if getattr(type(self.head), "input_style", "single_scale") == "multi_scale":
             out = self.head(feats)
         else:
             feat = feats[-1] if isinstance(feats, (list, tuple)) else feats
