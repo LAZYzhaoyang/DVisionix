@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 数据模块（统一接口 + 主流公开数据集 + 原子变换 + 自由组合）。
 """数据模块（统一接口 + 主流公开数据集 + 原子变换 + 自由组合）。
 
 - ``Sample`` 契约（``data.sample``）：所有 dataset / transform / collate 共用的字段名约定。

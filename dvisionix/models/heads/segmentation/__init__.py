@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分割头子包。
 """分割头子包。"""
 
 from .bisenet import BiSeNetHead

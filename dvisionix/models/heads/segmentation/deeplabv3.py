@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DeepLabV3 分割头（ASPP 空洞空间金字塔池化）。
 """DeepLabV3 分割头（ASPP 空洞空间金字塔池化）。"""
 
 import torch
@@ -39,6 +41,7 @@ class DeepLabV3Head(BaseModel):
         self.out_conv = nn.Conv2d(256, num_classes, 1)
 
     def forward(self, x):
+        """DeepLabV3Head 前向：特征 -> logits (B, C, H, W)。"""
         size = x.shape[-2:]
         pool = F.interpolate(self.pool_branch(x), size=size, mode="bilinear", align_corners=False)
         fused = self.fuse(

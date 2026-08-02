@@ -115,6 +115,6 @@ training:
 
 ## 相关文档
 - [配置系统](config_system.md)
-- [骨干网络（timm）](backbones.md)
+- [骨干网络](backbones.md)
 - [日志系统](logging.md)
 - [模型导出（ONNX）](model_export.md)

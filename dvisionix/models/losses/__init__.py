@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Loss 组件（模型层的一部分）。
 """Loss 组件（模型层的一部分）。
 
 - ``BaseLoss``：自定义损失基类，继承并实现 ``forward(preds, targets, **kwargs)``。

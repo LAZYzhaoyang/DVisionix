@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: TrainingLogger（utils.logging）测试：JSONL 事件流与指标记录。
 """TrainingLogger（utils.logging）测试：JSONL 事件流与指标记录。"""
 
 import json

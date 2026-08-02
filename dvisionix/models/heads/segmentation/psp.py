@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: PSPNet 分割头（金字塔场景解析池化 PPM）。
 """PSPNet 分割头（金字塔场景解析池化 PPM）。"""
 
 import torch
@@ -45,6 +47,7 @@ class PSPHead(BaseModel):
         self.out_conv = nn.Conv2d(channels, num_classes, 1)
 
     def forward(self, x):
+        """PSPHead 前向：特征 -> logits (B, C, H, W)。"""
         size = x.shape[-2:]
         pooled = []
         for module in self.ppm:

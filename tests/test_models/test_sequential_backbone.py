@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SequentialBackbone 测试：多尺度/分类输出、通道推导、配置构建、组合模型。
 """SequentialBackbone 测试：多尺度/分类输出、通道推导、配置构建、组合模型。"""
 
 import os

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 数据集基类与 Sample 契约。
 """数据集基类与 Sample 契约。
 
 设计：

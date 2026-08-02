@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 模型组件化架构测试：backbone / neck / head 组件与构建入口。
 """模型组件化架构测试：backbone / neck / head 组件与构建入口。"""
 
 import pytest

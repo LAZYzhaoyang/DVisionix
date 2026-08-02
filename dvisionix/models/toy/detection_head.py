@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 教学级网格检测头（DetHead）。
 """教学级网格检测头（DetHead）。
 
 随 GridDetectionModel 一同用于演示/教学，生产请使用组件化检测头
@@ -31,6 +33,7 @@ class DetHead(BaseModel):
         self.conv = nn.Conv2d(in_channels, self.out_channels, kernel_size=1)
 
     def forward(self, x):
+        """DetHead 前向：x -> 网格预测 (B, 5+num_classes, H, W)。"""
         if isinstance(x, (list, tuple)):
             x = x[-1]
         return self.conv(x)

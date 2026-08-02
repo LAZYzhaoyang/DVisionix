@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ConvNeXt 块（LN + 深度可分离 + 层缩放 + DropPath）。
 """ConvNeXt 块（LN + 深度可分离 + 层缩放 + DropPath）。"""
 
 import torch
@@ -32,6 +34,7 @@ class ConvNeXtBlock(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """ConvNeXt 块前向：x (B,C,H,W) -> 同形状输出。"""
         residual = x
         x = self.dwconv(x)
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)

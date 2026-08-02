@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: MaskFormer 风格分割头（query 掩码解码，compact 实现）。
 """MaskFormer 风格分割头（query 掩码解码，compact 实现）。"""
 
 import torch
@@ -53,6 +55,7 @@ class MaskFormerHead(BaseModel):
         self.mask_embed = nn.Linear(d_model, d_model)
 
     def forward(self, feats):
+        """MaskFormerHead 前向：特征 -> mask 预测 + 类别预测。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         target = feats[0].shape[-2:]

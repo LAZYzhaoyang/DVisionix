@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Transformer 共享层：可变形编解码层（DETR 家族）、MixFFN（SegFormer 家族）。
 """Transformer 共享层：可变形编解码层（DETR 家族）、MixFFN（SegFormer 家族）。"""
 
 import torch.nn as nn
@@ -29,6 +31,7 @@ class DeformableEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, proj, ref):
+        """可变形编码器层前向：token 序列 + 多尺度特征 -> 同形状输出。"""
         x = x + self.dropout(self.self_attn(self.norm1(x), proj, ref))
         x = x + self.dropout(self.ffn(self.norm2(x)))
         return x
@@ -60,6 +63,7 @@ class DeformableDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, tgt, query, proj, ref_q):
+        """可变形解码器层前向：tgt query 序列 -> 同形状输出。"""
         q = self.norm1(tgt + query)
         tgt = tgt + self.dropout(self.self_attn(q, q, q)[0])
         tgt = tgt + self.dropout(self.cross_attn(self.norm2(tgt + query), proj, ref_q))
@@ -81,6 +85,7 @@ class MixFFN(nn.Module):
         self.mlp2 = nn.Linear(dim * expand, dim)
 
     def forward(self, x):
+        """MixFFN 前向：x (B,C,H,W) -> 同形状输出。"""
         residual = x
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
         x = self.norm(x)

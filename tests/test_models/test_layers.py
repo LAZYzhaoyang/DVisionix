@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: layers 模块测试：内置层 / builder 工具 / 配置驱动 / timm 封装 / 自定义注册。
 """layers 模块测试：内置层 / builder 工具 / 配置驱动 / timm 封装 / 自定义注册。"""
 
 import os

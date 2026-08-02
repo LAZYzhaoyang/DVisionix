@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 测试通用训练引擎和任务系统
+
 # D:\\ZhaoyangProject\\DVisionix\\tests\\test_training\\test_trainer.py
 
 """

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SegmentationModel 与分割头测试（S4）。
 """SegmentationModel 与分割头测试（S4）。"""
 
 import pytest

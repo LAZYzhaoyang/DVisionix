@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 主流公开数据集预设。
 """主流公开数据集预设。
 
 目的：让用户 ``build_dataset({"type": "cifar10", ...})`` 就能开箱用主流数据集，

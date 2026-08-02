@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: YOLOv8 风格检测器（anchor-free，TaskAlignedAssigner）。
 """YOLOv8 风格检测器（anchor-free，TaskAlignedAssigner）。"""
 
 from typing import Any, Dict, Optional
@@ -39,6 +41,7 @@ class YOLODetector(SingleStageDetector):
         max_detections=100,
         topk_per_level=1000,
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return yolo_decode(
             preds,
             image_hw,

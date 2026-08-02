@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: FPN（Feature Pyramid Network）颈部。
 """FPN（Feature Pyramid Network）颈部。
 
 将骨干网络的多尺度特征图融合为统一通道数的金字塔特征，供检测/分割头复用。
@@ -47,6 +49,7 @@ class FPN(BaseModel):
             )
 
     def forward(self, inputs):
+        """FPN 前向：多尺度特征 -> 自顶向下融合后的多尺度特征列表。"""
         assert isinstance(inputs, (list, tuple)), "FPN expects a list of feature maps"
         laterals = [conv(x) for conv, x in zip(self.lateral_convs, inputs)]
 

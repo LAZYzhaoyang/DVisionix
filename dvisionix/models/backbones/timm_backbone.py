@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 基于 timm 的骨干网络封装。
 """基于 timm 的骨干网络封装。
 
 - TimmBackbone: 特征提取器。
@@ -98,9 +100,11 @@ class TimmBackbone(BaseModel):
         return self.model(x)
 
     def freeze_backbone(self):
+        """冻结骨干全部参数（用于迁移学习，仅训练分类头）。"""
         self.freeze()
 
     def unfreeze_backbone(self):
+        """解冻骨干全部参数。"""
         self.unfreeze()
 
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.9.0 阶段 C 测试：全景评估接入验证循环 / RT-DETR 增强版 / Mask2Former 完整版。
 """v0.9.0 阶段 C 测试：全景评估接入验证循环 / RT-DETR 增强版 / Mask2Former 完整版。"""
 
 import pytest

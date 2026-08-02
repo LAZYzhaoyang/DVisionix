@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 模型基类与任务类型契约。
 """模型基类与任务类型契约。
 
 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）已迁移到

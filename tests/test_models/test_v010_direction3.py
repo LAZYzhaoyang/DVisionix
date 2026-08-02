@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.10.0 方向 3 测试：YOLOv7/v10 / CenterNet / BiSeNet / CircleLos...
 """v0.10.0 方向 3 测试：YOLOv7/v10 / CenterNet / BiSeNet / CircleLoss / SimCLR。"""
 
 import os

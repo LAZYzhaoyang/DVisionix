@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: FCN 风格分割头（FCNHead）。
 """FCN 风格分割头（FCNHead）。"""
 
 import torch.nn as nn
@@ -24,6 +26,7 @@ class FCNHead(BaseModel):
         )
 
     def forward(self, x):
+        """FCNHead 前向：特征 -> logits (B, C, H, W)。"""
         out = self.conv(x)
         if self.output_size is not None and out.shape[-2:] != tuple(self.output_size):
             out = F.interpolate(

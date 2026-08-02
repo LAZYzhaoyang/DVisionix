@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分类任务组件。
 """分类任务组件。"""
 
 from typing import Any, Dict, Optional
@@ -44,6 +46,7 @@ class ClassificationTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步训练：模型前向 + 分类损失，返回 {loss, ...}。"""
         images = batch["image"].to(device)
         labels = batch["label"].to(device)
         logits = model(images)
@@ -56,6 +59,7 @@ class ClassificationTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步验证：模型前向 + 指标更新，返回 {preds, targets, loss, ...}。"""
         images = batch["image"].to(device)
         labels = batch["label"].to(device)
         with torch.no_grad():

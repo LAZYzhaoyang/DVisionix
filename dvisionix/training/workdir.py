@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 工作目录与断点续训工具。
 """工作目录与断点续训工具。
 
 - 工作目录默认在代码库外（``~/dvisionix_runs/<experiment>/<timestamp>``），

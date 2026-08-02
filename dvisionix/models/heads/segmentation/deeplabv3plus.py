@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DeepLabV3+ 分割头（ASPP 编码 + 低层特征解码）。
 """DeepLabV3+ 分割头（ASPP 编码 + 低层特征解码）。"""
 
 import torch
@@ -84,6 +86,7 @@ class DeepLabV3PlusHead(BaseModel):
         self.out_conv = nn.Conv2d(channels, num_classes, 1)
 
     def forward(self, feats):
+        """DeepLabV3PlusHead 前向：低层+高层特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         high = feats[-1]

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 训练装配层：从配置构建 callbacks 与 Trainer。
 """训练装配层：从配置构建 callbacks 与 Trainer。"""
 
 import os

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: YOLOv11 PSA 位置自注意力层（分组 + 自注意力 + 融合）。
 """YOLOv11 PSA 位置自注意力层（分组 + 自注意力 + 融合）。"""
 
 import torch
@@ -35,6 +37,7 @@ class PSABlock(nn.Module):
         self.conv_out = ConvNormAct(hidden, in_channels, 1, act=act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """PSA 注意力块前向：x (B,C,H,W) -> 同形状输出。"""
         residual = x
         h = self.conv_in(x)
         B, C, H, W = h.shape

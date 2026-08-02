@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 多标签分类头（MultiLabelHead）。
 """多标签分类头（MultiLabelHead）。"""
 
 import torch.nn as nn
@@ -23,6 +25,7 @@ class MultiLabelHead(BaseModel):
         self.fc = nn.Sequential(*layers)
 
     def forward(self, x):
+        """MultiLabelHead 前向：x -> 多标签 logits (B, num_classes)。"""
         return self.fc(x)
 
 

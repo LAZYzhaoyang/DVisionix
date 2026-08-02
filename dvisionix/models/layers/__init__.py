@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 层（layer）模块。
 """层（layer）模块。
 
 提供:

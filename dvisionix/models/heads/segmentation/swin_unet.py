@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Swin-UNet 风格分割解码器（PatchExpand 逐级上采样 + 跳连融合，compact）。
 """Swin-UNet 风格分割解码器（PatchExpand 逐级上采样 + 跳连融合，compact）。"""
 
 import torch.nn as nn
@@ -32,6 +34,7 @@ class SwinUNetDecoder(BaseModel):
         self.out_conv = nn.Conv2d(d_model, num_classes, 1)
 
     def forward(self, feats):
+        """SwinUNetDecoder 前向：多尺度编码特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         feats = [conv(f) for conv, f in zip(self.align, feats)]

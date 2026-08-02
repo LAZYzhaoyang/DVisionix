@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SegmentationModel（backbone + neck(可选) + 分割头）。
 """SegmentationModel（backbone + neck(可选) + 分割头）。"""
 
 from typing import Any, Dict, Optional
@@ -69,6 +71,7 @@ class SegmentationModel(BaseModel):
         self.upsample = upsample
 
     def extract_features(self, x: torch.Tensor):
+        """提取骨干特征（可选经 neck/多尺度注入）。"""
         feats = self.backbone(x)
         if self.neck is not None:
             feats = self.neck(feats)
@@ -96,6 +99,7 @@ class SegmentationModel(BaseModel):
         return decode_fn(preds, image_hw, **kwargs)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """SegmentationModel 前向：x -> 分割 logits (B, num_classes, H, W)。"""
         feats = self.extract_features(x)
         if getattr(type(self.head), "input_style", "single_scale") == "multi_scale":
             out = self.head(feats)

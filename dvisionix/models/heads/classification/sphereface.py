@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SphereFace 度量学习头（multiplicative angular margin）。
 """SphereFace 度量学习头（multiplicative angular margin）。"""
 
 import torch
@@ -24,6 +26,7 @@ class SphereFaceHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):
+        """SphereFace 前向：特征 -> 角度间隔 logits (B, num_classes)。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
         cos = torch.mm(x_norm, w_norm.t()).clamp(-1.0 + 1e-7, 1.0 - 1e-7)

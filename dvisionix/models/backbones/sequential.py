@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 可配置的顺序骨干网络。
 """可配置的顺序骨干网络。
 
 SequentialBackbone 允许用一组 layer 配置（stages）拼装自定义骨干网络，

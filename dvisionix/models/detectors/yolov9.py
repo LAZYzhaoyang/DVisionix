@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: YOLOv9-lite 检测器（PGI：主头 + 浅层辅助头，可逆块骨干可选）。
 """YOLOv9-lite 检测器（PGI：主头 + 浅层辅助头，可逆块骨干可选）。"""
 
 from typing import Any, Dict, Optional
@@ -70,6 +72,7 @@ class YOLOv9Detector(BaseModel):
             self.aux_head = HEADS.build(aux_cfg)
 
     def forward(self, x, **kwargs):
+        """YOLOv9Detector 前向：x -> 训练时含主/辅头输出，推理仅主头预测。"""
         feats = self.backbone(x)
         main_feats = self.neck(feats) if self.neck is not None else feats
         out = self.head(main_feats)
@@ -88,6 +91,7 @@ class YOLOv9Detector(BaseModel):
         max_detections=100,
         topk_per_level=1000,
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return yolo_decode(
             preds,
             image_hw,

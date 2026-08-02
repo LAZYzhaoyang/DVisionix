@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SegFormerV3 分割头（overlap embed + MixFFN + SE 通道注意力融合解码）。
 """SegFormerV3 分割头（overlap embed + MixFFN + SE 通道注意力融合解码）。"""
 
 import torch
@@ -59,6 +61,7 @@ class SegFormerV3Head(BaseModel):
         )
 
     def forward(self, feats):
+        """SegFormerV3Head 前向：多层特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         outs = []

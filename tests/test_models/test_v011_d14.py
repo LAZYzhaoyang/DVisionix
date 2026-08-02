@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.11.0 测试：内置骨干 / SegFormerV2+SwinUNet / SimCLR 端到端。
 """v0.11.0 测试：内置骨干 / SegFormerV2+SwinUNet / SimCLR 端到端。"""
 
 import os

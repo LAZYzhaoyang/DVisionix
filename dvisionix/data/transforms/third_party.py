@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 第三方数据增强库封装。
 """第三方数据增强库封装。
 
 支持把 albumentations / kornia / torchvision.transforms.v2 等第三方库的变换

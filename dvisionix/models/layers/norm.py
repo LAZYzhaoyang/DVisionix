@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 归一化层：channels-first 的 LayerNorm2d。
 """归一化层：channels-first 的 LayerNorm2d。"""
 
 import torch
@@ -22,6 +24,7 @@ class LayerNorm2d(nn.Module):
         self.bias = nn.Parameter(torch.zeros(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """LayerNorm2d 前向：x (B,C,H,W) -> 同形状归一化输出。"""
         mean = x.mean(dim=1, keepdim=True)
         var = x.var(dim=1, keepdim=True, unbiased=False)
         x = (x - mean) / torch.sqrt(var + self.eps)

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 教学级分割模型（SimpleSegmentationModel）。
 """教学级分割模型（SimpleSegmentationModel）。
 
 仅用于演示与快速验证，生产请使用 SegmentationModel + DeepLabV3Head / UNetDecoder 等组件。
@@ -37,6 +39,7 @@ class SimpleSegmentationModel(BaseModel):
         )
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """SimpleSegmentationModel 前向：x -> logits (B, num_classes, H, W)。"""
         input_size = x.shape[2:]
 
         x1 = F.max_pool2d(self.encoder1(x), 2)

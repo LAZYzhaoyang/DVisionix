@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Checkpoint 权重加载工具。
 """Checkpoint 权重加载工具。"""
 
 from typing import Any, Dict

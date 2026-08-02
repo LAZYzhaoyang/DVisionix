@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Swin 窗口注意力：WindowAttention + 窗口划分/还原工具。
 """Swin 窗口注意力：WindowAttention + 窗口划分/还原工具。"""
 
 import torch
@@ -20,6 +22,7 @@ class WindowAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """窗口注意力前向：x (B*num_windows, L, C) -> 同形状输出。"""
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads)
         qkv = qkv.permute(2, 0, 3, 1, 4)

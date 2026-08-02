@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CircleLoss 度量学习头（归一化余弦，配合 CircleLoss 损失使用）。
 """CircleLoss 度量学习头（归一化余弦，配合 CircleLoss 损失使用）。"""
 
 import torch
@@ -27,6 +29,7 @@ class CircleLossHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):
+        """CircleLossHead 前向：特征 -> 余弦 logits (B, num_classes)。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
         return torch.mm(x_norm, w_norm.t()) * self.s

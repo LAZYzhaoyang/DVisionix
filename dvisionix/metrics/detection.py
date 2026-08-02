@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测任务的原子指标：COCO-style mAP。
 """检测任务的原子指标：COCO-style mAP。
 
 MeanAveragePrecision 累积各图像的预测/标注，compute 返回
@@ -71,6 +73,7 @@ class MeanAveragePrecision(BaseMetric):
         super().__init__(name)
 
     def reset(self) -> None:
+        """重置检测评估累积状态。"""
         self.detections: Dict[int, List[Dict]] = {c: [] for c in range(self.num_classes)}
         self.annotations: Dict[int, List[Dict]] = {c: [] for c in range(self.num_classes)}
         self.image_ids: set = set()

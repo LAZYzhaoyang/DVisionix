@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分类任务的原子指标。
 """分类任务的原子指标。
 
 提供可自由组合的分类指标：Accuracy / TopKAccuracy / Precision / Recall / F1Score。
@@ -38,6 +40,7 @@ class _ConfusionMatrixMetric(BaseMetric):
         super().__init__(name)
 
     def reset(self) -> None:
+        """重置混淆矩阵状态。"""
         self.confusion_matrix = (
             np.zeros((self.num_classes, self.num_classes), dtype=np.int64)
             if self.num_classes is not None
@@ -45,6 +48,7 @@ class _ConfusionMatrixMetric(BaseMetric):
         )
 
     def update(self, logits: torch.Tensor, targets: torch.Tensor) -> None:
+        """累积一批 (logits, targets) 到混淆矩阵。"""
         preds = _to_preds(logits)
         preds_np = preds.cpu().numpy()
         targets_np = targets.cpu().numpy()
@@ -112,15 +116,18 @@ class Accuracy(BaseMetric):
         super().__init__(name)
 
     def reset(self) -> None:
+        """清零正确数与总数。"""
         self.correct = 0
         self.total = 0
 
     def update(self, logits: torch.Tensor, targets: torch.Tensor) -> None:
+        """累积一批预测的正确数。"""
         preds = _to_preds(logits)
         self.correct += int((preds == targets).sum().item())
         self.total += int(targets.numel())
 
     def compute(self) -> float:
+        """返回准确率 correct / total。"""
         return self.correct / self.total if self.total else 0.0
 
 
@@ -134,10 +141,12 @@ class TopKAccuracy(BaseMetric):
         super().__init__(name or f"top{k}_acc")
 
     def reset(self) -> None:
+        """清零命中数与总数。"""
         self.correct = 0
         self.total = 0
 
     def update(self, logits: torch.Tensor, targets: torch.Tensor) -> None:
+        """累积一批 Top-K 命中数。"""
         if logits.dim() < 2:
             raise ValueError("TopKAccuracy 需要 (B, C) 形状的 logits。")
         k = min(self.k, logits.size(1))
@@ -147,6 +156,7 @@ class TopKAccuracy(BaseMetric):
         self.total += int(targets.numel())
 
     def compute(self) -> float:
+        """返回 Top-K 准确率。"""
         return self.correct / self.total if self.total else 0.0
 
 
@@ -161,6 +171,7 @@ class Precision(_ConfusionMatrixMetric):
         super().__init__(num_classes=num_classes, average=average, name=name)
 
     def compute(self):
+        """按 average 方式返回精确率。"""
         if self.confusion_matrix is None:
             return 0.0
         precision, _, _, _, _, _ = self._prf_per_class()
@@ -178,6 +189,7 @@ class Recall(_ConfusionMatrixMetric):
         super().__init__(num_classes=num_classes, average=average, name=name)
 
     def compute(self):
+        """按 average 方式返回召回率。"""
         if self.confusion_matrix is None:
             return 0.0
         _, recall, _, _, _, _ = self._prf_per_class()
@@ -193,6 +205,7 @@ class F1Score(_ConfusionMatrixMetric):
         super().__init__(num_classes=num_classes, average=average, name=name)
 
     def compute(self):
+        """按 average 方式返回 F1 分数。"""
         if self.confusion_matrix is None:
             return 0.0
         _, _, f1, _, _, _ = self._prf_per_class()

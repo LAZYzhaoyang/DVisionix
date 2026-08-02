@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: EMA（指数滑动平均）回调。
 """EMA（指数滑动平均）回调。"""
 
 import os
@@ -40,12 +42,14 @@ class EMA(Callback):
         return 0.5 + (self.decay - 0.5) * progress
 
     def on_train_begin(self, trainer: Any) -> None:
+        """初始化 EMA 影子参数。"""
         state = trainer.model.state_dict()
         self.shadow = {k: v.detach().clone().float() for k, v in state.items()}
 
     def on_batch_end(
         self, trainer: Any, batch_idx: int, logs: Dict[str, float], mode: str, batch=None
     ) -> None:
+        """每个训练 batch 后更新 EMA 影子权重。"""
         if mode != "train":
             return
         with torch.no_grad():
@@ -55,6 +59,7 @@ class EMA(Callback):
                     self.shadow[k] = decay * self.shadow[k] + (1.0 - decay) * v.float()
 
     def on_validation_begin(self, trainer: Any) -> None:
+        """验证前把 EMA 权重同步到模型。"""
         if not self.swap_for_validation:
             return
         self._saved = {k: v.detach().clone() for k, v in trainer.model.state_dict().items()}
@@ -64,11 +69,13 @@ class EMA(Callback):
             _log(trainer, "warning", f"EMA swap missing keys: {missing}")
 
     def on_validation_end(self, trainer: Any) -> None:
+        """验证后恢复模型原始权重。"""
         if not self.swap_for_validation:
             return
         trainer.model.load_state_dict(self._saved)
 
     def on_train_end(self, trainer: Any) -> None:
+        """训练结束：按 save_final 导出 ema_last.pt。"""
         if not self.save_final or not getattr(trainer, "work_dir", None):
             return
         path = os.path.join(trainer.work_dir, "ema_last.pt")
@@ -76,6 +83,7 @@ class EMA(Callback):
         _log(trainer, "info", f"EMA 权重已导出到 {path}")
 
     def state_dict(self) -> Dict[str, Any]:
+        """返回 EMA 影子权重状态。"""
         return {
             "decay": self.decay,
             "decay_warmup_epochs": self.decay_warmup_epochs,
@@ -83,6 +91,7 @@ class EMA(Callback):
         }
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """恢复 EMA 影子权重。"""
         self.decay = state.get("decay", self.decay)
         self.decay_warmup_epochs = state.get("decay_warmup_epochs", self.decay_warmup_epochs)
         self.shadow = state.get("shadow", self.shadow)

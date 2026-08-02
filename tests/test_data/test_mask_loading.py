@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: BaseDataset mask 路径加载测试（Sample 契约：mask 可为文件路径）。
 """BaseDataset mask 路径加载测试（Sample 契约：mask 可为文件路径）。"""
 
 import os

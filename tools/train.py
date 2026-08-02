@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 配置驱动的统一训练入口（v0.3.0）。
 """配置驱动的统一训练入口（v0.3.0）。
 
 用法::
@@ -51,6 +53,7 @@ _TASK_MAPPING = {
 
 
 def build_transforms(task_type, image_size, train):
+    """按任务类型构建训练/验证变换流水线。"""
     if task_type == "classification":
         return ClassificationTransforms(train=train, image_size=image_size)
     if task_type == "detection":
@@ -236,6 +239,7 @@ def export_best_onnx(cfg, work_dir: str, logger=None):
 
 
 def main():
+    """配置驱动训练入口：解析参数 -> 构建数据/模型/任务/Trainer -> 训练 -> 可选 ONNX 导出。"""
     parser = argparse.ArgumentParser(description="DVisionix config-driven training")
     parser.add_argument("--config", required=True, help="YAML config path")
     parser.add_argument(

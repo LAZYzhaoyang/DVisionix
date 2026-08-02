@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 训练级日志器（TrainingLogger）。
 """训练级日志器（TrainingLogger）。
 
 统一训练过程的可观测出口：结构化日志（console + file）+ TensorBoard + JSONL 事件流。
@@ -43,15 +45,19 @@ class TrainingLogger:
     # 基础委托
     # ------------------------------------------------------------------
     def info(self, msg: str) -> None:
+        """记录 info 级别日志。"""
         self.logger.info(msg)
 
     def warning(self, msg: str) -> None:
+        """记录 warning 级别日志。"""
         self.logger.warning(msg)
 
     def error(self, msg: str) -> None:
+        """记录 error 级别日志。"""
         self.logger.error(msg)
 
     def debug(self, msg: str) -> None:
+        """记录 debug 级别日志。"""
         self.logger.debug(msg)
 
     # ------------------------------------------------------------------

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DETR 检测器（transformer 端到端目标检测）。
 """DETR 检测器（transformer 端到端目标检测）。"""
 
 from typing import Any, Dict, Optional
@@ -29,6 +31,7 @@ class DETRDetector(SingleStageDetector):
     def decode(
         self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5, max_detections=100, topk=300
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return detr_decode(
             preds,
             image_hw,

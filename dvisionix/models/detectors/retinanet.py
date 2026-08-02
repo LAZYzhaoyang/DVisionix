@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: RetinaNet 检测器（anchor-based 单阶段）。
 """RetinaNet 检测器（anchor-based 单阶段）。
 
 配置示例::
@@ -58,6 +60,7 @@ class RetinaNetDetector(SingleStageDetector):
         max_detections=100,
         topk_per_level=1000,
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return retinanet_decode(
             preds,
             image_hw,

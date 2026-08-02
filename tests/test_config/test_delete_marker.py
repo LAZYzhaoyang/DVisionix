@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Config._delete_ 替换语义测试。
 """Config._delete_ 替换语义测试。"""
 
 from dvisionix.config import Config

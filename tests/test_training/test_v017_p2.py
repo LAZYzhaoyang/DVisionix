@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.17-P2 测试：超参搜索工具 + 特征蒸馏。
 """v0.17-P2 测试：超参搜索工具 + 特征蒸馏。"""
 
 import pytest

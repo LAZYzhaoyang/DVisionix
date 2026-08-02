@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.16.0 测试：DINO-lite / 线性评估 / 训练工程 P1。
 """v0.16.0 测试：DINO-lite / 线性评估 / 训练工程 P1。"""
 
 import os

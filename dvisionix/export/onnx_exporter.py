@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ONNX 模型导出器
 """
 ONNX 模型导出器
 

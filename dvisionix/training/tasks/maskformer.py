@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: MaskFormer 实例分割任务组件（MaskFormerHead full 模式 + MaskFormerLoss ...
 """MaskFormer 实例分割任务组件（MaskFormerHead full 模式 + MaskFormerLoss + mask mAP）。"""
 
 from typing import Any, Dict, Optional
@@ -60,6 +62,7 @@ class MaskFormerTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """MaskFormer 训练步：mask 监督损失。"""
         images = batch["image"].to(device)
         preds = model(images)
         if not isinstance(preds, dict):
@@ -72,6 +75,7 @@ class MaskFormerTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """MaskFormer 验证步：mask/全景指标更新。"""
         images = batch["image"].to(device)
         with torch.no_grad():
             preds = model(images)
@@ -131,6 +135,7 @@ class MaskFormerTask(BaseTask):
         return out
 
     def update_metrics(self, preds: Any, targets: Any) -> None:
+        """用 (preds, targets) 更新 mask/实例指标。"""
         if self.metrics is None:
             return
         if self.panoptic:
@@ -145,6 +150,7 @@ class MaskFormerTask(BaseTask):
             self.metrics.update(masks_list, scores_list, labels_list, target_masks, target_labels)
 
     def on_validation_epoch_end(self) -> Dict[str, float]:
+        """验证结束：计算全景（PQ/SQ/RQ）或 mask 指标。"""
         result = self.metrics.compute() if self.metrics is not None else {}
         if self.metrics is not None:
             self.metrics.reset()
@@ -154,6 +160,7 @@ class MaskFormerTask(BaseTask):
         return result
 
     def reset_metrics(self) -> None:
+        """重置 mask/全景指标。"""
         super().reset_metrics()
         panoptic_metric = getattr(self, "_panoptic_metric", None)
         if panoptic_metric is not None:

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SwinV2 连续相对位置偏置（log-spaced，MLP 映射）。
 """SwinV2 连续相对位置偏置（log-spaced，MLP 映射）。"""
 
 import torch
@@ -24,6 +26,7 @@ class ContinuousRelativePositionBias(nn.Module):
         )
 
     def forward(self, window_size: int) -> torch.Tensor:
+        """相对位置偏置：返回 (num_heads, L, L) 的偏置矩阵。"""
         coords_h = torch.arange(window_size, device=self.cpb_mlp[0].weight.device)
         coords_w = torch.arange(window_size, device=self.cpb_mlp[0].weight.device)
         coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"))  # (2, ws, ws)

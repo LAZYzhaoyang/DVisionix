@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 指标组合容器。
 """指标组合容器。
 
 MetricCollection 把多个原子指标组合在一起，把 reset/update 广播给每个成员，
@@ -66,6 +68,7 @@ class MetricCollection:
         return self
 
     def reset(self) -> None:
+        """重置容器内全部指标。"""
         for m in self.metrics:
             m.reset()
 

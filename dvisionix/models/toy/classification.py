@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 教学级分类模型（SimpleCNN）。
 """教学级分类模型（SimpleCNN）。
 
 仅用于演示与快速验证数据/训练流程，生产请使用组件化模型（如 LinearClassifier + timm 骨干）。
@@ -40,6 +42,7 @@ class SimpleCNN(BaseModel):
         )
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """SimpleCNN 前向：x -> logits (B, num_classes)。"""
         x = self.features(x)
         x = x.flatten(1)
         return self.classifier(x)

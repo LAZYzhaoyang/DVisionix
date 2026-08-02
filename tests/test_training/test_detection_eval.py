@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测推理解码、NMS 与 mAP 评估的单元测试。
 """检测推理解码、NMS 与 mAP 评估的单元测试。"""
 
 import os

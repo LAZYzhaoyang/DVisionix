@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 数据样本（Sample）契约。
 """数据样本（Sample）契约。
 
 整个 data 模块对样本字段名/类型/约定做了统一定义，所有 dataset / transform / collate

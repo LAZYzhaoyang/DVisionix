@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: PANet（FPN + 自底向上路径增强）。
 """PANet（FPN + 自底向上路径增强）。
 
 在 FPN 的 top-down 融合之上，增加 bottom-up 路径，利于小目标与大目标间信息传递。
@@ -44,6 +46,7 @@ class PANet(BaseModel):
             )
 
     def forward(self, inputs):
+        """PANet 前向：多尺度特征 -> FPN + 自底向上路径增强的特征列表。"""
         assert isinstance(inputs, (list, tuple)), "PANet expects a list of feature maps"
         laterals = [conv(x) for conv, x in zip(self.lateral_convs, inputs)]
 

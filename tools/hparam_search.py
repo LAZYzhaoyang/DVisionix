@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 超参搜索工具：对配置参数网格/随机采样批量跑 train.py 并汇总最优指标。
 """超参搜索工具：对配置参数网格/随机采样批量跑 train.py 并汇总最优指标。
 
 用法::
@@ -26,6 +28,7 @@ from dvisionix.utils import get_logger  # noqa: E402
 
 
 def load_param_spec(path):
+    """加载参数网格 YAML（点路径 -> 候选值列表）。"""
     with open(path, "r", encoding="utf-8") as f:
         spec = yaml.safe_load(f)
     assert isinstance(spec, dict) and spec, "param-spec 需为 {点路径: [候选值,...]} 字典"
@@ -33,17 +36,20 @@ def load_param_spec(path):
 
 
 def combinations(spec):
+    """对参数网格做笛卡尔积，返回 (keys, combos)。"""
     keys = list(spec.keys())
     values = list(itertools.product(*[spec[k] for k in keys]))
     return keys, values
 
 
 def random_trials(spec, num_trials, rng):
+    """随机采样 num_trials 组参数组合。"""
     keys = list(spec.keys())
     return keys, [tuple(rng.choice(spec[k]) for k in keys) for _ in range(num_trials)]
 
 
 def format_value(v):
+    """把参数值格式化为 CLI 字符串（列表转 [a,b]）。"""
     if isinstance(v, (list, tuple)):
         return "[" + ",".join(str(x) for x in v) + "]"
     return str(v)
@@ -55,6 +61,7 @@ def to_cfg_options(keys, combo):
 
 
 def best_from_history(work_dir, monitor, mode):
+    """从 work_dir/history.csv 读取监控指标的最优值。"""
     path = os.path.join(work_dir, "history.csv")
     if not os.path.exists(path):
         return None
@@ -76,6 +83,7 @@ def best_from_history(work_dir, monitor, mode):
 
 
 def main():
+    """超参搜索入口：组合/采样 -> 批量跑 train.py -> 汇总 search_results.csv。"""
     parser = argparse.ArgumentParser(description="DVisionix 超参搜索")
     parser.add_argument("--config", required=True, help="基础配置文件")
     parser.add_argument("--param-spec", required=True, help="参数网格 YAML（点路径 -> 候选值列表）")

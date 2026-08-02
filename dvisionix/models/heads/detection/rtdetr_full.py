@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: RT-DETR 增强版检测头（IoU-aware query selection + 多尺度可变形编码器，compact...
 """RT-DETR 增强版检测头（IoU-aware query selection + 多尺度可变形编码器，compact）。"""
 
 import torch
@@ -91,6 +93,7 @@ class RTDETRFullHead(BaseModel):
         return torch.cat(refs, dim=0)
 
     def forward(self, feats):
+        """RTDETRFullHead 前向：多尺度特征 -> {logits, boxes}（框细化）。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         B = feats[0].shape[0]

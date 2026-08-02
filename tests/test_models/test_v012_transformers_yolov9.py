@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.12.0 测试：ViT/Swin 骨干 / YOLOv9-lite（PGI）。
 """v0.12.0 测试：ViT/Swin 骨干 / YOLOv9-lite（PGI）。"""
 
 import os

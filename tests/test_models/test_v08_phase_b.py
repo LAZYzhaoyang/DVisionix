@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.8.0 阶段 B 测试：分割头 / MaskFormerTask / PanopticQuality / YOLO...
 """v0.8.0 阶段 B 测试：分割头 / MaskFormerTask / PanopticQuality / YOLO 系列 / Deformable DETR / 分类头。"""
 
 import pytest

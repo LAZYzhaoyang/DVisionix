@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.5 工程能力测试：EMA / 蒸馏 / checkpoint 保留 / history.csv / MaskFor...
 """v0.5 工程能力测试：EMA / 蒸馏 / checkpoint 保留 / history.csv / MaskFormerLoss。"""
 
 import os

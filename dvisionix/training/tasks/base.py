@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Task 基类（任务组件）。
 """Task 基类（任务组件）。
 
 任务逻辑（训练步 / 验证步 / 优化器与调度器 / 损失 / 指标）完全由 Task 承载，
@@ -87,6 +89,7 @@ class BaseTask(ABC):
     # 指标
     # ------------------------------------------------------------------
     def reset_metrics(self) -> None:
+        """重置任务内指标状态。"""
         if self.metrics is not None:
             self.metrics.reset()
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DINO query denoising（去噪训练 query 生成，含对比正负样本）。
 """DINO query denoising（去噪训练 query 生成，含对比正负样本）。"""
 
 import torch

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: FCOS / RetinaNet 检测器、assigner、检测损失测试（S3）。
 """FCOS / RetinaNet 检测器、assigner、检测损失测试（S3）。"""
 
 import pytest

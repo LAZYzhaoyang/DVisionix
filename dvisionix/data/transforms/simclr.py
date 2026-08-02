@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SimCLR 双视角增强（随机裁剪/翻转/色彩抖动 + 归一化）。
 """SimCLR 双视角增强（随机裁剪/翻转/色彩抖动 + 归一化）。"""
 
 from typing import Tuple

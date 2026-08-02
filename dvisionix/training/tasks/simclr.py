@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SimCLR 对比学习任务（双视角 InfoNCE，自监督）。
 """SimCLR 对比学习任务（双视角 InfoNCE，自监督）。"""
 
 from typing import Any, Dict, Optional
@@ -38,6 +40,7 @@ class SimCLRTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步训练：双视角对比损失（InfoNCE）。"""
         z1 = model(batch["image1"].to(device))
         z2 = model(batch["image2"].to(device))
         loss, extras = compute_loss(self.loss, z1, z2)
@@ -46,6 +49,7 @@ class SimCLRTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步验证：返回投影向量（无监督无指标）。"""
         with torch.no_grad():
             z1 = model(batch["image1"].to(device))
             z2 = model(batch["image2"].to(device))

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CosFace 度量学习头（additive cosine margin）。
 """CosFace 度量学习头（additive cosine margin）。"""
 
 import torch
@@ -24,6 +26,7 @@ class CosFaceHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):
+        """CosFace 前向：特征 -> 余弦 logits（含余弦间隔）。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
         cos = torch.mm(x_norm, w_norm.t())

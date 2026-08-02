@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 内置骨干基类：stage 列表 + dry-run 通道推导 + features_only 多尺度输出。
 """内置骨干基类：stage 列表 + dry-run 通道推导 + features_only 多尺度输出。"""
 
 from typing import List, Optional, Sequence
@@ -57,6 +59,7 @@ class FeatureBackboneBase(BaseModel):
         return channels
 
     def forward(self, x: torch.Tensor, **kwargs):
+        """骨干前向：features_only=True 返回多尺度特征列表；否则返回全局池化特征 (B, C)。"""
         feats = []
         for stage in self.stages:
             x = stage(x)

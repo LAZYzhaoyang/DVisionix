@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 学习率调度器注册表与构建工具。
 """学习率调度器注册表与构建工具。
 
 ``build_scheduler(cfg, optimizer)`` 返回 ``(scheduler, monitor)``：

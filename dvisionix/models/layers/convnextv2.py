@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ConvNeXtV2 块（GRN 全局响应归一化，替代 LayerScale）。
 """ConvNeXtV2 块（GRN 全局响应归一化，替代 LayerScale）。"""
 
 import torch
@@ -25,6 +27,7 @@ class ConvNeXtV2Block(nn.Module):
         self.drop_path = DropPath(drop_path) if drop_path > 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """ConvNeXtV2 块前向：x (B,C,H,W) -> 同形状输出。"""
         residual = x
         x = self.dwconv(x)
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)

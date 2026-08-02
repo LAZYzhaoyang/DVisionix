@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DINO 风格检测头（compact：hybrid query selection + query denoising ...
 """DINO 风格检测头（compact：hybrid query selection + query denoising + box refinement）。"""
 
 import torch
@@ -88,6 +90,7 @@ class DINODetrHead(BaseModel):
         return torch.cat(refs, dim=0)
 
     def forward(self, feats, batch=None):
+        """DINODetrHead 前向：多尺度特征(+batch) -> {logits, boxes}，训练含中间框/去噪项。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         B = feats[0].shape[0]

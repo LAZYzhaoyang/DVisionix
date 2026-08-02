@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.17 DINO 可选增强：look-forward-twice（LFT）。
 """v0.17 DINO 可选增强：look-forward-twice（LFT）。"""
 
 import pytest

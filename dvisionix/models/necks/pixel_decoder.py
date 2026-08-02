@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: PixelDecoder 颈部（Mask2Former 像素解码器，与 FPN/PANet 同级）。
 """PixelDecoder 颈部（Mask2Former 像素解码器，与 FPN/PANet 同级）。"""
 
 import torch.nn as nn
@@ -28,6 +30,7 @@ class PixelDecoder(BaseModel):
         )
 
     def forward(self, feats):
+        """PixelDecoder 前向：多尺度特征 -> 多尺度掩码特征（最精细在前）。"""
         laterals = [conv(f) for conv, f in zip(self.lateral, feats)]
         for i in range(len(laterals) - 2, -1, -1):
             laterals[i] = laterals[i] + F.interpolate(

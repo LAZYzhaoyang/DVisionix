@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: GRN（全局响应归一化，ConvNeXtV2）层。
 """GRN（全局响应归一化，ConvNeXtV2）层。"""
 
 import torch
@@ -23,6 +25,7 @@ class GRN(nn.Module):
         self.beta = nn.Parameter(torch.zeros(dim))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """GRN 全局响应归一化：x (B,C,H,W) -> 同形状输出。"""
         if self.channels_first:
             gx = x.norm(p=2, dim=(2, 3), keepdim=True)
             nx = gx / (gx.mean(dim=1, keepdim=True) + self.eps)

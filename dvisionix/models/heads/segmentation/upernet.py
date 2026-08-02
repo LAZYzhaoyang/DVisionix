@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: UPerNet 分割头（FPN 风格多尺度融合 + 金字塔池化）。
 """UPerNet 分割头（FPN 风格多尺度融合 + 金字塔池化）。"""
 
 import torch
@@ -52,6 +54,7 @@ class UPerNetHead(BaseModel):
         self.out_conv = nn.Conv2d(channels, num_classes, 1)
 
     def forward(self, feats):
+        """UPerNetHead 前向：多尺度特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         # 自顶向下融合（FPN 风格）：逐级把高层上采样到当前层尺寸再相加

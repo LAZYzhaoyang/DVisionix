@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SegFormer 变体分割头（overlap patch embed + MixFFN，compact）。
 """SegFormer 变体分割头（overlap patch embed + MixFFN，compact）。"""
 
 import torch
@@ -55,6 +57,7 @@ class SegFormerV2Head(BaseModel):
         )
 
     def forward(self, feats):
+        """SegFormerV2Head 前向：多层特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         outs = []

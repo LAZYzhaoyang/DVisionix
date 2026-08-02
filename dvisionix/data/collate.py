@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 数据整理（collate）函数。
 """数据整理（collate）函数。
 
 - 分类任务：默认 PyTorch collate 即可。

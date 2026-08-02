@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 阶段 3 训练引擎能力测试：AMP / 梯度累积 / 种子 / resume。
 """阶段 3 训练引擎能力测试：AMP / 梯度累积 / 种子 / resume。"""
 
 import os

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 全景分割质量（Panoptic Quality，PQ / SQ / RQ）指标。
 """全景分割质量（Panoptic Quality，PQ / SQ / RQ）指标。
 
 遵循 Panoptic Segmentation (Kirillov et al.) 定义：按类别逐类匹配预测/真值片段
@@ -35,6 +37,7 @@ class PanopticQuality(BaseMetric):
         self.id_scale = int(id_scale)
 
     def reset(self) -> None:
+        """重置全景评估累积状态。"""
         self._tp_iou: Dict[int, float] = {}
         self._tp: Dict[int, int] = {}
         self._fp: Dict[int, int] = {}
@@ -87,6 +90,7 @@ class PanopticQuality(BaseMetric):
             self._tp_iou[cat] = self._tp_iou.get(cat, 0.0) + tp_iou
 
     def compute(self) -> Dict[str, float]:
+        """计算 PQ / SQ / RQ 三项全景指标。"""
         cats = [
             c
             for c in set(self._tp) | set(self._fp) | set(self._fn)

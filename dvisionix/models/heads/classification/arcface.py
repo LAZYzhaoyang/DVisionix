@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ArcFace 度量学习头。
 """ArcFace 度量学习头。"""
 
 from typing import Optional
@@ -30,6 +32,7 @@ class ArcFaceHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels: Optional[torch.Tensor] = None):
+        """ArcFace 前向：特征 -> 加角度间隔的 logits (B, num_classes)。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
         cos_theta = torch.mm(x_norm, w_norm.t())

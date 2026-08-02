@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: FCOS 检测器（anchor-free 单阶段）。
 """FCOS 检测器（anchor-free 单阶段）。
 
 配置示例::
@@ -49,6 +51,7 @@ class FCOSDetector(SingleStageDetector):
         max_detections=100,
         topk_per_level=1000,
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return fcos_decode(
             preds,
             image_hw,

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CenterNet 检测头（关键点热图 + 尺寸 + 偏移）。
 """CenterNet 检测头（关键点热图 + 尺寸 + 偏移）。"""
 
 import torch.nn as nn
@@ -36,6 +38,7 @@ class CenterNetHead(BaseModel):
         self.offset = nn.Conv2d(hidden, 2, 1)
 
     def forward(self, x):
+        """CenterNetHead 前向：特征 -> {hm, wh, offset} 热图/宽高/偏移预测。"""
         if isinstance(x, (list, tuple)):
             x = x[-1]  # 单尺度头：取多尺度特征最后一层
         feat = self.stem(x)

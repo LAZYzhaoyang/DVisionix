@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SimCLR 对比学习投影头（MLP 投影，配合 InfoNCELoss）。
 """SimCLR 对比学习投影头（MLP 投影，配合 InfoNCELoss）。"""
 
 import torch.nn as nn
@@ -27,6 +29,7 @@ class SimCLRHead(BaseModel):
         )
 
     def forward(self, x, labels=None):
+        """SimCLRHead 前向：特征 -> 投影向量 (B, proj_dim)。"""
         return self.proj(x)
 
 

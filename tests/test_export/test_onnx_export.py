@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ONNX 导出器测试：单/多输入、dict/多输出、verify、backend、元数据。
 """ONNX 导出器测试：单/多输入、dict/多输出、verify、backend、元数据。"""
 
 import os

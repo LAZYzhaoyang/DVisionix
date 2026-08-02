@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.14.0 中期批次 1 测试：ConvNeXtV2 / EfficientNetLite / MiT / Swin...
 """v0.14.0 中期批次 1 测试：ConvNeXtV2 / EfficientNetLite / MiT / SwinUNet / YOLOv11(C3k2+PSA)。"""
 
 import os

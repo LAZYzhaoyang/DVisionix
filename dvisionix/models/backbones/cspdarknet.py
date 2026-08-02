@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CSPDarknet 骨干（YOLOv5/v8 官方结构：Conv stem + CSP 阶段）。
 """CSPDarknet 骨干（YOLOv5/v8 官方结构：Conv stem + CSP 阶段）。"""
 
 from typing import List, Optional, Sequence

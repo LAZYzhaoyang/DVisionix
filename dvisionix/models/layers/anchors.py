@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Anchor 工具（通用几何工具，detectors 与 losses 平级共用）。
 """Anchor 工具（通用几何工具，detectors 与 losses 平级共用）。"""
 
 import math
@@ -34,6 +36,7 @@ class AnchorGenerator:
 
     @property
     def num_anchors(self) -> int:
+        """返回该锚框生成器的锚框数量。"""
         return len(self.ratios) * len(self.scales)
 
     def grid_anchors(self, feature_maps: List[torch.Tensor]) -> List[torch.Tensor]:

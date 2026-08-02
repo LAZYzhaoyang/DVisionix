@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DETR 检测头（transformer encoder-decoder + 类别/框 FFN）。
 """DETR 检测头（transformer encoder-decoder + 类别/框 FFN）。"""
 
 import torch
@@ -58,6 +60,7 @@ class DETRHead(BaseModel):
         )
 
     def forward(self, feats):
+        """DETRHead 前向：特征 -> {logits, boxes}。"""
         if isinstance(feats, (list, tuple)):
             feats = feats[-1]
         x = self.input_proj(feats)  # (B, d, H, W)

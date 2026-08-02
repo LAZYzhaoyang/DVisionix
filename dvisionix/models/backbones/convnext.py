@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ConvNeXt 骨干网络（现代 CNN，LN + 深度可分离 + 层缩放）。
 """ConvNeXt 骨干网络（现代 CNN，LN + 深度可分离 + 层缩放）。"""
 
 from typing import List, Optional, Sequence

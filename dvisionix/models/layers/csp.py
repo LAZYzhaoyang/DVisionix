@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CSP（Cross Stage Partial）瓶颈层，用于 YOLOv5 风格骨干。
 """CSP（Cross Stage Partial）瓶颈层，用于 YOLOv5 风格骨干。"""
 
 import torch
@@ -45,6 +47,7 @@ class CSPLayer(nn.Module):
         self.out_conv = ConvNormAct(hidden * 2, out_channels, 1, act=act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """CSP 层前向：x (B,C,H,W) -> (B,out_channels,H,W)。"""
         y1 = self.blocks(self.main_conv(x))
         y2 = self.short_conv(x)
         return self.out_conv(torch.cat([y1, y2], dim=1))
@@ -68,6 +71,7 @@ class _Bottleneck(nn.Module):
         self.shortcut = shortcut and in_channels == out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """CSP 层前向：x (B,C,H,W) -> (B,out_channels,H,W)。"""
         out = self.conv2(self.conv1(x))
         return out + x if self.shortcut else out
 

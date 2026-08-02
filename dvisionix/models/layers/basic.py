@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 内置自定义层。
 """内置自定义层。
 
 这些层都注册到全局 ``LAYERS`` 注册表，可通过 ``build_layer`` 或配置字典构建，
@@ -65,6 +67,7 @@ class ConvNormAct(nn.Module):
         self.act = build_activation_layer(act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """ConvNormAct 前向：x (B,C,H,W) -> (B,out_channels,H,W)。"""
         return self.act(self.norm(self.conv(x)))
 
 
@@ -93,6 +96,7 @@ class MLP(nn.Module):
         self.drop = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """MLP 前向：x (..., in_dim) -> (..., out_dim)。"""
         x = self.drop(self.act(self.fc1(x)))
         x = self.drop(self.fc2(x))
         return x
@@ -125,6 +129,7 @@ class SEBlock(nn.Module):
         self.gate = build_activation_layer(gate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """SE 通道注意力：x (B,C,H,W) -> 同形状加权输出。"""
         scale = x.mean((2, 3), keepdim=True)
         scale = self.gate(self.fc2(self.act(self.fc1(scale))))
         return x * scale
@@ -143,6 +148,7 @@ class DropPath(nn.Module):
         self.drop_prob = float(drop_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """DropPath：训练时按概率丢弃残差路径，推理/评估时为恒等。"""
         if self.drop_prob <= 0.0 or not self.training:
             return x
         keep_prob = 1.0 - self.drop_prob
@@ -152,6 +158,7 @@ class DropPath(nn.Module):
         return x / keep_prob * mask
 
     def extra_repr(self) -> str:
+        """返回模块的额外字符串表示（参数名/数值）。"""
         return f"drop_prob={self.drop_prob}"
 
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 优化器注册表与构建工具。
 """优化器注册表与构建工具。
 
 Task 不再硬编码优化器；通过 ``optimizer_cfg``（如 ``{"type": "adamw", "lr": 1e-3}``）

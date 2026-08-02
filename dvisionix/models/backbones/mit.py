@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SegFormer 编码器（MiTBackbone）：overlap patch embed + MixFFN 多尺度输...
 """SegFormer 编码器（MiTBackbone）：overlap patch embed + MixFFN 多尺度输出。"""
 
 from typing import List, Optional, Sequence

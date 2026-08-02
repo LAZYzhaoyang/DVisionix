@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Task 组件化测试：配置驱动构建 / optimizer/scheduler/loss/metrics 注入。
 """Task 组件化测试：配置驱动构建 / optimizer/scheduler/loss/metrics 注入。"""
 
 import torch

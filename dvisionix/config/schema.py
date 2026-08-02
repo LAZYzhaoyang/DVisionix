@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 配置 schema 校验（轻量、无重依赖）。
 """配置 schema 校验（轻量、无重依赖）。
 
 - 校验必填/类型/取值，错误抛 ValueError；

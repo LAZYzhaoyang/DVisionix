@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 日志系统单元测试。
 """日志系统单元测试。"""
 
 import os

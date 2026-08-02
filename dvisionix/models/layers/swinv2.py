@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SwinV2 块（cosine attention + res-post-norm + 连续相对位置偏置）。
 """SwinV2 块（cosine attention + res-post-norm + 连续相对位置偏置）。"""
 
 import torch
@@ -38,6 +40,7 @@ class SwinV2Block(nn.Module):
         self.drop_path = nn.Identity() if drop_path == 0 else DropPath(drop_path)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """SwinV2 块前向：x (B, L, C) -> 同形状输出。"""
         B, C, H, W = x.shape
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
         ws = min(self.window_size, H, W)
@@ -59,6 +62,7 @@ class SwinV2Block(nn.Module):
         return x.permute(0, 3, 1, 2)
 
     def attn(self, t: torch.Tensor, ws: int) -> torch.Tensor:
+        """窗口注意力前向：q/k/v -> 注意力输出。"""
         B, N, C = t.shape
         qkv = self.qkv(t).reshape(B, N, 3, self.num_heads, C // self.num_heads)
         qkv = qkv.permute(2, 0, 3, 1, 4)

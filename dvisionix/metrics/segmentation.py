@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分割任务的原子指标。
 """分割任务的原子指标。
 
 提供可自由组合的分割指标：MeanIoU / PixelAccuracy / DiceScore。
@@ -37,9 +39,11 @@ class _SegConfusionMetric(BaseMetric):
         super().__init__(name)
 
     def reset(self) -> None:
+        """重置分割指标状态。"""
         self.confusion_matrix = np.zeros((self.num_classes, self.num_classes), dtype=np.int64)
 
     def update(self, logits: torch.Tensor, targets: torch.Tensor) -> None:
+        """累积一批分割预测与目标。"""
         preds_np = logits.argmax(dim=1).cpu().numpy().flatten()
         targets_np = targets.cpu().numpy().flatten()
 
@@ -72,6 +76,7 @@ class MeanIoU(_SegConfusionMetric):
         super().__init__(num_classes, ignore_index, per_class, name)
 
     def compute(self):
+        """返回当前分割指标值。"""
         cm = self.confusion_matrix
         intersection = np.diag(cm).astype(np.float64)
         union = cm.sum(axis=1) + cm.sum(axis=0) - intersection
@@ -94,6 +99,7 @@ class PixelAccuracy(_SegConfusionMetric):
         super().__init__(num_classes, ignore_index, per_class=False, name=name)
 
     def compute(self) -> float:
+        """返回当前分割指标值。"""
         cm = self.confusion_matrix
         total = cm.sum()
         correct = np.diag(cm).sum()
@@ -115,6 +121,7 @@ class DiceScore(_SegConfusionMetric):
         super().__init__(num_classes, ignore_index, per_class, name)
 
     def compute(self):
+        """返回当前分割指标值。"""
         cm = self.confusion_matrix
         intersection = np.diag(cm).astype(np.float64)
         denom = cm.sum(axis=1) + cm.sum(axis=0)
@@ -159,11 +166,13 @@ class MaskAveragePrecision(BaseMetric):
         super().__init__(name)
 
     def reset(self):
+        """重置分割指标状态。"""
         self.detections = {c: [] for c in range(self.num_classes)}
         self.annotations = {c: [] for c in range(self.num_classes)}
         self.image_id = 0
 
     def update(self, pred_masks, pred_scores, pred_labels, target_masks, target_labels):
+        """累积一批分割预测与目标。"""
         for i in range(len(pred_masks)):
             img_id = self.image_id
             self.image_id += 1
@@ -186,6 +195,7 @@ class MaskAveragePrecision(BaseMetric):
                     )
 
     def compute(self):
+        """返回当前分割指标值。"""
         aps = []
         for c in range(self.num_classes):
             if len(self.annotations[c]) == 0:

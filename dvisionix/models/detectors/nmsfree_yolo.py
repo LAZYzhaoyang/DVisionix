@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: YOLOv10 风格检测器（one-to-one 训练，推理无需 NMS）。
 """YOLOv10 风格检测器（one-to-one 训练，推理无需 NMS）。"""
 
 from typing import Any, Dict, Optional

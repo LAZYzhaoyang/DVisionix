@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 头部子包：按任务组织（classification / segmentation / detection），每个头一个文...
 """头部子包：按任务组织（classification / segmentation / detection），每个头一个文件。
 
 新增头：在对应任务子目录新建文件（继承 BaseModel + @HEADS.register()），并在

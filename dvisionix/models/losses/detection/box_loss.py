@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测框回归损失：GIoU / CIoU / L1。
 """检测框回归损失：GIoU / CIoU / L1。
 
 约定：输入为已匹配的 ``(N, 4)`` 预测框与目标框对（[x1, y1, x2, y2] 绝对坐标）。
@@ -42,6 +44,7 @@ class GIoULoss(BaseLoss):
     def forward(
         self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
     ) -> torch.Tensor:
+        """GIoU 损失：预测框 vs 目标框（像素 xyxy）。"""
         iou, union = _compute_iou_union(pred_boxes, target_boxes)
         cw = torch.max(pred_boxes[:, 2], target_boxes[:, 2]) - torch.min(
             pred_boxes[:, 0], target_boxes[:, 0]
@@ -68,6 +71,7 @@ class CIoULoss(BaseLoss):
     def forward(
         self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
     ) -> torch.Tensor:
+        """CIoU 损失：GIoU + 宽高比惩罚项。"""
         iou, union = _compute_iou_union(pred_boxes, target_boxes)
 
         pcx = (pred_boxes[:, 0] + pred_boxes[:, 2]) / 2
@@ -109,6 +113,7 @@ class L1BoxLoss(BaseLoss):
     def forward(
         self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
     ) -> torch.Tensor:
+        """L1 框回归损失（归一化 xywh）。"""
         loss = F.l1_loss(pred_boxes, target_boxes, reduction=self.reduction)
         return loss
 

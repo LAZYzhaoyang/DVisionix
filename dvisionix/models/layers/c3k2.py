@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: YOLOv11 C3k2 块（CSP 变体，k=2 默认两个 3x3 bottleneck）。
 """YOLOv11 C3k2 块（CSP 变体，k=2 默认两个 3x3 bottleneck）。"""
 
 import torch
@@ -44,6 +46,7 @@ class C3k2Block(nn.Module):
         self.out = ConvNormAct(hidden * 2, out_channels, 1, act=act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """C3k2 模块前向：x (B,C,H,W) -> (B,C,H,W)。"""
         y1 = self.blocks(self.main(x))
         y2 = self.short(x)
         return self.out(torch.cat([y1, y2], dim=1))

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 颈部（neck）模块：多尺度特征融合。
 """颈部（neck）模块：多尺度特征融合。"""
 
 from .fpn import FPN

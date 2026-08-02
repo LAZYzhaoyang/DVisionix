@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 阶段 A-D 新增模型测试：YOLO / DETR / SegFormer / MaskFormer / 度量学习头 /...
 """阶段 A-D 新增模型测试：YOLO / DETR / SegFormer / MaskFormer / 度量学习头 / MultiLabelTask。"""
 
 import pytest

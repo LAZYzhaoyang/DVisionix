@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 数据模块测试：Sample 契约 + BaseDataset + CustomDataset + 主流公开数据集。
 """数据模块测试：Sample 契约 + BaseDataset + CustomDataset + 主流公开数据集。"""
 
 import os

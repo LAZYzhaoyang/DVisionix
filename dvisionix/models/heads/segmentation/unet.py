@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: U-Net 风格解码器（UNetDecoder）。
 """U-Net 风格解码器（UNetDecoder）。"""
 
 import torch
@@ -44,6 +46,7 @@ class UNetDecoder(BaseModel):
         )
 
     def forward(self, feats):
+        """UNetDecoder 前向：多尺度编码特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         x = feats[-1]

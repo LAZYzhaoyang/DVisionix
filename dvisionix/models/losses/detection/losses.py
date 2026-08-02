@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测组合损失：GridDetectionLoss（单阶段网格检测器默认损失）。
 """检测组合损失：GridDetectionLoss（单阶段网格检测器默认损失）。
 
 GridDetectionLoss 内部使用 GridAssigner 做目标分配，再由
@@ -25,6 +27,7 @@ class ObjectnessLoss(BaseLoss):
     """Objectness BCE-with-logits 损失。"""
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """objectness 二分类损失。"""
         return F.binary_cross_entropy_with_logits(logits, targets)
 
 
@@ -61,6 +64,7 @@ class GridDetectionLoss(BaseLoss):
         device: Optional[torch.device] = None,
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
+        """网格检测损失：objectness + 框回归 + 类别。"""
         if device is None:
             device = preds.device
         if image_hw is None:
@@ -115,6 +119,7 @@ class SigmoidFocalLoss(BaseLoss):
         self.reduction = reduction
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """Sigmoid + Focal 分类损失。"""
         p = torch.sigmoid(logits)
         ce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
         p_t = p * targets + (1 - p) * (1 - targets)
@@ -179,6 +184,7 @@ class FCOSDetectionLoss(BaseLoss):
         device=None,
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
+        """FCOS 损失：类别 + centerness + 框回归。"""
         if device is None:
             device = preds["cls"][0].device
         if image_hw is None:
@@ -290,6 +296,7 @@ class RetinaNetLoss(BaseLoss):
     def forward(
         self, preds, batch, image_hw=None, device=None, **kwargs
     ) -> Dict[str, torch.Tensor]:
+        """RetinaNet 损失：focal 分类 + L1 框回归。"""
         if device is None:
             device = preds["cls"][0].device
         if image_hw is None:
@@ -384,6 +391,7 @@ class YOLOLoss(BaseLoss):
     def forward(
         self, preds, batch, image_hw=None, device=None, **kwargs
     ) -> Dict[str, torch.Tensor]:
+        """YOLO 损失：BCE 类别 + 框回归（TaskAlignedAssigner 匹配）。"""
         if device is None:
             device = preds["cls"][0].device
         if image_hw is None:
@@ -505,6 +513,7 @@ class DETRLoss(BaseLoss):
     def forward(
         self, preds, batch, image_hw=None, device=None, **kwargs
     ) -> Dict[str, torch.Tensor]:
+        """DETR set 损失：匈牙利匹配 + CE + L1 + GIoU。"""
         if device is None:
             device = preds["logits"].device
         if image_hw is None:
@@ -586,6 +595,7 @@ class OneToOneYOLOLoss(BaseLoss):
         return torch.stack([cx.reshape(-1), cy.reshape(-1)], dim=1)
 
     def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        """YOLOv10 one-to-one 损失：每 GT 仅匹配一个最高质量预测。"""
         if device is None:
             device = preds["cls"][0].device
         cls_outs, reg_outs = preds["cls"], preds["reg"]
@@ -712,6 +722,7 @@ class CenterNetLoss(BaseLoss):
         return hm, wh, offset, reg_mask
 
     def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        """CenterNet 损失：热图 focal + 宽高 L1 + 偏移 L1。"""
         if device is None:
             device = preds["heatmap"].device
         hm_pred = preds["heatmap"]
@@ -771,6 +782,7 @@ class YOLOv9Loss(BaseLoss):
         self.aux_weight = float(aux_weight)
 
     def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        """YOLOv9 损失：主/辅头辅助监督 + 框回归。"""
         main_out = self.main(
             {"cls": preds["cls"], "reg": preds["reg"]},
             batch,
@@ -823,6 +835,7 @@ class DINOLoss(BaseLoss):
         )
 
     def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        """DINO 损失：主头（look-forward-twice）+ 去噪分支。"""
         if device is None:
             device = preds["logits"].device
         intermediate = preds.get("intermediate_boxes")

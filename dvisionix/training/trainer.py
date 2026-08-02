@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 统一训练引擎（Trainer）
 """
 统一训练引擎（Trainer）
 
@@ -263,6 +265,7 @@ class Trainer:
     # 训练主流程
     # ------------------------------------------------------------------
     def fit(self, model: nn.Module) -> Dict[str, Any]:
+        """训练主循环：多 epoch 训练 + 验证 + 回调 + history 导出。"""
         if self.seed is not None:
             set_seed(self.seed + self.rank)
         self.model = self._wrap_model(model)
@@ -447,6 +450,7 @@ class Trainer:
     def validate(
         self, model: nn.Module, val_loader: Optional[DataLoader] = None
     ) -> Dict[str, float]:
+        """独立验证：对给定模型与验证集计算指标并返回。"""
         self.model = model.to(self.device)
         loader = val_loader or self.val_loader
         if loader is None:
@@ -479,6 +483,7 @@ class Trainer:
     # 推理
     # ------------------------------------------------------------------
     def predict(self, model: nn.Module, batch: Dict[str, Any]) -> Any:
+        """推理：对单个 batch 做模型前向。"""
         model = model.to(self.device)
         model.eval()
         images = batch["image"].to(self.device)
@@ -510,6 +515,7 @@ class Trainer:
             torch.cuda.set_rng_state_all(cuda_state)
 
     def save_checkpoint(self, path: str) -> None:
+        """保存完整检查点（model/optimizer/scheduler/scaler/rng/callbacks/task）。"""
         if not self._is_rank0():
             return
         checkpoint = {
@@ -538,6 +544,7 @@ class Trainer:
 
     def load_checkpoint(self, path: str, model: nn.Module, strict: bool = True) -> None:
         # torch 2.6 起默认 weights_only=True，导致完整 checkpoint 无法反序列化
+        """加载检查点并恢复训练状态（断点续训）。"""
         try:
             checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         except TypeError:  # pragma: no cover

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分割任务组件。
 """分割任务组件。"""
 
 from typing import Any, Dict, Optional
@@ -45,6 +47,7 @@ class SegmentationTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步训练：分割损失。"""
         images = batch["image"].to(device)
         masks = batch["mask"].to(device)
         logits = model(images)
@@ -62,6 +65,7 @@ class SegmentationTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步验证：分割指标更新。"""
         images = batch["image"].to(device)
         masks = batch["mask"].to(device)
         with torch.no_grad():

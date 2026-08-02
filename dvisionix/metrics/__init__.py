@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 指标模块。
 """指标模块。
 
 设计：原子指标（可自由组合）+ MetricCollection（组合容器）+ 预设组合。

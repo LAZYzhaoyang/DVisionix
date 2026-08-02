@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Deformable DETR 检测器（多尺度可变形注意力，输出契约与 DETR 一致）。
 """Deformable DETR 检测器（多尺度可变形注意力，输出契约与 DETR 一致）。"""
 
 from typing import Any, Dict, Optional
@@ -29,6 +31,7 @@ class DeformableDETRDetector(SingleStageDetector):
     def decode(
         self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5, max_detections=100, topk=300
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return detr_decode(
             preds,
             image_hw,

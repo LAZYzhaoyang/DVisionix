@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.7 测试：RT-DETR / Mask mAP 指标 / maskformer_decode / evaluate...
 """v0.7 测试：RT-DETR / Mask mAP 指标 / maskformer_decode / evaluate_mask_ap。"""
 
 import pytest

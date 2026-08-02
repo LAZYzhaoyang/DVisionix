@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 多标签分类任务（MultiLabelTask）。
 """多标签分类任务（MultiLabelTask）。"""
 
 from typing import Any, Dict, Optional
@@ -37,6 +39,7 @@ class MultiLabelTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步训练：多标签 BCE 损失。"""
         images = batch["image"].to(device)
         labels = batch["label"].to(device).float()
         logits = model(images)
@@ -46,6 +49,7 @@ class MultiLabelTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步验证：多标签指标更新。"""
         images = batch["image"].to(device)
         labels = batch["label"].to(device).float()
         with torch.no_grad():
@@ -54,6 +58,7 @@ class MultiLabelTask(BaseTask):
         return {"loss": loss, "preds": logits, "targets": labels, **extras}
 
     def update_metrics(self, preds: Any, targets: Any) -> None:
+        """用 (preds, targets) 更新多标签指标。"""
         if self.metrics is not None:
             self.metrics.update(preds, targets)
 

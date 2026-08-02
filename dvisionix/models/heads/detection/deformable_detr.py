@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Deformable DETR 风格检测头（紧凑版：纯 PyTorch 可变形注意力）。
 """Deformable DETR 风格检测头（紧凑版：纯 PyTorch 可变形注意力）。"""
 
 import torch
@@ -78,6 +80,7 @@ class DeformableDETRHead(BaseModel):
         return torch.cat(refs, dim=0)  # (T, 2)
 
     def forward(self, feats):
+        """DeformableDETRHead 前向：多尺度特征 -> {logits, boxes}。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         B = feats[0].shape[0]

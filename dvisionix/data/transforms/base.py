@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 变换基类与组合管道。
 """变换基类与组合管道。
 
 设计：
@@ -66,6 +68,7 @@ class TransformPipeline:
         return iter(self.transforms)
 
     def append(self, transform: Any) -> "TransformPipeline":
+        """向变换流水线追加一个变换。"""
         from .builder import build_transform
 
         self.transforms.append(build_transform(transform))

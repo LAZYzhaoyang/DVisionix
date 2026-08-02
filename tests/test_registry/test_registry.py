@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 注册表与配置驱动构建的单元测试。
 """注册表与配置驱动构建的单元测试。"""
 
 import pytest

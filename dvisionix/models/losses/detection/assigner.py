@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测目标分配器（assigner）。
 """检测目标分配器（assigner）。
 
 正负样本匹配逻辑与 Loss 解耦：assigner 只负责把 GT 框分配到网格单元，

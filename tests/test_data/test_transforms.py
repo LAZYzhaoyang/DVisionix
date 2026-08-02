@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 变换测试：原子 transform + 几何同步 + pipeline + 注册。
 """变换测试：原子 transform + 几何同步 + pipeline + 注册。"""
 
 import os

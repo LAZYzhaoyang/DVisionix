@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: RetinaNet anchor-based 检测头（RetinaNetHead）。
 """RetinaNet anchor-based 检测头（RetinaNetHead）。"""
 
 import torch
@@ -37,6 +39,7 @@ class RetinaNetHead(BaseModel):
         self.reg_out = nn.Conv2d(in_channels, num_anchors * 4, 1)
 
     def forward(self, feats):
+        """RetinaNetHead 前向：特征 -> {cls, reg} 各层预测。"""
         if isinstance(feats, torch.Tensor):
             feats = [feats]
         cls_outs, reg_outs = [], []

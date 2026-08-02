@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: LinearClassifier（backbone + 分类头，配置驱动、即插即用）。
 """LinearClassifier（backbone + 分类头，配置驱动、即插即用）。"""
 
 from typing import Any, Dict, Optional
@@ -43,6 +45,7 @@ class LinearClassifier(BaseModel):
         self.num_classes = getattr(self.head, "num_classes", num_classes)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """LinearClassifier 前向：x -> logits (B, num_classes)。"""
         return self.head(self.backbone(x))
 
 

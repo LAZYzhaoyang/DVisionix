@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: SegFormer 分割头（分层 transformer 特征 + MLP 解码）。
 """SegFormer 分割头（分层 transformer 特征 + MLP 解码）。"""
 
 import torch
@@ -30,6 +32,7 @@ class SegFormerHead(BaseModel):
         self.linear_pred = nn.Conv2d(channels, num_classes, 1)
 
     def forward(self, feats):
+        """SegFormerHead 前向：多层特征 -> logits (B, C, H, W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         target = feats[0].shape[-2:]

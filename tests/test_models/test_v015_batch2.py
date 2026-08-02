@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: v0.15.0 批次 2 测试：SwinV2 / 可变形注意力 V2 / SegFormerV3 / 组合器子包。
 """v0.15.0 批次 2 测试：SwinV2 / 可变形注意力 V2 / SegFormerV3 / 组合器子包。"""
 
 import pytest

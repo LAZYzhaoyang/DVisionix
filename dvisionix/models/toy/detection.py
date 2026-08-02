@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 教学级网格检测模型（GridDetectionModel，YOLO 风格）。
 """教学级网格检测模型（GridDetectionModel，YOLO 风格）。
 
 仅用于演示与教学；生产请使用 FCOSDetector / RetinaNetDetector 等组件化检测器。
@@ -21,6 +23,7 @@ class GridDetectionModel(BaseModel):
         self.out_channels = 5 + num_classes
 
         def block(cin, cout):
+            """卷积块：Conv2d + BN + ReLU + MaxPool2d。"""
             return nn.Sequential(
                 nn.Conv2d(cin, cout, 3, padding=1),
                 nn.BatchNorm2d(cout),
@@ -36,6 +39,7 @@ class GridDetectionModel(BaseModel):
         self.head = nn.Conv2d(width * 4, self.out_channels, kernel_size=1)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
+        """GridDetectionModel 前向：x -> 网格预测 (B, 5+num_classes, H, W)。"""
         return self.head(self.backbone(x))
 
     @torch.no_grad()

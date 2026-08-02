@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 知识蒸馏回调（DistillCallback）。
 """知识蒸馏回调（DistillCallback）。
 
 把 teacher 模型挂在 trainer 上，每个训练 batch 计算 teacher logits（no_grad）并存入
@@ -34,12 +36,14 @@ class DistillCallback(Callback):
         self._batch_idx = 0
 
     def on_train_begin(self, trainer: Any) -> None:
+        """将 teacher 置为 eval 并初始化缓存字段。"""
         self.teacher = self.teacher.to(trainer.device).eval()
         trainer.teacher_logits = None
         trainer.teacher_features = None
         trainer.distill_temperature = self.temperature
 
     def on_batch_begin(self, trainer: Any, batch_idx: int, mode: str, batch=None) -> None:
+        """每个训练 batch 计算 teacher logits / 中间特征。"""
         if mode != "train" or batch is None:
             return
         images = batch["image"].to(trainer.device)
@@ -52,13 +56,16 @@ class DistillCallback(Callback):
             trainer.teacher_features = self.feature_extractor(self.teacher, images)
 
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
+        """epoch 结束清空 teacher 缓存。"""
         trainer.teacher_logits = None
         trainer.teacher_features = None
 
     def state_dict(self) -> Dict[str, Any]:
+        """返回 teacher 状态字典。"""
         return {"teacher": self.teacher.state_dict()}
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """恢复 teacher 权重。"""
         if "teacher" in state:
             self.teacher.load_state_dict(state["teacher"])
 

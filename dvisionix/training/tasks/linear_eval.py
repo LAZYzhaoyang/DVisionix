@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 线性评估任务：冻结 backbone，仅训练线性分类头（自监督表征质量评估）。
 """线性评估任务：冻结 backbone，仅训练线性分类头（自监督表征质量评估）。"""
 
 from typing import Any, Dict, Optional
@@ -47,6 +49,7 @@ class LinearEvalTask(BaseTask):
         model.eval()  # 冻结 BN 统计
 
     def configure_optimizers(self, model: nn.Module) -> Dict[str, Any]:
+        """惰性构建线性头并返回仅含线性头参数的优化器。"""
         self._freeze_backbone(model)
         in_features = getattr(model.backbone, "num_features", None)
         if in_features is None:
@@ -66,6 +69,7 @@ class LinearEvalTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步训练：冻结 backbone，仅训练线性头。"""
         self._freeze_backbone(model)
         feats = self._features(model, batch["image"].to(device))
         logits = self.linear(feats)
@@ -77,6 +81,7 @@ class LinearEvalTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步验证：线性头评估。"""
         self._freeze_backbone(model)
         feats = self._features(model, batch["image"].to(device))
         logits = self.linear(feats)

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Patch 操作：PatchMerging（Swin 降采样）与 PatchExpand（Swin-UNet 上采样）。
 """Patch 操作：PatchMerging（Swin 降采样）与 PatchExpand（Swin-UNet 上采样）。"""
 
 import torch
@@ -19,6 +21,7 @@ class PatchMerging(nn.Module):
         self.reduction = nn.Linear(4 * dim, out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """PatchMerging：x (B,C,H,W) -> (B,2C,H/2,W/2)。"""
         B, C, H, W = x.shape
         if H % 2 == 1:
             x = F.pad(x, (0, 0, 0, 1))
@@ -46,6 +49,7 @@ class PatchExpand(nn.Module):
         self.expand = nn.Linear(dim, 2 * dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """PatchExpand：x (B,C,H,W) -> (B,C/2,2H,2W)。"""
         B, C, H, W = x.shape
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
         x = self.norm(x)

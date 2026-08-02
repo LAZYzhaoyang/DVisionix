@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 模型检查点保存回调（best.pt / last.pt / 可选 epoch 存档）。
 """模型检查点保存回调（best.pt / last.pt / 可选 epoch 存档）。"""
 
 import os
@@ -38,6 +40,7 @@ class ModelCheckpoint(Callback):
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
+        """epoch 结束：按监控指标保存 best.pt / last.pt / 可选存档。"""
         current = logs.get(self.monitor)
 
         if current is not None and self.is_better(current, self.best_value):
@@ -71,9 +74,11 @@ class ModelCheckpoint(Callback):
                 pass
 
     def state_dict(self) -> Dict[str, Any]:
+        """返回 best_value 等检查点状态。"""
         return {"best_value": self.best_value}
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """恢复 best_value 等状态。"""
         self.best_value = state.get("best_value", self.best_value)
 
 

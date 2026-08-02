@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 多尺度可变形注意力（纯 PyTorch compact 实现，无 C++ 算子）。
 """多尺度可变形注意力（纯 PyTorch compact 实现，无 C++ 算子）。
 
 对每个 query，在每层特征上预测 num_points 个采样偏移，用双线性采样聚合多尺度上下文，
@@ -102,6 +104,7 @@ class MultiScaleDeformableAttentionV2(MultiScaleDeformableAttention):
         nn.init.uniform_(self.level_offset, -0.02, 0.02)
 
     def forward(self, query, value_list, reference_points):
+        """多尺度可变形注意力：query/value/reference -> 加权聚合特征。"""
         B, N, C = query.shape
         L = len(value_list)
         assert L == self.num_levels

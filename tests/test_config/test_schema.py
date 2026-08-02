@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Config schema 校验与 CLI 解析增强测试。
 """Config schema 校验与 CLI 解析增强测试。"""
 
 import pytest

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ConvNeXtV2 骨干（GRN 全局响应归一化）。
 """ConvNeXtV2 骨干（GRN 全局响应归一化）。"""
 
 from typing import List, Optional, Sequence

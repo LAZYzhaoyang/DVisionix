@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Transformer 组件：正弦位置编码。
 """Transformer 组件：正弦位置编码。"""
 
 import math
@@ -22,6 +24,7 @@ class PositionEmbeddingSine(nn.Module):
         self.normalize = normalize
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """正弦位置编码：输入 (B, C, H, W) -> 输出 (B, 2*num_pos_feats, H, W)。"""
         not_mask = torch.ones(
             (x.shape[0], x.shape[2], x.shape[3]), dtype=torch.bool, device=x.device
         )

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Swin Transformer 骨干（window attention + shifted window + patc...
 """Swin Transformer 骨干（window attention + shifted window + patch merging，compact）。"""
 
 from typing import List, Optional, Sequence
@@ -80,6 +82,7 @@ class _SwinBlock(nn.Module):
         self.drop_path = nn.Identity() if drop_path == 0 else DropPath(drop_path)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Swin 骨干前向：输出多尺度特征列表（features_only）或全局池化向量。"""
         B, C, H, W = x.shape
         x = x.permute(0, 2, 3, 1)  # (B, H, W, C)
         shortcut = x

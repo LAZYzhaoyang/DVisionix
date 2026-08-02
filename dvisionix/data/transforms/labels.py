@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 标签字段的张量化与基础转换。
 """标签字段的张量化与基础转换。"""
 
 import torch

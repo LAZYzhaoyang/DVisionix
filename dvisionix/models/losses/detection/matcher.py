@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 匈牙利匹配器（DETR set-based 损失用）。
 """匈牙利匹配器（DETR set-based 损失用）。"""
 
 from typing import Tuple

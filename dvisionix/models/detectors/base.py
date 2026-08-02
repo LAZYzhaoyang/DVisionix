@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测器装配脚手架（SingleStageDetector）。
 """检测器装配脚手架（SingleStageDetector）。
 
 统一「backbone(features_only) + neck(可选) + head」装配逻辑，具体检测器（FCOS / RetinaNet）

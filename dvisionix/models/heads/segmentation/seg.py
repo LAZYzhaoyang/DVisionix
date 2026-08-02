@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 基础分割头（SegHead，1x1 卷积）。
 """基础分割头（SegHead，1x1 卷积）。"""
 
 import torch.nn as nn
@@ -24,6 +26,7 @@ class SegHead(BaseModel):
         self.conv = nn.Sequential(*layers)
 
     def forward(self, x):
+        """SegHead 前向：特征 -> logits (B, C, H, W)。"""
         out = self.conv(x)
         if self.output_size is not None and out.shape[-2:] != tuple(self.output_size):
             out = F.interpolate(

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 回调子包：Callback / CallbackList + 内置回调。
 """回调子包：Callback / CallbackList + 内置回调。
 
 新增回调：在 callbacks/ 下新建一个文件（继承 Callback），并在本文件导入导出。

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CurricularFace 度量学习头（课程式自适应 margin，compact）。
 """CurricularFace 度量学习头（课程式自适应 margin，compact）。"""
 
 import torch
@@ -28,6 +30,7 @@ class CurricularFaceHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):
+        """CurricularFace 前向：特征 -> 课程学习 logits (B, num_classes)。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
         cos = torch.mm(x_norm, w_norm.t()).clamp(-1.0 + 1e-7, 1.0 - 1e-7)

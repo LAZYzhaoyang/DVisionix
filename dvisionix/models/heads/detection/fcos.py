@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: FCOS anchor-free 检测头（FCOSHead）。
 """FCOS anchor-free 检测头（FCOSHead）。"""
 
 import torch
@@ -43,6 +45,7 @@ class FCOSHead(BaseModel):
         self.center_out = nn.Conv2d(in_channels, 1, 1)
 
     def forward(self, feats):
+        """FCOSHead 前向：特征 -> {cls, reg, centerness} 各层预测。"""
         if isinstance(feats, torch.Tensor):
             feats = [feats]
         cls_outs, reg_outs, center_outs = [], [], []

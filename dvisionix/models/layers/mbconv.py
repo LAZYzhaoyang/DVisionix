@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: MobileNetV3 倒残差块（MBConv：1x1 扩展 + 深度可分离 + SE + 线性投影）。
 """MobileNetV3 倒残差块（MBConv：1x1 扩展 + 深度可分离 + SE + 线性投影）。"""
 
 import torch
@@ -60,6 +62,7 @@ class MBConvBlock(nn.Module):
         self.use_residual = stride == 1 and in_channels == out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """MBConv 块前向：x (B,C,H,W) -> (B,out_channels,H,W)。"""
         out = self.blocks(x)
         return x + out if self.use_residual else out
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 损失函数基类与组合工具。
 """损失函数基类与组合工具。
 
 Loss 是模型层组件（dvisionix.models.losses），不依赖 training 模块：
@@ -54,6 +56,7 @@ class LossComposer(nn.Module):
     def forward(
         self, preds: torch.Tensor, targets: torch.Tensor, **kwargs: Any
     ) -> Dict[str, torch.Tensor]:
+        """组合多损失加权求和，返回 {loss, 各子损失键...}。"""
         total = None
         extras: Dict[str, torch.Tensor] = {}
         for loss in self.losses:

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 优化器 / 调度器注册表与构建工具子包。
 """优化器 / 调度器注册表与构建工具子包。"""
 
 from .optimizers import OPTIMIZERS, build_optimizer

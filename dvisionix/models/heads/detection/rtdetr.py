@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: RT-DETR 风格检测头（混合编码器 + query 选择 + transformer 解码器，compact）。
 """RT-DETR 风格检测头（混合编码器 + query 选择 + transformer 解码器，compact）。"""
 
 import torch.nn as nn
@@ -53,6 +55,7 @@ class RTDETRHead(BaseModel):
         )
 
     def forward(self, feats):
+        """RTDETRHead 前向：特征 -> {logits, boxes}。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         target = feats[0].shape[-2:]

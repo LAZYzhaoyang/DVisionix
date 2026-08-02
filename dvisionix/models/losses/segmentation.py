@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分割任务损失：DiceLoss 与 CombinedSegmentationLoss（CE + Dice）。
 """分割任务损失：DiceLoss 与 CombinedSegmentationLoss（CE + Dice）。"""
 
 import torch
@@ -22,6 +24,7 @@ class DiceLoss(BaseLoss):
         self.ignore_index = ignore_index
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """Dice 损失：类别不平衡不敏感。"""
         num_classes = logits.shape[1]
         valid = targets != self.ignore_index
 
@@ -65,6 +68,7 @@ class CombinedSegmentationLoss(BaseLoss):
         self.dice = DiceLoss(ignore_index=ignore_index)
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """分割组合损失：CE + Dice 加权求和。"""
         return self.ce_weight * self.ce(logits, targets) + self.dice_weight * self.dice(
             logits, targets
         )
@@ -132,6 +136,7 @@ class MaskFormerLoss(BaseLoss):
         )
 
     def forward(self, preds, batch, device=None, **kwargs) -> dict:
+        """MaskFormer 损失：匈牙利 mask 匹配 + CE/Dice/BCE。"""
         if device is None:
             device = preds["pred_logits"].device
         logits_all, masks_all = preds["pred_logits"], preds["pred_masks"]

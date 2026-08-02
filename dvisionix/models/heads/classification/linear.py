@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 线性分类头（ClsHead / LinearClsHead）。
 """线性分类头（ClsHead / LinearClsHead）。"""
 
 import torch.nn as nn
@@ -23,6 +25,7 @@ class ClsHead(BaseModel):
         self.fc = nn.Sequential(*layers)
 
     def forward(self, x):
+        """ClsHead 前向：x -> logits (B, num_classes)。"""
         return self.fc(x)
 
 

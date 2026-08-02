@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: BiSeNet 风格轻量分割头（细节分支 + 全局上下文分支，compact）。
 """BiSeNet 风格轻量分割头（细节分支 + 全局上下文分支，compact）。"""
 
 import torch
@@ -44,6 +46,7 @@ class BiSeNetHead(BaseModel):
         )
 
     def forward(self, x):
+        """BiSeNetHead 前向：多尺度特征 -> logits (B, C, H, W)。"""
         if isinstance(x, (list, tuple)):
             x = x[-1]
         size = x.shape[-2:]

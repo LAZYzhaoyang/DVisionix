@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: CenterNet 检测器（关键点热图峰值解码）。
 """CenterNet 检测器（关键点热图峰值解码）。"""
 
 from typing import Any, Dict, Optional

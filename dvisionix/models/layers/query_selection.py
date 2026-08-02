@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DINO 混合 query 选择（Hybrid Query Selection）。
 """DINO 混合 query 选择（Hybrid Query Selection）。"""
 
 import torch
@@ -21,6 +23,7 @@ class QuerySelection(nn.Module):
         self.topk = int(topk)
 
     def forward(self, class_logits, box_deltas, memory):
+        """混合 query 选择：按类别分数取 top-k 并输出 anchor 框。"""
         B, T, _ = memory.shape
         scores = torch.softmax(class_logits, dim=-1)[..., :-1].max(dim=-1).values  # (B, T)
         k = min(self.topk, T)

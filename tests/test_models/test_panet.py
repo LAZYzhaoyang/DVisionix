@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: PANet 颈部测试（S5）。
 """PANet 颈部测试（S5）。"""
 
 import pytest

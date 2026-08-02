@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 分类任务损失：CrossEntropy（含 label smoothing）与 FocalLoss。
 """分类任务损失：CrossEntropy（含 label smoothing）与 FocalLoss。"""
 
 from typing import Optional
@@ -34,6 +36,7 @@ class CrossEntropy(BaseLoss):
         )
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """交叉熵损失：logits + targets -> 标量损失（支持 label_smoothing / ignore_index）。"""
         return self.criterion(logits, targets)
 
 
@@ -62,6 +65,7 @@ class FocalLoss(BaseLoss):
         self.reduction = reduction
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """Focal 损失：缓解类别不平衡（难易样本加权）。"""
         num_classes = logits.shape[1]
         if logits.dim() > 2:
             logits = logits.permute(0, *range(2, logits.dim()), 1).reshape(-1, num_classes)
@@ -96,6 +100,7 @@ class BinaryCrossEntropy(BaseLoss):
         self.reduction = reduction
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """二元交叉熵损失：logits + 0/1 targets。"""
         return F.binary_cross_entropy_with_logits(logits, targets.float(), reduction=self.reduction)
 
 
@@ -119,6 +124,7 @@ class CircleLoss(BaseLoss):
         self.delta_n = margin
 
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
+        """Circle 损失：相似度对 -> 度量学习损失。"""
         s = max(float(logits.abs().max().item()), 1.0)
         cos = logits / s  # 余弦相似度
         num_classes = logits.shape[1]
@@ -142,6 +148,7 @@ class InfoNCELoss(BaseLoss):
         self.temperature = float(temperature)
 
     def forward(self, z1: torch.Tensor, z2: torch.Tensor, **kwargs) -> torch.Tensor:
+        """InfoNCE 对比损失：特征对 -> 对比学习损失。"""
         z1 = F.normalize(z1, dim=1)
         z2 = F.normalize(z2, dim=1)
         sim = z1 @ z2.t() / self.temperature  # (B, B)
@@ -180,6 +187,7 @@ class FeatureDistillLoss(BaseLoss):
         return F.mse_loss(s, t, reduction=self.reduction)
 
     def forward(self, student_feats, teacher_feats, **kwargs) -> torch.Tensor:
+        """特征蒸馏损失：student/teacher 特征对齐（支持单张量或列表）。"""
         if isinstance(student_feats, (list, tuple)):
             return sum(self._one(s, t) for s, t in zip(student_feats, teacher_feats))
         return self._one(student_feats, teacher_feats)
@@ -202,6 +210,7 @@ class DistillationLoss(BaseLoss):
         self.temperature = float(temperature)
 
     def forward(self, logits, targets, teacher_logits=None, **kwargs):
+        """知识蒸馏损失：CE 硬标签 + alpha * KL 软标签。"""
         t = self.temperature
         ce = F.cross_entropy(logits, targets)
         if teacher_logits is None:

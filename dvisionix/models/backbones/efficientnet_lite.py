@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: EfficientNetLite 轻量骨干（MBConv + SE，B0-lite 配置）。
 """EfficientNetLite 轻量骨干（MBConv + SE，B0-lite 配置）。"""
 
 from typing import List, Optional, Sequence, Tuple

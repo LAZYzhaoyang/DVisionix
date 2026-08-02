@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 组件注册表（Registry）
 """
 组件注册表（Registry）
 
@@ -32,6 +34,7 @@ class Registry:
 
     @property
     def name(self) -> str:
+        """注册表名称。"""
         return self._name
 
     def __contains__(self, key: str) -> bool:
@@ -41,9 +44,11 @@ class Registry:
         return len(self._registry)
 
     def keys(self) -> Iterable[str]:
+        """已注册的组件名列表（排序）。"""
         return self._registry.keys()
 
     def get(self, key: str) -> Callable[..., Any]:
+        """按名称获取已注册组件；未注册时抛出 KeyError。"""
         if key not in self._registry:
             raise KeyError(
                 f'"{key}" is not registered in registry "{self._name}". '

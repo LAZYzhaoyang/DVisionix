@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ViT 骨干网络（patch embed + Transformer encoder，单尺度输出）。
 """ViT 骨干网络（patch embed + Transformer encoder，单尺度输出）。"""
 
 from typing import List, Optional, Sequence
@@ -65,6 +67,7 @@ class _AddPosEmbed(nn.Module):
         self.pe = PositionEmbeddingSine(dim // 2, normalize=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """在 4D 特征图上叠加正弦位置编码。"""
         return x + self.pe(x)
 
 
@@ -73,6 +76,7 @@ class _PatchTokens(nn.Module):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """(B, C, H, W) -> (B, HW, C) 的 token 序列。"""
         return x.flatten(2).permute(0, 2, 1)  # (B, HW, C)
 
 
@@ -82,6 +86,7 @@ class _TokensToGrid(nn.Module):
         self.dim = dim
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """(B, N, C) token 序列 -> (B, C, H, W) 特征图。"""
         B, N, C = x.shape
         h = w = int(N**0.5)
         return x.permute(0, 2, 1).reshape(B, C, h, w)

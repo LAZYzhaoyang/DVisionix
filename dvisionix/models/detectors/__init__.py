@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测器子包。
 """检测器子包。
 
 - base：SingleStageDetector（backbone + neck + head 装配脚手架）。

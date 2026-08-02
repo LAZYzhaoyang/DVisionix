@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 可逆块（RevCol 风格 compact）：输入拆半，add 耦合，可精确逆向（PGI 用）。
 """可逆块（RevCol 风格 compact）：输入拆半，add 耦合，可精确逆向（PGI 用）。"""
 
 import torch
@@ -37,6 +39,7 @@ class ReversibleBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """可逆块前向：x 与 F/G 分支前向，反向可重建。"""
         x1, x2 = x.chunk(2, dim=1)
         y1 = x1 + self.F(x2)
         y2 = x2 + self.G(y1)

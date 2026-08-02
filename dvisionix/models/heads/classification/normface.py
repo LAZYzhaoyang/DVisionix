@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: NormFace 度量学习头（特征/权重 L2 归一化 + 缩放）。
 """NormFace 度量学习头（特征/权重 L2 归一化 + 缩放）。"""
 
 import torch
@@ -26,6 +28,7 @@ class NormFaceHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):
+        """NormFace 前向：特征 -> L2 归一化后的 logits。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
         return torch.mm(x_norm, w_norm.t()) * self.s

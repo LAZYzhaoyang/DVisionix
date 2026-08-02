@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: YOLOv8 风格解耦检测头（YOLOHead，anchor-free）。
 """YOLOv8 风格解耦检测头（YOLOHead，anchor-free）。"""
 
 import torch
@@ -41,6 +43,7 @@ class YOLOHead(BaseModel):
         self.reg_out = nn.Conv2d(in_channels, 4, 1)
 
     def forward(self, feats):
+        """YOLOHead 前向：特征列表 -> {cls, reg} 每层预测。"""
         if isinstance(feats, torch.Tensor):
             feats = [feats]
         cls_outs, reg_outs = [], []

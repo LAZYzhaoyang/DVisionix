@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: models.losses 模块测试：基类 / 组合 / 构建 / 数值正确性。
 """models.losses 模块测试：基类 / 组合 / 构建 / 数值正确性。"""
 
 import pytest

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DINO 检测器（hybrid query selection + 去噪训练，输出契约与 DETR 一致）。
 """DINO 检测器（hybrid query selection + 去噪训练，输出契约与 DETR 一致）。"""
 
 from typing import Any, Dict, Optional
@@ -29,12 +31,14 @@ class DINODetrDetector(SingleStageDetector):
         super().__init__(backbone, head_cfg, neck, out_indices)
 
     def forward(self, x, **kwargs):
+        """DINODetrDetector 前向：x（训练时附 batch）-> 头部输出 dict（训练含去噪/中间框）。"""
         feats = self.extract_features(x)
         return self.head(feats, batch=kwargs.get("batch"))
 
     def decode(
         self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5, max_detections=100, topk=300
     ):
+        """推理解码：preds + image_hw -> (boxes_list, scores_list, labels_list)。"""
         return detr_decode(
             preds,
             image_hw,

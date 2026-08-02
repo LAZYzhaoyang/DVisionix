@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 任务组件子包：BaseTask + 内置任务 + build_task（配置驱动）。
 """任务组件子包：BaseTask + 内置任务 + build_task（配置驱动）。
 
 新增任务：在 tasks/ 下新建一个文件（继承 BaseTask），在顶部 ``@TASKS.register()`` 注册即可。

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Swin-UNet 完整装配（Swin encoder + SwinUNetDecoder 跳连）。
 """Swin-UNet 完整装配（Swin encoder + SwinUNetDecoder 跳连）。"""
 
 from typing import Any, Dict, Optional
@@ -37,6 +39,7 @@ class SwinUNet(BaseModel):
         self.upsample = upsample
 
     def forward(self, x: torch.Tensor, **kwargs):
+        """SwinUNet 前向：x -> 分割 logits (B, num_classes, H, W)。"""
         out = self.decoder(self.backbone(x))
         if self.upsample and out.shape[-2:] != x.shape[-2:]:
             out = F.interpolate(out, size=x.shape[-2:], mode="bilinear", align_corners=False)

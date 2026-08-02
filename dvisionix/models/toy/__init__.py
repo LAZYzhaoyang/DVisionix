@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 教学级模型（toy）：SimpleCNN / SimpleSegmentationModel / GridDetecti...
 """教学级模型（toy）：SimpleCNN / SimpleSegmentationModel / GridDetectionModel。
 
 这些模型仅用于演示与快速验证数据/训练流程，不与组件化模型混放；

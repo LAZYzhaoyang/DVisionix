@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 早停回调。
 """早停回调。"""
 
 from typing import Any, Dict
@@ -34,6 +36,7 @@ class EarlyStopping(Callback):
         self.best_weights = None
 
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
+        """epoch 结束：监控指标连续未改善则触发早停。"""
         current = logs.get(self.monitor)
         if current is None:
             return
@@ -56,6 +59,7 @@ class EarlyStopping(Callback):
                     _log(trainer, "info", "Restored best model weights")
 
     def state_dict(self) -> Dict[str, Any]:
+        """返回早停状态（best_value / patience 计数）。"""
         return {
             "best_value": self.best_value,
             "wait": self.wait,
@@ -63,6 +67,7 @@ class EarlyStopping(Callback):
         }
 
     def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """恢复早停状态。"""
         self.best_value = state.get("best_value", self.best_value)
         self.wait = state.get("wait", self.wait)
         self.stopped_epoch = state.get("stopped_epoch", self.stopped_epoch)

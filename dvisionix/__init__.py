@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: DVisionix: 深度学习算法库
+
 """
 DVisionix: 深度学习算法库
 

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 检测任务组件（单阶段网格检测器，配合 GridDetectionModel）。
 """检测任务组件（单阶段网格检测器，配合 GridDetectionModel）。"""
 
 from typing import Any, Dict, Optional
@@ -48,6 +50,7 @@ class DetectionTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步训练：模型前向（附 batch）+ 检测损失。"""
         images = batch["image"].to(device)
         if getattr(model, "needs_batch", False):
             preds = model(images, batch=batch)
@@ -60,6 +63,7 @@ class DetectionTask(BaseTask):
     def validation_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
+        """单步验证：前向 + decode + 检测指标更新。"""
         images = batch["image"].to(device)
         with torch.no_grad():
             preds = model(images)
@@ -82,6 +86,7 @@ class DetectionTask(BaseTask):
         }
 
     def update_metrics(self, preds: Any, targets: Any) -> None:
+        """用 (preds, targets) 更新检测指标（mAP 等）。"""
         if self.metrics is None:
             return
         boxes_list, scores_list, labels_list = preds

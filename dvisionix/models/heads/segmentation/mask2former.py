@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: Mask2Former 分割头（mask attention 解码器 + FPN 像素解码器，compact）。
 """Mask2Former 分割头（mask attention 解码器 + FPN 像素解码器，compact）。"""
 
 import torch
@@ -62,6 +64,7 @@ class Mask2FormerHead(BaseModel):
         self.mask_embed = nn.Linear(d_model, d_model)
 
     def forward(self, feats):
+        """Mask2FormerHead 前向：特征 -> full 模式返回 {pred_logits, pred_masks, semantic_logits}，否则返回语义 logits (B,C,H,W)。"""
         if not isinstance(feats, (list, tuple)):
             feats = [feats]
         feats_ms = self.pixel_decoder(feats)  # 多尺度，最精细在前
@@ -125,6 +128,7 @@ class _MaskAttentionDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, tgt, query, memory, pixel_feat, mask_logits):
+        """Mask2Former 解码层前向：tgt query 序列 -> 同形状输出。"""
         q = self.norm1(tgt + query)
         tgt = tgt + self.dropout(self.self_attn(q, q, q)[0])
 
@@ -155,6 +159,7 @@ class _MaskedCrossAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, query, key, value, attn_mask=None):
+        """带注意力掩码的多头交叉注意力前向：query/key/value -> 输出 (B, N, d)。"""
         B, N, d = query.shape
         L = key.shape[1]
         H = self.num_heads

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 封装来自 timm 的层（timm.layers）。
 """封装来自 timm 的层（timm.layers）。
 
 timm 提供了大量高质量的即用层（DropPath / SqueezeExcite / Mlp / ConvNormAct 等），

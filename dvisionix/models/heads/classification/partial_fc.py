@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: PartialFC 度量学习头（大规模类别采样子集 softmax，compact）。
 """PartialFC 度量学习头（大规模类别采样子集 softmax，compact）。"""
 
 from typing import Optional
@@ -38,6 +40,7 @@ class PartialFCHead(BaseModel):
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels: Optional[torch.Tensor] = None):
+        """PartialFCHead 前向：特征 -> 采样类别子集的 logits。"""
         x_norm = F.normalize(x, dim=1)
         w_norm = F.normalize(self.weight, dim=1)
         if (

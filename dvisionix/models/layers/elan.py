@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: ELAN（Efficient Layer Aggregation Network）层，用于 YOLOv7 / v9 风格...
 """ELAN（Efficient Layer Aggregation Network）层，用于 YOLOv7 / v9 风格骨干。"""
 
 from typing import Optional
@@ -36,6 +38,7 @@ class ELANLayer(nn.Module):
         self.out_conv = ConvNormAct(hidden * (num_blocks + 2), out_channels, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """ELAN 层前向：x (B,C,H,W) -> (B,out_channels,H,W)。"""
         y1 = self.branch1(x)
         y2 = self.branch2(x)
         outs = [y1, y2]
@@ -72,6 +75,7 @@ class EELANLayer(nn.Module):
         self.out_conv = ConvNormAct(hidden * (2 * num_blocks + 2), out_channels, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """E-ELAN 层前向：x (B,C,H,W) -> (B,out_channels,H,W)。"""
         x1 = self.branch1(x)
         x2 = self.branch2(x)
         outs = [x1, x2]

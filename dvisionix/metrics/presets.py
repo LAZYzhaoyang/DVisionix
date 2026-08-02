@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# 作者: Zhaoyang Li
+# 用途: 各任务的预设指标组合 + 预设类范例。
 """各任务的预设指标组合 + 预设类范例。
 
 两种入口：
@@ -74,12 +76,15 @@ class _PresetMetric(BaseMetric):
 
     def reset(self) -> None:
         # BaseMetric.__init__ 会在设置 _collection 后调用本方法
+        """重置预设指标集合。"""
         self._collection.reset()
 
     def update(self, *args: Any, **kwargs: Any) -> None:
+        """用 (preds, targets) 更新预设指标集合。"""
         self._collection.update(*args, **kwargs)
 
     def compute(self) -> Dict[str, Any]:
+        """计算并返回预设指标集合的结果字典。"""
         return self._collection.compute()
 
 
