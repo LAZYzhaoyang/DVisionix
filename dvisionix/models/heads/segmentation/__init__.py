@@ -10,6 +10,8 @@ from .maskformer import MaskFormerHead, maskformer_decode
 from .psp import PSPHead
 from .seg import SegHead
 from .segformer import SegFormerHead
+from .segformer_v2 import SegFormerV2Head
+from .swin_unet import SwinUNetDecoder
 from .unet import UNetDecoder
 from .upernet import UPerNetHead
 
@@ -23,6 +25,8 @@ __all__ = [
     "UPerNetHead",
     "UNetDecoder",
     "SegFormerHead",
+    "SegFormerV2Head",
+    "SwinUNetDecoder",
     "MaskFormerHead",
     "Mask2FormerHead",
     "maskformer_decode",

@@ -16,7 +16,16 @@ from . import (
     losses,  # noqa: F401
     toy,
 )
-from .backbones import SequentialBackbone, TimmBackbone, TimmClassifier, list_timm_models
+from .backbones import (
+    ConvNeXtBackbone,
+    CSPDarknetBackbone,
+    FeatureBackboneBase,
+    MobileNetV3Backbone,
+    SequentialBackbone,
+    TimmBackbone,
+    TimmClassifier,
+    list_timm_models,
+)
 from .base import TASK_TYPES, BaseModel
 from .classifiers import LinearClassifier
 from .detectors import (
@@ -107,6 +116,10 @@ __all__ = [
     "TimmBackbone",
     "TimmClassifier",
     "SequentialBackbone",
+    "FeatureBackboneBase",
+    "ConvNeXtBackbone",
+    "CSPDarknetBackbone",
+    "MobileNetV3Backbone",
     "list_timm_models",
     "build_layer",
     "build_norm_layer",

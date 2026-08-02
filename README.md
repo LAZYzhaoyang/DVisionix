@@ -45,9 +45,9 @@ dvisionix/
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath / CSP / ELAN / E-ELAN / 可变形注意力）
-│   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
+│   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone / ConvNeXt / CSPDarknet / MobileNetV3
 │   ├── necks/           # FPN / PANet
-│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC/CircleLoss/SimCLR）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer/MaskFormer(+2)/PSP/UPerNet/BiSeNet）· 检测（Det/FCOS/RetinaNet/YOLO(v8/v10)/DETR/RT-DETR(+full)/DeformableDETR/CenterNet）
+│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC/CircleLoss/SimCLR）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer(+V2)/MaskFormer(+2)/PSP/UPerNet/BiSeNet/SwinUNet）· 检测（Det/FCOS/RetinaNet/YOLO(v8/v10)/DETR/RT-DETR(+full)/DeformableDETR/CenterNet）
 │   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO(v8/v10) / DETR / RT-DETR(+full) / DeformableDETR / CenterNet（decode 与模型同文件）
 │   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
 │   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
@@ -334,6 +334,14 @@ MIT License
 ---
 
 ## 📌 版本演进
+
+### 0.11.0（骨干库 / SimCLR / 分割增强）
+- 内置骨干：`convnext_backbone` / `cspdarknet_backbone` / `mobilenetv3_backbone`（通用 `FeatureBackboneBase`，
+  新增 `ConvNeXtBlock` / `MBConvBlock` 层），分类/检测/分割即插即用；
+- SimCLR 端到端：`SimCLRTransforms`（双视角）+ `SimCLRTask`（InfoNCE）+ `tools/train.py` 支持 simclr 任务 + 配置示例；
+- 分割：`segformer_v2_head`（overlap patch embed + MixFFN）、`swin_unet_decoder`（PatchExpand 上采样 + 跳连）；
+- YOLOv9-lite（PGI）详细计划已写入 CodePlan，待实施；ViT/Swin 骨干列为后续；
+- 全量测试 244 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.10.0（方向 3：模型继续扩充）
 - YOLO 系列：`EELANLayer`（YOLOv7 风格骨干）、`yolo_v10`（NMS-free：one-to-one 损失 + 免 NMS 解码）；

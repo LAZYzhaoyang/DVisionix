@@ -1,0 +1,49 @@
+# SimCLR 自监督对比学习 demo 配置（双视角增强 + InfoNCE）
+_base_: "../../dvisionix/config/defaults/classification.yaml"
+
+task_type: "simclr"
+
+experiment_name: "demo_simclr_synthetic"
+
+model:
+  _delete_: true
+  type: "linear_classifier"
+  num_classes: 16
+  backbone:
+    type: "sequential_backbone"
+    features_only: false
+    stages:
+      - {type: conv_norm_act, in_channels: 3, out_channels: 16, stride: 2}
+      - {type: conv_norm_act, in_channels: 16, out_channels: 32, stride: 2}
+      - {type: conv_norm_act, in_channels: 32, out_channels: 64, stride: 2}
+  head:
+    type: "simclr_head"
+    out_dim: 32
+
+task:
+  type: "SimCLRTask"
+  temperature: 0.1
+
+loss:
+  _delete_: true
+  type: "info_nce"
+  temperature: 0.1
+
+data:
+  dataset: "synthetic"
+  image_size: 32
+  num_samples: 64
+  val_samples: 16
+
+training:
+  num_epochs: 1
+  batch_size: 8
+  optimizer: {type: adam, lr: 0.001}
+  device: "auto"
+  num_workers: 0
+  early_stopping: {enabled: false}
+
+checkpoint:
+  save_dir: "checkpoints"
+  monitor: "val_loss"
+  mode: "min"

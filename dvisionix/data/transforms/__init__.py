@@ -32,6 +32,7 @@ from .image import (
     ToTensor,
 )
 from .labels import BoxesToTensor, LabelToTensor, MaskToTensor
+from .simclr import SimCLRTransforms
 from .third_party import AlbumentationsWrapper
 
 __all__ = [
@@ -60,6 +61,8 @@ __all__ = [
     "MaskToTensor",
     # 第三方封装
     "AlbumentationsWrapper",
+    # SimCLR
+    "SimCLRTransforms",
 ]
 
 

@@ -32,6 +32,7 @@ from .tasks import (
     MaskFormerTask,
     MultiLabelTask,
     SegmentationTask,
+    SimCLRTask,
     build_task,
 )
 from .trainer import Trainer
@@ -51,6 +52,7 @@ __all__ = [
     "SegmentationTask",
     "MultiLabelTask",
     "MaskFormerTask",
+    "SimCLRTask",
     "build_task",
     "Callback",
     "CallbackList",

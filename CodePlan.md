@@ -715,3 +715,48 @@ models/
 - 新增 `tests/test_models/test_v010_direction3.py`（7 项）：E-ELAN、yolo_v10 前向/解码/损失下降、
   centernet 前向/解码/损失下降、新配置加载、BiSeNet、CircleLoss、SimCLR/InfoNCE。
 - 全量测试 236 passed + 2 skipped；ruff / black 全绿。
+
+
+---
+
+# D-1 骨干库 / D-2 SimCLR / D-4 分割增强（v0.11.0）
+
+> 用户确认：D-1 内置骨干（ConvNeXt + CSPDarknet + MobileNetV3；ViT 等 Transformer 骨干列入后续）；
+> D-2 SimCLR 端到端按计划实施；D-3 YOLOv9-lite 仅出详细计划暂不实施；D-4 SwinUNet 风格 + SegFormer 变体实施；
+> 多卡验证 / torchmetrics 迁移继续列为后续。
+
+## 一、D-1：内置骨干库
+- `FeatureBackboneBase`（feature.py）：内置骨干通用基类（stage 列表 + dry-run 通道推导 + features_only / out_channels / num_features）。
+- `ConvNeXtBackbone`（convnext_backbone）：LN + 深度可分离 + 层缩放；stem 4x4 stride4 + 4 个 stage（stride 4/8/16/32）。
+- `CSPDarknetBackbone`（cspdarknet_backbone）：YOLOv5 风格（6x6 stem + 4 个 3x3 stride2 + CSP，SiLU）。
+- `MobileNetV3Backbone`（mobilenetv3_backbone）：MBConv 倒残差 + SE（stride 2/4/8/16/32）。
+- 新增层：`ConvNeXtBlock`（convnext_block）、`MBConvBlock`（mbconv_block），均注册 LAYERS。
+- 全部支持分类 / 检测 / 分割即插即用（与 LinearClassifier / SingleStageDetector / SegmentationModel 组合验证）。
+
+## 二、D-2：SimCLR 端到端
+- `SimCLRTransforms`（simclr_transforms）：双视角增强（随机缩放裁剪 / 翻转 / 色彩抖动 / 归一化），输出 image1/image2。
+- `SimCLRTask`（training/tasks/simclr.py）：InfoNCELoss 自监督训练（兼容装配器 num_classes 注入）。
+- `tools/train.py` 支持 task_type="simclr"（变换 + 任务映射 + 合成数据）。
+- 配置示例：`configs/classification/simclr_synthetic.yaml`。
+
+## 三、D-4：分割增强
+- `SegFormerV2Head`（segformer_v2_head）：overlap patch embed（4x4 stride2）+ MixFFN（LN + 3x3 DWConv + MLP）。
+- `SwinUNetDecoder`（swin_unet_decoder）：PatchExpand（LN + Linear(2x) + PixelShuffle(2)）逐级上采样 + 跳连融合。
+
+## 四、D-3：YOLOv9-lite 详细计划（待实施）
+目标：NMS-free 之外的检测能力再进一步，用 PGI（Programmable Gradient Information）提升浅层梯度质量。
+1. **可逆分支（RevCol 风格简化）**：新增 `layers/reversible.py` —— `ReversibleBlock`（add 耦合 + 显式保存激活，训练时可重计算，节省显存）；骨干末端加 1 层可逆块组。
+2. **PGI 辅助损失**：浅层特征加辅助预测头（`YOLOAuxHead`，结构与 YOLOHead 一致），损失与主头按比例组合（`YOLOAuxLoss`：主损失 + aux_weight * 辅助损失），只参与训练、推理时丢弃。
+3. **检测器**：`YOLOv9Detector`（yolo_v9）：E-ELAN 骨干（已有）+ 可逆分支 + YOLOHead（主）+ aux 头（训练）。
+4. **配置**：`configs/detection/yolov9_synthetic.yaml`（复用现有合成数据）。
+5. **验证**：forward / decode / 主+辅损失下降；aux 头在推理 forward 中不参与输出。
+6. 工作量：中-大（可逆块 + 辅助头 + 损失装配）。
+
+## 五、后续计划（未实施）
+- ViT / Swin 等 Transformer 骨干（BACKBONES 扩展）。
+- 多卡实机验证（DDP 已隔离实现）。
+- 分类 / 分割指标迁移 torchmetrics 可选后端。
+
+## 六、验证
+- 新增 `tests/test_models/test_v011_d14.py`（8 项）：三个内置骨干分类+检测组合、SegFormerV2 / SwinUNet、SimCLRTransforms 双视角、SimCLRTask 训练下降、simclr 配置加载。
+- 全量测试 244 passed + 2 skipped；ruff / black 全绿。

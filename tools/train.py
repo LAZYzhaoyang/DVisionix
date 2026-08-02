@@ -28,6 +28,7 @@ from dvisionix.data.transforms import (
     ClassificationTransforms,
     DetectionTransforms,
     SegmentationTransforms,
+    SimCLRTransforms,
 )
 from dvisionix.models import build_model
 from dvisionix.training import (
@@ -39,11 +40,12 @@ from dvisionix.training import (
 )
 from dvisionix.utils import get_logger, set_seed
 
-_TASK_TYPES = ("classification", "detection", "segmentation")
+_TASK_TYPES = ("classification", "detection", "segmentation", "simclr")
 _TASK_MAPPING = {
     "classification": "ClassificationTask",
     "detection": "DetectionTask",
     "segmentation": "SegmentationTask",
+    "simclr": "SimCLRTask",
 }
 
 
@@ -54,6 +56,8 @@ def build_transforms(task_type, image_size, train):
         return DetectionTransforms(train=train, image_size=image_size)
     if task_type == "segmentation":
         return SegmentationTransforms(train=train, image_size=image_size)
+    if task_type == "simclr":
+        return SimCLRTransforms(train=train, image_size=image_size)
     raise ValueError(f"Unknown task_type: {task_type}")
 
 

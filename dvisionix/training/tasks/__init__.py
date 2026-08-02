@@ -13,8 +13,16 @@ from .detection import DetectionTask
 from .maskformer import MaskFormerTask
 from .multi_label import MultiLabelTask
 from .segmentation import SegmentationTask
+from .simclr import SimCLRTask
 
-for _cls in (ClassificationTask, DetectionTask, SegmentationTask, MultiLabelTask, MaskFormerTask):
+for _cls in (
+    ClassificationTask,
+    DetectionTask,
+    SegmentationTask,
+    MultiLabelTask,
+    MaskFormerTask,
+    SimCLRTask,
+):
     if _cls.__name__ not in TASKS:
         TASKS.register(_cls)
 
@@ -38,5 +46,6 @@ __all__ = [
     "SegmentationTask",
     "MultiLabelTask",
     "MaskFormerTask",
+    "SimCLRTask",
     "build_task",
 ]
