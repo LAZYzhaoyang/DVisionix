@@ -24,12 +24,12 @@ from .layers import (
     create_timm_layer,
     list_timm_layers,
 )
-from .postprocess import nms, batched_nms, box_iou, fcos_decode, retinanet_decode
+from .postprocess import nms, batched_nms, box_iou, fcos_decode, retinanet_decode, yolo_decode, detr_decode
 from .classifiers import LinearClassifier
 from .segmenters import SegmentationModel
-from .detectors import SingleStageDetector, AnchorGenerator, FCOSDetector, RetinaNetDetector
+from .detectors import SingleStageDetector, AnchorGenerator, FCOSDetector, RetinaNetDetector, YOLODetector, DETRDetector
 from .necks import FPN, PANet
-from .heads import ClsHead, SegHead, FCNHead, DeepLabV3Head, UNetDecoder, DetHead, ArcFaceHead, MultiLabelHead, FCOSHead, RetinaNetHead
+from .heads import ClsHead, SegHead, FCNHead, DeepLabV3Head, UNetDecoder, SegFormerHead, MaskFormerHead, DetHead, ArcFaceHead, MultiLabelHead, CosFaceHead, SphereFaceHead, AdaFaceHead, FCOSHead, RetinaNetHead, YOLOHead, DETRHead
 from . import toy
 from .toy import SimpleCNN, SimpleSegmentationModel, GridDetectionModel
 from . import losses
@@ -53,9 +53,12 @@ from .losses import (
     FCOSAssigner,
     MaxIoUAssigner,
     ATSSAssigner,
+    TaskAlignedAssigner,
     SigmoidFocalLoss,
     FCOSDetectionLoss,
     RetinaNetLoss,
+    DETRLoss,
+    YOLOLoss,
 )
 
 __all__ = [
@@ -79,12 +82,16 @@ __all__ = [
     "box_iou",
     "fcos_decode",
     "retinanet_decode",
+    "yolo_decode",
+    "detr_decode",
     "LinearClassifier",
     "SegmentationModel",
     "SingleStageDetector",
     "AnchorGenerator",
     "FCOSDetector",
     "RetinaNetDetector",
+    "YOLODetector",
+    "DETRDetector",
     "FPN",
     "PANet",
     "ClsHead",
@@ -92,11 +99,18 @@ __all__ = [
     "FCNHead",
     "DeepLabV3Head",
     "UNetDecoder",
+    "SegFormerHead",
+    "MaskFormerHead",
     "DetHead",
     "ArcFaceHead",
     "MultiLabelHead",
+    "CosFaceHead",
+    "SphereFaceHead",
+    "AdaFaceHead",
     "FCOSHead",
     "RetinaNetHead",
+    "YOLOHead",
+    "DETRHead",
     "toy",
     # 教学级模型（re-export，兼容旧导入）
     "SimpleCNN",
@@ -122,9 +136,12 @@ __all__ = [
     "FCOSAssigner",
     "MaxIoUAssigner",
     "ATSSAssigner",
+    "TaskAlignedAssigner",
     "SigmoidFocalLoss",
     "FCOSDetectionLoss",
     "RetinaNetLoss",
+    "DETRLoss",
+    "YOLOLoss",
 ]
 
 # =============================================================================

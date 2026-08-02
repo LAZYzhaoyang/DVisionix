@@ -11,8 +11,9 @@ from .base import BaseTask
 from .classification import ClassificationTask
 from .detection import DetectionTask
 from .segmentation import SegmentationTask
+from .multi_label import MultiLabelTask
 
-for _cls in (ClassificationTask, DetectionTask, SegmentationTask):
+for _cls in (ClassificationTask, DetectionTask, SegmentationTask, MultiLabelTask):
     if _cls.__name__ not in TASKS:
         TASKS.register(_cls)
 
@@ -34,5 +35,6 @@ __all__ = [
     "ClassificationTask",
     "DetectionTask",
     "SegmentationTask",
+    "MultiLabelTask",
     "build_task",
 ]

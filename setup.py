@@ -16,7 +16,7 @@ def _read_long_description() -> str:
 
 setup(
     name="dvisionix",
-    version="0.4.0",
+    version="0.5.0",
     author="DVisionix Team",
     description="A PyTorch-based deep learning training framework for computer vision tasks",
     long_description=_read_long_description(),

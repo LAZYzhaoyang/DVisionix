@@ -1,8 +1,16 @@
 # -*- coding: utf-8 -*-
-"""头部子包：分类头 / 分割头 / 检测头。"""
+"""头部子包：按任务组织（classification / segmentation / detection），每个头一个文件。
 
-from .cls_head import ClsHead, ArcFaceHead, MultiLabelHead
-from .seg_head import SegHead, FCNHead, DeepLabV3Head, UNetDecoder
-from .det_head import DetHead, FCOSHead, RetinaNetHead
+新增头：在对应任务子目录新建文件（继承 BaseModel + @HEADS.register()），并在
+子包 __init__ 导出即可，互不影响。
+"""
 
-__all__ = ["ClsHead", "ArcFaceHead", "MultiLabelHead", "SegHead", "FCNHead", "DeepLabV3Head", "UNetDecoder", "DetHead", "FCOSHead", "RetinaNetHead"]
+from .classification import ClsHead, ArcFaceHead, MultiLabelHead, CosFaceHead, SphereFaceHead, AdaFaceHead
+from .segmentation import SegHead, FCNHead, DeepLabV3Head, UNetDecoder, SegFormerHead, MaskFormerHead
+from .detection import DetHead, FCOSHead, RetinaNetHead, YOLOHead, DETRHead
+
+__all__ = [
+    "ClsHead", "ArcFaceHead", "MultiLabelHead", "CosFaceHead", "SphereFaceHead", "AdaFaceHead",
+    "SegHead", "FCNHead", "DeepLabV3Head", "UNetDecoder", "SegFormerHead", "MaskFormerHead",
+    "DetHead", "FCOSHead", "RetinaNetHead", "YOLOHead", "DETRHead",
+]

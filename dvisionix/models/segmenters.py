@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from .base import BaseModel
 from ..registry import MODELS, BACKBONES, NECKS, HEADS
 
-_UNET_HEAD_TYPES = ("unet_decoder", "UNetDecoder")
+_LIST_INPUT_HEADS = ("unet_decoder", "UNetDecoder", "segformer_head", "SegFormerHead", "maskformer_head", "MaskFormerHead")
 
 
 @MODELS.register()
@@ -60,7 +60,7 @@ class SegmentationModel(BaseModel):
             self.in_channels = self.backbone.out_channels[-1]
 
         head_cfg = dict(head)
-        if head_type in _UNET_HEAD_TYPES:
+        if head_type in _LIST_INPUT_HEADS:
             head_cfg.setdefault("in_channels_list", list(self.backbone.out_channels))
         else:
             head_cfg.setdefault("in_channels", self.in_channels)
@@ -78,7 +78,7 @@ class SegmentationModel(BaseModel):
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         feats = self.extract_features(x)
-        if isinstance(self.head, HEADS.get("unet_decoder")) or type(self.head).__name__ == "UNetDecoder":
+        if type(self.head).__name__ in ("UNetDecoder", "SegFormerHead", "MaskFormerHead"):
             out = self.head(feats)
         else:
             feat = feats[-1] if isinstance(feats, (list, tuple)) else feats

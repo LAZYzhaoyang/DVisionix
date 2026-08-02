@@ -424,3 +424,32 @@ models/
 - 更多分割头：Mask2Former / SegFormer（语义+实例分割统一）。
 - 更多分类头：度量学习变体（CosFace / SphereFace）、多标签任务化。
 - GeneralizedModel 相关文档/测试引用清理已完成；README 版本演进已补充。
+
+---
+
+# 前沿模型扩展（v0.5.0）
+
+> 用户决策：优先级 A(YOLO)→B(DETR)→C(分割头)→D(度量学习头)；全部完成后统一测试；
+> heads 模块按任务重组为子包、每头一个文件。
+
+## 一、新增内容
+- 检测：`YOLODetector`（YOLOv8 风格，`YOLOHead` 解耦头 + `TaskAlignedAssigner` + `YOLOLoss` + `yolo_decode`）；
+  `DETRDetector`（`DETRHead` transformer + `HungarianMatcher` + `DETRLoss` + `detr_decode` + `PositionEmbeddingSine`）。
+- 分割：`SegFormerHead`（MLP 解码）、`MaskFormerHead`（query 掩码解码，compact，输出语义 logits 可直接用 SegmentationTask）；
+  `SegmentationModel` 支持列表输入头（UNet/SegFormer/MaskFormer）。
+- 分类：`CosFaceHead` / `SphereFaceHead` / `AdaFaceHead`（度量学习变体）；`MultiLabelTask`（多标签训练任务）。
+- heads 目录重组：`classification/ segmentation/ detection/` 子包，每头一个文件，互不影响。
+
+## 二、修复
+- HungarianMatcher 在 n>m（query 多于 gt）时无增广路径导致死循环 → 代价矩阵补齐为方阵后求解。
+- 清理超时遗留的孤儿 python 进程（Windows torch DLL 偶发加载失败与此相关）。
+
+## 三、验证
+- 阶段 A-D 各自冒烟通过（YOLO/DETR loss 下降、decode 形状正确；SegFormer/MaskFormer/度量头/多标签任务 forward 正确）。
+- 统一全量测试：195 passed + 2 skipped。
+
+## 四、遗留 / 下一步
+- Mask2Former 完整版：mask 监督（匈牙利 mask 匹配）+ 实例/全景分割评估（COCO mask mAP）——当前为 compact 语义版。
+- YOLO 配置示例（configs/detection/yolo_synthetic.yaml）可按需补充。
+- 知识蒸馏回调（DistillCallback）可选。
+- DETR 系列进阶：Deformable DETR / RT-DETR。

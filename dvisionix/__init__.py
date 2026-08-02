@@ -21,7 +21,7 @@ DVisionix: 深度学习算法库
     from dvisionix.training import build_task, Trainer
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 from . import data
 from . import models

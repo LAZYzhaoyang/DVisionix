@@ -47,8 +47,8 @@ dvisionix/
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath）
 │   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
 │   ├── necks/           # FPN / PANet
-│   ├── heads/           # 分类（Cls/ArcFace/MultiLabel）· 分割（Seg/FCN/DeepLabV3/UNet）· 检测（Det/FCOS/RetinaNet）
-│   ├── detectors/       # SingleStageDetector + FCOS（anchor-free）+ RetinaNet（anchor-based）
+│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel）· 分割（Seg/FCN/DeepLabV3/UNet/SegFormer/MaskFormer）· 检测（Det/FCOS/RetinaNet/YOLO/DETR）
+│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO / DETR
 │   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
 │   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
 │   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
@@ -345,6 +345,13 @@ MIT License
 - **Task 全面配置化**：optimizer / scheduler / loss / metrics 均由配置驱动；
   `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
 - **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
+
+### 0.5.0（前沿检测与分割）
+- 检测：新增 `YOLODetector`（YOLOv8 风格，TaskAlignedAssigner）与 `DETRDetector`（transformer + HungarianMatcher）；
+- 分割：新增 `SegFormerHead`（MLP 解码）与 `MaskFormerHead`（query 掩码解码，compact）；
+- 分类：新增 `CosFaceHead` / `SphereFaceHead` / `AdaFaceHead`（度量学习）与 `MultiLabelTask`；
+- heads 模块按任务重组为子包（classification / segmentation / detection），每头一个文件；
+- 修复 Hungarian 匹配器 n>m 时死循环（方阵补齐）。
 
 ### 0.4.0（模型模块丰富）
 - 删除 GeneralizedModel（三任务万能模型，契约弱、检测半成品），替换为具体模型 + 共享脚手架；

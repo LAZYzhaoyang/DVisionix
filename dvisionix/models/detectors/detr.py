@@ -1,0 +1,38 @@
+# -*- coding: utf-8 -*-
+"""DETR 检测器（transformer 端到端目标检测）。"""
+
+from typing import Any, Dict, Optional
+
+from ..postprocess import detr_decode
+from .base import SingleStageDetector
+from ...registry import MODELS
+
+
+@MODELS.register()
+@MODELS.register(name="detr")
+class DETRDetector(SingleStageDetector):
+    """DETR：backbone（单层特征）-> DETRHead（transformer + 类别/框 FFN）。"""
+
+    def __init__(
+        self,
+        backbone: Dict[str, Any],
+        head: Dict[str, Any],
+        neck: Optional[Dict[str, Any]] = None,
+        out_indices: Optional[list] = None,
+        num_classes: Optional[int] = None,
+        **kwargs,
+    ):
+        head_cfg = dict(head)
+        if num_classes is not None and "num_classes" not in head_cfg:
+            head_cfg["num_classes"] = num_classes
+        super().__init__(backbone, head_cfg, neck, out_indices)
+
+    def decode(self, preds, image_hw, score_threshold=0.05, iou_threshold=0.5, max_detections=100, topk=300):
+        return detr_decode(
+            preds, image_hw,
+            score_threshold=score_threshold, iou_threshold=iou_threshold,
+            max_detections=max_detections, topk=topk,
+        )
+
+
+__all__ = ["DETRDetector"]

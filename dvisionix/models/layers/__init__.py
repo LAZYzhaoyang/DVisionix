@@ -15,6 +15,7 @@ from typing import Any, Dict
 from ...registry import LAYERS
 from .builder import build_norm_layer, build_activation_layer
 from .basic import ConvNormAct, MLP, SEBlock, DropPath
+from .attention import PositionEmbeddingSine
 from .timm_layers import create_timm_layer, list_timm_layers
 
 
@@ -41,3 +42,4 @@ __all__ = [
     "create_timm_layer",
     "list_timm_layers",
 ]
+__all__ = __all__ + ["PositionEmbeddingSine"]

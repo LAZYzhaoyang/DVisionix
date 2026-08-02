@@ -20,9 +20,12 @@ from .detection import (
     FCOSAssigner,
     MaxIoUAssigner,
     ATSSAssigner,
+    TaskAlignedAssigner,
     SigmoidFocalLoss,
     FCOSDetectionLoss,
     RetinaNetLoss,
+    DETRLoss,
+    YOLOLoss,
 )
 
 __all__ = [
@@ -45,7 +48,10 @@ __all__ = [
     "FCOSAssigner",
     "MaxIoUAssigner",
     "ATSSAssigner",
+    "TaskAlignedAssigner",
     "SigmoidFocalLoss",
     "FCOSDetectionLoss",
     "RetinaNetLoss",
+    "DETRLoss",
+    "YOLOLoss",
 ]

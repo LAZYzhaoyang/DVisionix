@@ -65,7 +65,7 @@ class GridAssigner:
         return obj_target, box_target, cls_target, num_pos
 
 
-__all__ = ["GridAssigner"]
+
 
 
 def _box_iou_matrix(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
@@ -310,4 +310,72 @@ class ATSSAssigner:
         return labels, bbox_targets
 
 
-__all__ = ["GridAssigner", "FCOSAssigner", "MaxIoUAssigner", "ATSSAssigner"]
+class TaskAlignedAssigner:
+    """YOLOv8 风格任务对齐分配器。
+
+    对齐度量 = sigmoid(cls)^alpha * IoU(pred_box, gt)^beta；按每个 gt 取 top-k 正样本，
+    冲突时保留对齐度量最大的 gt。
+    """
+
+    def __init__(self, num_classes: int, topk: int = 13, alpha: float = 0.5, beta: float = 6.0):
+        self.num_classes = num_classes
+        self.topk = topk
+        self.alpha = alpha
+        self.beta = beta
+
+    def assign(self, pred_boxes, pred_scores, centers, strides, gt_boxes, gt_labels):
+        """每层预测框/分数/位置中心 -> (labels_per_level, bbox_targets_per_level)。
+
+        pred_boxes / pred_scores / centers: 每层 list。
+        labels 语义：0 背景，1..num_classes 为类别（class c -> c+1）。
+        """
+        device = pred_boxes[0].device
+        starts = [0]
+        for pb in pred_boxes:
+            starts.append(starts[-1] + pb.shape[0])
+        n = starts[-1]
+        labels_all = torch.zeros((n,), dtype=torch.long, device=device)
+        bbox_t_all = torch.zeros((n, 4), device=device)
+        ranges = list(zip(starts, starts[1:]))
+
+        if gt_boxes.numel() == 0:
+            return (
+                [labels_all[s:e] for s, e in ranges],
+                [bbox_t_all[s:e] for s, e in ranges],
+            )
+
+        all_boxes = torch.cat(pred_boxes, dim=0)
+        all_scores = torch.cat(pred_scores, dim=0)
+        all_centers = torch.cat(centers, dim=0)
+        best_align = torch.zeros((n,), device=device)
+
+        for j in range(gt_boxes.shape[0]):
+            box = gt_boxes[j]
+            inside = (
+                (all_centers[:, 0] >= box[0]) & (all_centers[:, 0] <= box[2])
+                & (all_centers[:, 1] >= box[1]) & (all_centers[:, 1] <= box[3])
+            )
+            iou = _box_iou_matrix(all_boxes, box[None])[:, 0]
+            cls_score = torch.sigmoid(all_scores[:, gt_labels[j]])
+            align = (cls_score ** self.alpha) * (iou ** self.beta)
+            align = torch.where(inside & (iou > 0), align, torch.full_like(align, -1e9))
+
+            k = min(self.topk, int((inside & (iou > 0)).sum().item()))
+            if k <= 0:
+                continue
+            topk_idx = align.topk(k).indices
+            top_align = align[topk_idx]
+            update = top_align > best_align[topk_idx]
+            for idx, flag in zip(topk_idx.tolist(), update.tolist()):
+                if flag:
+                    best_align[idx] = align[idx]
+                    labels_all[idx] = gt_labels[j] + 1
+                    bbox_t_all[idx] = box
+
+        return (
+            [labels_all[s:e] for s, e in ranges],
+            [bbox_t_all[s:e] for s, e in ranges],
+        )
+
+
+__all__ = ["GridAssigner", "FCOSAssigner", "MaxIoUAssigner", "ATSSAssigner", "TaskAlignedAssigner"]

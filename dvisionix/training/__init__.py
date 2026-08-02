@@ -19,6 +19,7 @@ from .tasks import (
     ClassificationTask,
     DetectionTask,
     SegmentationTask,
+    MultiLabelTask,
     build_task,
 )
 from .callbacks import (
