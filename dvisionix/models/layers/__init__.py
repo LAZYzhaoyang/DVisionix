@@ -16,6 +16,9 @@ from ...registry import LAYERS
 from .attention import PositionEmbeddingSine
 from .basic import MLP, ConvNormAct, DropPath, SEBlock
 from .builder import build_activation_layer, build_norm_layer
+from .csp import CSPLayer
+from .deformable_attention import MultiScaleDeformableAttention
+from .elan import ELANLayer
 from .timm_layers import create_timm_layer, list_timm_layers
 
 
@@ -39,6 +42,9 @@ __all__ = [
     "MLP",
     "SEBlock",
     "DropPath",
+    "CSPLayer",
+    "ELANLayer",
+    "MultiScaleDeformableAttention",
     "create_timm_layer",
     "list_timm_layers",
 ]

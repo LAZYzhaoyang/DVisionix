@@ -15,6 +15,7 @@ from .base import BaseMetric
 from .classification import Accuracy, F1Score, Precision, Recall, TopKAccuracy
 from .collection import MetricCollection, build_single_metric
 from .detection import MeanAveragePrecision
+from .panoptic import PanopticQuality
 from .presets import (
     ClassificationMetrics,
     DetectionMetrics,
@@ -33,6 +34,7 @@ __all__ = [
     "MeanIoU",
     "PixelAccuracy",
     "MaskAveragePrecision",
+    "PanopticQuality",
     "DiceScore",
     "MeanAveragePrecision",
     "MetricCollection",

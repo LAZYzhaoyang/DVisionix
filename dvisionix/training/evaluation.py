@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-检测评估工具
+检测 / 掩码评估工具
 
-将 GridDetectionModel 的原始输出解码为框，再用 DetectionMetrics 计算
-COCO-style mAP / mAP_50 / mAP_75。
+- evaluate_detection：检测模型 decode 后用 DetectionMetrics 计算 COCO mAP。
+- evaluate_mask_ap：MaskFormerHead full 模式 -> mask mAP。
+- panoptic_decode / evaluate_panoptic：full 模式 -> 全景 id 图 -> PanopticQuality（PQ/SQ/RQ）。
 """
 
 from typing import Dict
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from ..metrics import DetectionMetrics
@@ -104,4 +106,94 @@ def evaluate_mask_ap(
             for lb in batch.get("labels", [torch.full_like(m, 1) for m in target_masks])
         ]
         metric.update(masks_list, scores_list, labels_list, target_masks, target_labels)
+    return metric.compute()
+
+
+@torch.no_grad()
+def panoptic_decode(
+    preds,
+    image_hw,
+    num_classes: int,
+    score_threshold: float = 0.3,
+    mask_threshold: float = 0.5,
+    max_instances: int = 100,
+    id_scale: int = 1000,
+):
+    """MaskFormerHead full 模式 -> 每张图的全景 id 图列表（(H, W) int64）。
+
+    id 编码：category_id * id_scale + instance_id；实例掩码覆盖语义预测（实例优先）。
+    """
+    logits = preds["pred_logits"]
+    masks = preds["pred_masks"].sigmoid()
+    semantic = preds.get("semantic_logits")
+    probs = torch.softmax(logits, dim=-1)[..., :-1]  # (B, Q, C)
+    scores, labels = probs.max(dim=-1)
+    pan_list = []
+    for b in range(logits.shape[0]):
+        if semantic is not None:
+            sem = semantic[b].argmax(0)
+        else:
+            sem = torch.einsum("qc,qhw->chw", probs[b], masks[b]).argmax(0)
+        pan = sem * id_scale
+        keep = scores[b] >= score_threshold
+        idx = scores[b][keep].argsort(descending=True)
+        if idx.numel() > max_instances:
+            idx = idx[:max_instances]
+        inst_id = 1
+        for q in idx.tolist():
+            m = masks[b, q] > mask_threshold
+            pan[m] = int(labels[b, q]) * id_scale + inst_id
+            inst_id += 1
+        if tuple(pan.shape) != tuple(image_hw):
+            pan = (
+                F.interpolate(
+                    pan.unsqueeze(0).unsqueeze(0).float(),
+                    size=tuple(image_hw),
+                    mode="nearest",
+                )
+                .long()
+                .squeeze(0)
+                .squeeze(0)
+            )
+        pan_list.append(pan)
+    return pan_list
+
+
+@torch.no_grad()
+def evaluate_panoptic(
+    model,
+    data_loader: "DataLoader",
+    num_classes: int,
+    device: "torch.device",
+    score_threshold: float = 0.3,
+    mask_threshold: float = 0.5,
+    gt_key: str = "panoptic",
+    id_scale: int = 1000,
+) -> dict:
+    """MaskFormer 风格模型的全景分割评估（PQ / SQ / RQ）。
+
+    模型输出需为 full 模式 dict；GT 取 batch["panoptic"]（全景 id 图），
+    若缺失则退化为 batch["mask"] * id_scale（纯语义）。
+    """
+    from ..metrics import PanopticQuality
+
+    model.eval()
+    metric = PanopticQuality(num_categories=num_classes, id_scale=id_scale)
+    for batch in data_loader:
+        images = batch["image"].to(device)
+        preds = model(images)
+        pan_preds = panoptic_decode(
+            preds,
+            (images.shape[2], images.shape[3]),
+            num_classes,
+            score_threshold=score_threshold,
+            mask_threshold=mask_threshold,
+            id_scale=id_scale,
+        )
+        for i, pp in enumerate(pan_preds):
+            if gt_key in batch:
+                gt = batch[gt_key][i].to(device)
+            else:
+                gt = batch["mask"][i].to(device) * id_scale
+            metric.update(pp, gt)
     return metric.compute()

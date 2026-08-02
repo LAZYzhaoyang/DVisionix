@@ -44,11 +44,11 @@ dvisionix/
 ├── config/               # Config（YAML 继承 / CLI 覆盖 / schema 校验）
 ├── models/
 │   ├── base.py          # BaseModel（TASK_TYPES 校验 / init_weights / from_config）
-│   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath）
+│   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath / CSP / ELAN / 可变形注意力）
 │   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
 │   ├── necks/           # FPN / PANet
-│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel）· 分割（Seg/FCN/DeepLabV3/UNet/SegFormer/MaskFormer）· 检测（Det/FCOS/RetinaNet/YOLO/DETR/RT-DETR）
-│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO / DETR / RT-DETR（decode 与模型同文件）
+│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel/NormFace/CurricularFace/PartialFC）· 分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer/MaskFormer/PSP/UPerNet）· 检测（Det/FCOS/RetinaNet/YOLO/DETR/RT-DETR/DeformableDETR）
+│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO / DETR / RT-DETR / DeformableDETR（decode 与模型同文件）
 │   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
 │   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
 │   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
@@ -334,6 +334,14 @@ MIT License
 ---
 
 ## 📌 版本演进
+
+### 0.8.0（阶段 B：模型库扩充）
+- 分割：新增 `PSPHead` / `UPerNetHead` / `DeepLabV3PlusHead`（即插即用，多尺度头走 input_style）；
+  `MaskFormerTask` 实例分割训练任务；`PanopticQuality`（PQ/SQ/RQ）+ `panoptic_decode` / `evaluate_panoptic` 打通全景评估；
+- 检测：新增 `CSPLayer` / `ELANLayer`（YOLOv5/v9 风格骨干即插即用，附配置示例）；
+  `DeformableDETRHead` / `DeformableDETRDetector`（纯 PyTorch 多尺度可变形注意力，复用 DETRLoss/decode）；
+- 分类：新增 `NormFaceHead` / `CurricularFaceHead` / `PartialFCHead`（大规模类别采样 softmax）；
+- 全量测试 223 passed + 2 skipped；ruff / black 全绿。
 
 ### 0.7.1（decode 归位 / 组合性验证）
 - 模型专属 decode 从共享 `postprocess.py` 移回各模型文件：`detr_decode`（detectors/base.py，DETR/RT-DETR 共用）、

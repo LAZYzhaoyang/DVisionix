@@ -23,12 +23,13 @@ from .callbacks import (
     ModelCheckpoint,
     ProgressBar,
 )
-from .evaluation import evaluate_detection, evaluate_mask_ap
+from .evaluation import evaluate_detection, evaluate_mask_ap, evaluate_panoptic, panoptic_decode
 from .optim import OPTIMIZERS, SCHEDULERS, build_optimizer, build_scheduler
 from .tasks import (
     BaseTask,
     ClassificationTask,
     DetectionTask,
+    MaskFormerTask,
     MultiLabelTask,
     SegmentationTask,
     build_task,
@@ -49,6 +50,7 @@ __all__ = [
     "DetectionTask",
     "SegmentationTask",
     "MultiLabelTask",
+    "MaskFormerTask",
     "build_task",
     "Callback",
     "CallbackList",
@@ -63,6 +65,8 @@ __all__ = [
     "build_scheduler",
     "evaluate_detection",
     "evaluate_mask_ap",
+    "evaluate_panoptic",
+    "panoptic_decode",
     "default_work_root",
     "resolve_work_dir",
     "find_latest_run",

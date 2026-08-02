@@ -10,17 +10,31 @@ from .classification import (
     ArcFaceHead,
     ClsHead,
     CosFaceHead,
+    CurricularFaceHead,
     MultiLabelHead,
+    NormFaceHead,
+    PartialFCHead,
     SphereFaceHead,
 )
-from .detection import DetHead, DETRHead, FCOSHead, RetinaNetHead, RTDETRHead, YOLOHead
+from .detection import (
+    DeformableDETRHead,
+    DetHead,
+    DETRHead,
+    FCOSHead,
+    RetinaNetHead,
+    RTDETRHead,
+    YOLOHead,
+)
 from .segmentation import (
     DeepLabV3Head,
+    DeepLabV3PlusHead,
     FCNHead,
     MaskFormerHead,
+    PSPHead,
     SegFormerHead,
     SegHead,
     UNetDecoder,
+    UPerNetHead,
     maskformer_decode,
 )
 
@@ -29,11 +43,17 @@ __all__ = [
     "ArcFaceHead",
     "MultiLabelHead",
     "CosFaceHead",
+    "CurricularFaceHead",
+    "NormFaceHead",
+    "PartialFCHead",
     "SphereFaceHead",
     "AdaFaceHead",
     "SegHead",
     "FCNHead",
     "DeepLabV3Head",
+    "DeepLabV3PlusHead",
+    "PSPHead",
+    "UPerNetHead",
     "UNetDecoder",
     "SegFormerHead",
     "MaskFormerHead",
@@ -44,4 +64,5 @@ __all__ = [
     "YOLOHead",
     "RTDETRHead",
     "DETRHead",
+    "DeformableDETRHead",
 ]

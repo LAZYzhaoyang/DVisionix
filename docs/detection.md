@@ -12,8 +12,10 @@ DVisionix 提供**组件化检测器**（backbone → neck → head 即插即用
 | `YOLODetector` | anchor-free（YOLOv8 风格） | `YOLOHead` + `TaskAlignedAssigner` + `YOLOLoss` | `yolo` |
 | `DETRDetector` | transformer 端到端 | `DETRHead` + `HungarianMatcher` + `DETRLoss` | `detr` |
 | `RTDETRDetector` | transformer 端到端（compact） | `RTDETRHead`（混合编码器 + query 选择）+ `DETRLoss` | `rtdetr` |
+| `DeformableDETRDetector` | transformer 端到端（compact） | `DeformableDETRHead`（多尺度可变形注意力）+ `DETRLoss` | `deformable_detr` |
 
 所有检测器由 `SingleStageDetector` 脚手架统一装配：backbone（自动 `features_only=True`）→ neck（可选 FPN / PANet）→ head。
+YOLO 系列骨干可用 `csp_layer` / `elan_layer` 拼装（见 `configs/detection/yolov5_synthetic.yaml` / `yolov9_synthetic.yaml`）。
 backbone / neck / head 均配置驱动，可自由组合（例如 `timm_backbone` 或 `SequentialBackbone` 配 `fpn` / `panet`）。
 
 ## 数据格式

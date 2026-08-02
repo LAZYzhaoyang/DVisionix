@@ -1,0 +1,56 @@
+# YOLOv5 风格端到端 demo 配置（CSP 骨干 + PANet + YOLOHead）
+_base_: "../../dvisionix/config/defaults/detection.yaml"
+
+experiment_name: "demo_yolov5_synthetic"
+
+model:
+  _delete_: true
+  type: "yolo"
+  num_classes: 3
+  backbone:
+    type: "sequential_backbone"
+    features_only: true
+    stages:
+      - {type: conv_norm_act, in_channels: 3, out_channels: 16, stride: 4}
+      - {type: conv_norm_act, in_channels: 16, out_channels: 32, stride: 2}
+      - [
+          {type: conv_norm_act, in_channels: 32, out_channels: 64, stride: 2},
+          {type: csp_layer, in_channels: 64, out_channels: 64, num_blocks: 2},
+        ]
+      - [
+          {type: conv_norm_act, in_channels: 64, out_channels: 128, stride: 2},
+          {type: csp_layer, in_channels: 128, out_channels: 128, num_blocks: 2},
+        ]
+  neck:
+    type: "panet"
+    out_channels: 64
+  head:
+    type: "yolo_head"
+    num_classes: 3
+    strides: [4, 8, 16, 32]
+
+loss:
+  _delete_: true
+  type: "yolo_detection"
+  strides: [4, 8, 16, 32]
+  topk: 13
+
+data:
+  dataset: "synthetic"
+  image_size: 64
+  num_samples: 64
+  val_samples: 16
+  max_boxes: 3
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  optimizer: {type: adam, lr: 0.001, weight_decay: 0.0001}
+  device: "auto"
+  num_workers: 0
+  early_stopping: {enabled: false}
+
+checkpoint:
+  save_dir: "checkpoints"
+  monitor: "val_loss"
+  mode: "min"

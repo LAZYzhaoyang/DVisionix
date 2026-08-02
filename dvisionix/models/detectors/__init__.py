@@ -10,6 +10,7 @@
 
 from .anchors import AnchorGenerator, bbox2delta, delta2bbox
 from .base import SingleStageDetector, detr_decode
+from .deformable_detr import DeformableDETRDetector
 from .detr import DETRDetector
 from .fcos import FCOSDetector, fcos_decode
 from .retinanet import RetinaNetDetector, retinanet_decode
@@ -30,4 +31,5 @@ __all__ = [
     "yolo_decode",
     "DETRDetector",
     "RTDETRDetector",
+    "DeformableDETRDetector",
 ]

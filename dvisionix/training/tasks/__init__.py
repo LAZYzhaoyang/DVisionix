@@ -10,10 +10,11 @@ from ...registry import TASKS
 from .base import BaseTask
 from .classification import ClassificationTask
 from .detection import DetectionTask
+from .maskformer import MaskFormerTask
 from .multi_label import MultiLabelTask
 from .segmentation import SegmentationTask
 
-for _cls in (ClassificationTask, DetectionTask, SegmentationTask, MultiLabelTask):
+for _cls in (ClassificationTask, DetectionTask, SegmentationTask, MultiLabelTask, MaskFormerTask):
     if _cls.__name__ not in TASKS:
         TASKS.register(_cls)
 
@@ -36,5 +37,6 @@ __all__ = [
     "DetectionTask",
     "SegmentationTask",
     "MultiLabelTask",
+    "MaskFormerTask",
     "build_task",
 ]

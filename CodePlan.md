@@ -593,3 +593,50 @@ models/
 - 分割：Mask2Former 实例/全景分割评估打通（mask 监督已就绪）；更多分割头（按任务目录每头一文件扩展）。
 - 检测：YOLO 系列扩展（YOLOv5 / v7 / v9 风格变体）、更多 anchor-free 检测器。
 - 指标：分类 / 分割指标全面迁移 torchmetrics（可选后端）。
+
+
+---
+
+# 阶段 B：模型库扩充（v0.8.0）
+
+> 用户确认实施：按"算法工具箱"方向扩充模型库，全部模块化、即插即用；教学模型独立；规模大不是问题。
+
+## 一、B-分割：新分割头 + 实例/全景
+- 新头（均注册 HEADS，接入 SegmentationModel 即插即用）：
+  - `PSPHead`（psp_head）：金字塔场景解析池化（1/2/3/6 bins），单尺度输入。
+  - `UPerNetHead`（upernet_head）：FPN 风格自顶向下多尺度融合 + 顶层 PPM，input_style="multi_scale"。
+  - `DeepLabV3PlusHead`（deeplabv3plus_head）：高层 ASPP + 低层特征解码器（取 in_channels_list[-2]），input_style="multi_scale"。
+- `MaskFormerTask`（实例分割任务）：MaskFormerHead full 模式 + `MaskFormerLoss` + mask mAP 验证；已注册 TASKS 并在 training 顶层导出。
+- 全景分割评估打通：
+  - `PanopticQuality`（metrics/panoptic.py，注册 panoptic_quality）：标准 PQ / SQ / RQ（按类 IoU>=0.5 贪心匹配）。
+  - `panoptic_decode` / `evaluate_panoptic`（training/evaluation.py）：full 模式 preds -> 全景 id 图 -> PQ 评估（GT 可取 batch["panoptic"] 或退化为语义）。
+
+## 二、B-检测：YOLO 系列 + Deformable DETR
+- 新层（注册 LAYERS，可直接用于 SequentialBackbone stages）：
+  - `CSPLayer`（csp_layer）：CSP 瓶颈块（YOLOv5 风格）。
+  - `ELANLayer`（elan_layer）：高效聚合网络块（YOLOv7/v9 风格）。
+- 新配置示例：`configs/detection/yolov5_synthetic.yaml`（CSP 骨干 + PANet + YOLOHead）、
+  `yolov9_synthetic.yaml`（ELAN 骨干 + PANet + YOLOHead）。
+- `DeformableDETRHead`（deformable_detr_head）+ `DeformableDETRDetector`（deformable_detr）：
+  纯 PyTorch 多尺度可变形注意力（`MultiScaleDeformableAttention`，layers 注册），输出契约与 DETR 一致，
+  复用 DETRLoss 与 detr_decode（compact，head 间取平均简化）。
+
+## 三、B-分类：新度量学习头
+- `NormFaceHead`（normface_head）：归一化特征/权重 + 缩放，无 margin。
+- `CurricularFaceHead`（curricularface_head）：课程式自适应 margin（compact：困难样本 margin 更大）。
+- `PartialFCHead`（partial_fc_head）：大规模类别采样子集 softmax；默认全量可用（配合 LinearClassifier +
+  ClassificationTask），采样模式返回 (logits_subset, sampled_indices) + `remap_labels` 辅助。
+
+## 四、验证
+- 新增 `tests/test_models/test_v08_phase_b.py`（13 项）：新分割头前向/多尺度注入、MaskFormerTask 训练/验证、
+  PanopticQuality 完美/错误、panoptic_decode 形状、CSP/ELAN 层、YOLOv5 风格检测器、Deformable DETR 前向/解码/损失下降、
+  NormFace/CurricularFace、PartialFC 全量/采样模式。
+- 全量测试 223 passed + 2 skipped；ruff / black 全绿。
+- 修复过程中问题：UPerNet 融合循环逐级对齐；panoptic_decode 输出上采样到图像分辨率；
+  PartialFC 采样从非 batch 类别中抽取保证恰好 num_sample_classes。
+
+## 五、下一步计划（阶段 C/D）
+- 多卡实机验证（torchrun + test_ddp_smoke.py；DDP 已隔离实现）。
+- 指标：分类/分割指标迁移 torchmetrics 可选后端。
+- 训练/评估收尾：实例/全景评估接入训练验证循环（evaluate_panoptic 已就绪，可挂进 MaskFormerTask 或自定义回调）。
+- 文档/CI 收尾：README/CodePlan 同步、版本号、CI 全绿。
