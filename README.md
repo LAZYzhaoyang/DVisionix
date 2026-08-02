@@ -335,6 +335,12 @@ MIT License
 
 ## 📌 版本演进
 
+### 0.16.0（DINO-lite / 线性评估 / 训练工程 P1）
+- 检测：`dinodetr`（hybrid query selection + query denoising 对比正负样本 + box refinement）；
+- 自监督闭环：`LinearEvalTask`（冻结 encoder + L2 归一化线性头）+ `load_backbone` + `pretrained_backbone` 配置；
+- 训练工程：`linear_warmup` 调度器、`gradient_clip_value`、EMA `decay_warmup_epochs` + 最终导出 `ema_last.pt`；
+- 新增 dino / linear_eval 配置示例；全量测试 271 passed + 2 skipped；ruff / black 全绿。
+
 ### 0.15.0（组合器目录化 + 批次 2）
 - classifiers / segmenters 子包化（顶层 API 不变，调用规则新增 R7）；
 - `swinv2_backbone`（cosine attention + 连续相对位置偏置 + res-post-norm）；

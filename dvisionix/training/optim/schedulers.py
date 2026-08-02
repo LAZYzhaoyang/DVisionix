@@ -52,6 +52,26 @@ def _multi_step(
     )
 
 
+def _linear_warmup(
+    optimizer: torch.optim.Optimizer,
+    warmup_epochs: int = 5,
+    scheduler: Optional[Dict[str, Any]] = None,
+    start_factor: float = 0.1,
+    **kwargs: Any,
+):
+    """线性 warmup（epoch 级）后交棒给主调度器（SequentialLR）。不支持 plateau 主调度器。"""
+    warmup = torch.optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=float(start_factor), total_iters=int(warmup_epochs)
+    )
+    main_cfg = dict(scheduler or {})
+    main_cfg.setdefault("type", "cosine")
+    main_cfg.setdefault("T_max", 100)
+    main, _ = build_scheduler(main_cfg, optimizer)
+    return torch.optim.lr_scheduler.SequentialLR(
+        optimizer, [warmup, main], milestones=[int(warmup_epochs)]
+    )
+
+
 def _one_cycle(
     optimizer: torch.optim.Optimizer,
     max_lr: Optional[float] = None,
@@ -72,6 +92,8 @@ SCHEDULERS.register(_reduce_on_plateau, name="plateau")
 SCHEDULERS.register(_step, name="step")
 SCHEDULERS.register(_multi_step, name="multi_step")
 SCHEDULERS.register(_one_cycle, name="one_cycle")
+SCHEDULERS.register(_linear_warmup, name="linear_warmup")
+SCHEDULERS.register(_linear_warmup, name="warmup")
 
 
 def build_scheduler(

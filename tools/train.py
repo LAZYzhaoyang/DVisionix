@@ -36,6 +36,7 @@ from dvisionix.training import (
     build_trainer,
     dump_config,
     find_checkpoint,
+    load_backbone,
     resolve_work_dir,
 )
 from dvisionix.utils import get_logger, set_seed
@@ -242,6 +243,13 @@ def main():
 
     model = build_model(cfg.model.to_dict())
     logger.info(f"Model params: {model.count_parameters():,}")
+
+    pretrained_backbone = cfg.model.get("pretrained_backbone") or cfg.training.get(
+        "pretrained_backbone"
+    )
+    if pretrained_backbone:
+        load_backbone(model, pretrained_backbone)
+        logger.info(f"Backbone pretrained weights loaded from: {pretrained_backbone}")
 
     task = build_task(build_task_cfg(cfg))
 

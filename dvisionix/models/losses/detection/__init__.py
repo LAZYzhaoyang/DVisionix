@@ -12,6 +12,7 @@ from .box_loss import CIoULoss, GIoULoss, L1BoxLoss
 from .losses import (
     CenterNetLoss,
     DETRLoss,
+    DINOLoss,
     FCOSDetectionLoss,
     GridDetectionLoss,
     ObjectnessLoss,
@@ -41,4 +42,5 @@ __all__ = [
     "OneToOneYOLOLoss",
     "CenterNetLoss",
     "YOLOv9Loss",
+    "DINOLoss",
 ]

@@ -790,6 +790,83 @@ class YOLOv9Loss(BaseLoss):
         return main_out
 
 
+@LOSSES.register()
+@LOSSES.register(name="dino_detection")
+class DINOLoss(BaseLoss):
+    """DINO-lite 损失：主头 DETRLoss + 去噪分支损失（对比去噪：正样本参与分类+框回归，负样本仅分类）。"""
+
+    def __init__(
+        self,
+        num_classes: int,
+        cost_class: float = 1.0,
+        cost_bbox: float = 5.0,
+        cost_giou: float = 2.0,
+        dn_weight: float = 1.0,
+        weight: float = 1.0,
+    ):
+        super().__init__(weight)
+        self.num_classes = num_classes
+        self.main = DETRLoss(
+            num_classes, cost_class=cost_class, cost_bbox=cost_bbox, cost_giou=cost_giou
+        )
+        self.dn_weight = float(dn_weight)
+
+    def forward(self, preds, batch, image_hw=None, device=None, **kwargs) -> dict:
+        if device is None:
+            device = preds["logits"].device
+        main_out = self.main(preds, batch, image_hw=image_hw, device=device)
+        if "dn_logits" not in preds:
+            return main_out
+        dn_logits = preds["dn_logits"]
+        dn_boxes = preds["dn_boxes"]
+        cls_t = preds["dn_cls_target"]
+        box_t = preds["dn_box_target"]
+        pos = preds["dn_positive_mask"]
+        valid = preds["dn_valid"]
+        img_h, img_w = image_hw
+        B, N, _ = dn_logits.shape
+        total_cls = torch.tensor(0.0, device=device)
+        total_l1 = torch.tensor(0.0, device=device)
+        total_giou = torch.tensor(0.0, device=device)
+        for b in range(B):
+            keep = valid[b]
+            if not keep.any():
+                continue
+            logits = dn_logits[b][keep]
+            targets = cls_t[b][keep]
+            total_cls = total_cls + F.cross_entropy(logits, targets)
+            p_mask = pos[b][keep]
+            if p_mask.any():
+                pb = dn_boxes[b][keep][p_mask]
+                gb = box_t[b][keep][p_mask]
+                # 归一化框 -> 像素
+                pb_px = torch.stack(
+                    [
+                        pb[:, 0] * img_w,
+                        pb[:, 1] * img_h,
+                        (pb[:, 0] + pb[:, 2]) * img_w,
+                        (pb[:, 1] + pb[:, 3]) * img_h,
+                    ],
+                    dim=1,
+                )
+                gb_px = torch.stack(
+                    [
+                        gb[:, 0] * img_w,
+                        gb[:, 1] * img_h,
+                        (gb[:, 0] + gb[:, 2]) * img_w,
+                        (gb[:, 1] + gb[:, 3]) * img_h,
+                    ],
+                    dim=1,
+                )
+                total_l1 = total_l1 + F.l1_loss(pb, gb)
+                total_giou = total_giou + GIoULoss()(pb_px, gb_px)
+        dn_loss = total_cls + self.main.bbox_weight * total_l1 + total_giou
+        main_out["loss"] = main_out["loss"] + self.dn_weight * dn_loss
+        main_out["dn_cls_loss"] = total_cls
+        main_out["dn_l1_loss"] = total_l1
+        return main_out
+
+
 __all__ = [
     "ObjectnessLoss",
     "GridDetectionLoss",
@@ -801,4 +878,5 @@ __all__ = [
     "OneToOneYOLOLoss",
     "CenterNetLoss",
     "YOLOv9Loss",
+    "DINOLoss",
 ]

@@ -49,7 +49,10 @@ class DetectionTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         images = batch["image"].to(device)
-        preds = model(images)
+        if getattr(model, "needs_batch", False):
+            preds = model(images, batch=batch)
+        else:
+            preds = model(images)
         image_hw = (images.shape[2], images.shape[3])
         loss, extras = compute_loss(self.loss, preds, batch, image_hw=image_hw, device=device)
         return {"loss": loss, **extras}

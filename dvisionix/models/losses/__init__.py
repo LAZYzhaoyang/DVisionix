@@ -21,6 +21,7 @@ from .detection import (
     CenterNetLoss,
     CIoULoss,
     DETRLoss,
+    DINOLoss,
     FCOSAssigner,
     FCOSDetectionLoss,
     GIoULoss,
@@ -71,4 +72,5 @@ __all__ = [
     "OneToOneYOLOLoss",
     "CenterNetLoss",
     "YOLOv9Loss",
+    "DINOLoss",
 ]

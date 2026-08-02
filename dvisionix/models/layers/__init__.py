@@ -22,12 +22,14 @@ from .convnext import ConvNeXtBlock
 from .convnextv2 import ConvNeXtV2Block
 from .csp import CSPLayer
 from .deformable_attention import MultiScaleDeformableAttention, MultiScaleDeformableAttentionV2
+from .detr_denoising import DenoisingQueryGenerator
 from .elan import EELANLayer, ELANLayer
 from .grn import GRN
 from .mbconv import MBConvBlock
 from .norm import LayerNorm2d
 from .patch_ops import PatchExpand, PatchMerging
 from .psa import PSABlock
+from .query_selection import QuerySelection
 from .relative_position_bias import ContinuousRelativePositionBias
 from .reversible import ReversibleBlock
 from .swinv2 import SwinV2Block
@@ -81,6 +83,8 @@ __all__ = __all__ + [
     "PatchMerging",
     "PatchExpand",
     "GRN",
+    "QuerySelection",
+    "DenoisingQueryGenerator",
     "ContinuousRelativePositionBias",
     "SwinV2Block",
     "MultiScaleDeformableAttentionV2",

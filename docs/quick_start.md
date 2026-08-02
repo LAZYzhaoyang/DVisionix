@@ -58,6 +58,13 @@ trainer = Trainer(task=task, train_loader=train_loader, device="auto", max_epoch
 trainer.fit(model)
 ```
 
+## 训练工程增强（v0.16.0）
+- 调度器 warmup：`training.scheduler: {type: linear_warmup, warmup_epochs: 3, scheduler: {type: cosine, T_max: 100}}`
+- 梯度裁剪：`training.gradient_clip_value`（值裁剪）或 `training.gradient_clip_val`（范数裁剪）
+- EMA：`training.callbacks` 配置 `{type: ema, decay: 0.999, decay_warmup_epochs: 5, save_final: true}`（结束后导出 `work_dir/ema_last.pt`）
+- 线性评估（自监督表征质量）：`model.pretrained_backbone` 加载预训练权重后冻结 encoder + L2 归一化线性头
+  （见 `configs/classification/linear_eval.yaml`）
+
 ## 相关文档
 - [配置系统](config_system.md)
 - [骨干网络（timm）](backbones.md)

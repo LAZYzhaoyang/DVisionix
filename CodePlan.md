@@ -981,3 +981,39 @@ models/
 ## 四、后续
 - 批次 3：D3 DINO 变体（大工作量，单独排期）。
 - 长期（默认推迟）：多卡验证、torchmetrics 迁移。
+
+
+---
+
+# 批次 3 DINO + 线性评估 + 训练工程 P1（v0.16.0）
+
+> 用户确认：批次 3 按核心 4 项 + 可选项实施（遵循 R1-R7）；线性评估按 P1 方案；训练工程 P1 全部包含，P2/P3 下一步。
+
+## 一、批次 3：DINO-lite（core 4 + box refinement）
+- `layers/query_selection.py`：`QuerySelection`（hybrid query selection：按类别分数取 top-k encoder token + anchor 框）。
+- `layers/detr_denoising.py`：`DenoisingQueryGenerator`（每 GT 生成正/负去噪 query；正样本小噪声参与分类+回归，负样本大噪声仅分类）。
+- `DINODetrHead`（dino_head）：多尺度可变形编码器 + 混合选择 + 解码器 + box refinement（增量叠加）。
+- `DINODetrDetector`（dinodetr）：`needs_batch=True`（训练 forward 接收 batch 生成去噪 query）；decode 复用 detr_decode。
+- `DINOLoss`（dino_detection）：主 DETRLoss + 去噪分支（对比去噪，负样本回归 masked）。
+- 配置示例：`configs/detection/dino_synthetic.yaml`。
+- look-forward-twice：后置可选（未实现，记录）。
+
+## 二、线性评估（自监督闭环）
+- `LinearEvalTask`（training/tasks/linear_eval.py）：冻结 backbone（eval + requires_grad=False）+ L2 特征归一化 + 线性头（configure_optimizers 惰性构建，仅优化线性头）。
+- `training/checkpoint.py`：`load_backbone`（兼容 Trainer 完整 checkpoint 与纯 state_dict/EMA 导出，自动过滤 backbone. 前缀）。
+- `tools/train.py`：支持 `model.pretrained_backbone` / `training.pretrained_backbone` 配置加载。
+- 配置示例：`configs/classification/linear_eval.yaml`。
+
+## 三、训练工程 P1
+- **warmup 调度器**：`linear_warmup` / `warmup`（LinearLR + SequentialLR，warmup 后交棒主调度器）。
+- **梯度裁剪增强**：Trainer 新增 `gradient_clip_value`（值裁剪，优先于范数裁剪 `gradient_clip_val`）。
+- **EMA 增强**：`decay_warmup_epochs`（decay 从 0.5 线性升到目标）+ `save_final`（训练结束导出 `work_dir/ema_last.pt`）。
+
+## 四、验证
+- 新增 `tests/test_models/test_v016_p1_dino.py`（6 项）：DINO forward/decode/损失下降 + 配置、warmup 调度、EMA 参数、LinearEvalTask 端到端（冻结验证 + 损失下降）。
+- 全量测试 271 passed + 2 skipped；ruff / black 全绿。
+
+## 五、下一步
+- 训练工程 P2：超参搜索工具 `tools/hparam_search.py`、蒸馏扩展（FeatureDistillLoss）。
+- 训练工程 P3：torch.compile / channels_last、实验管理增强。
+- DINO 可选增强：look-forward-twice、对比去噪细调。

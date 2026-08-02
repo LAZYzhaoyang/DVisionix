@@ -13,6 +13,7 @@ from .base import SingleStageDetector, detr_decode
 from .centernet import CenterNetDetector
 from .deformable_detr import DeformableDETRDetector
 from .detr import DETRDetector
+from .dino import DINODetrDetector
 from .fcos import FCOSDetector, fcos_decode
 from .nmsfree_yolo import NMSFreeYOLODetector
 from .retinanet import RetinaNetDetector, retinanet_decode
@@ -39,5 +40,6 @@ __all__ = [
     "DeformableDETRDetector",
     "CenterNetDetector",
     "NMSFreeYOLODetector",
+    "DINODetrDetector",
     "YOLOv9Detector",
 ]

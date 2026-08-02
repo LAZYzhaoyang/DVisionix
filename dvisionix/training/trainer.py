@@ -101,6 +101,7 @@ class Trainer:
         device: str = "auto",
         max_epochs: int = 10,
         gradient_clip_val: Optional[float] = None,
+        gradient_clip_value: Optional[float] = None,
         log_interval: int = 50,
         amp: bool = False,
         accumulate_grad_batches: int = 1,
@@ -117,6 +118,7 @@ class Trainer:
         self.work_dir = work_dir
         self.max_epochs = max_epochs
         self.gradient_clip_val = gradient_clip_val
+        self.gradient_clip_value = gradient_clip_value
         self.log_interval = log_interval
         self.amp = amp
         self.accumulate_grad_batches = max(1, int(accumulate_grad_batches))
@@ -330,7 +332,11 @@ class Trainer:
     # 单 epoch
     # ------------------------------------------------------------------
     def _optimizer_step(self) -> None:
-        if self.gradient_clip_val is not None:
+        if self.gradient_clip_value is not None:
+            if self.scaler is not None:
+                self.scaler.unscale_(self.optimizer)
+            torch.nn.utils.clip_grad_value_(self.model.parameters(), self.gradient_clip_value)
+        elif self.gradient_clip_val is not None:
             if self.scaler is not None:
                 self.scaler.unscale_(self.optimizer)
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.gradient_clip_val)

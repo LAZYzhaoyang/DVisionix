@@ -4,6 +4,7 @@
 from .centernet import CenterNetHead
 from .deformable_detr import DeformableDETRHead
 from .detr import DETRHead
+from .dino import DINODetrHead
 from .fcos import FCOSHead
 from .grid import DetHead
 from .nmsfree_yolo import NMSFreeYOLOHead
@@ -23,4 +24,5 @@ __all__ = [
     "DeformableDETRHead",
     "CenterNetHead",
     "NMSFreeYOLOHead",
+    "DINODetrHead",
 ]

@@ -10,6 +10,7 @@ from ...registry import TASKS
 from .base import BaseTask
 from .classification import ClassificationTask
 from .detection import DetectionTask
+from .linear_eval import LinearEvalTask
 from .maskformer import MaskFormerTask
 from .multi_label import MultiLabelTask
 from .segmentation import SegmentationTask
@@ -18,6 +19,7 @@ from .simclr import SimCLRTask
 for _cls in (
     ClassificationTask,
     DetectionTask,
+    LinearEvalTask,
     SegmentationTask,
     MultiLabelTask,
     MaskFormerTask,
@@ -47,5 +49,6 @@ __all__ = [
     "MultiLabelTask",
     "MaskFormerTask",
     "SimCLRTask",
+    "LinearEvalTask",
     "build_task",
 ]
