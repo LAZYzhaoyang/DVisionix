@@ -500,7 +500,7 @@ models/
 
 ## 二、实例/语义 mask mAP
 - `MaskAveragePrecision`（metrics/segmentation.py）：COCO 风格 mask mAP（IoU 0.5:0.95，101-point 插值）。
-- `maskformer_decode`（postprocess）：MaskFormerHead full 模式 -> (masks, scores, labels)。
+- `maskformer_decode`（models/heads/segmentation/maskformer.py）：MaskFormerHead full 模式 -> (masks, scores, labels)。
 - `evaluate_mask_ap`（training/evaluation）：端到端评估（目标 mask 自动对齐预测分辨率）。
 
 ## 三、本地 lint 工具链落地
@@ -515,3 +515,59 @@ models/
 ## 五、验证
 - 新增 tests/test_models/test_v07_rtdetr_mask.py（RT-DETR forward/decode/loss 下降、mask mAP 完美/错误、evaluate_mask_ap）。
 - 全量测试 204 passed + 2 skipped；ruff / black 全绿。
+
+
+---
+
+# decode 归位与组合性验证（v0.7.1）
+
+> 用户决策：模型专属 decode 从共享 postprocess 移回各模型文件（便于定位与维护）；
+> 验证 heads 与不同 backbone/neck 的组合性；同步 CodePlan 与使用文档。
+
+## 一、decode 归位（postprocess 只保留共享原语）
+
+- 背景：postprocess.py 曾集中承载各模型专属 decode，模型逻辑分散、定位维护困难。
+- 结果：
+  - `postprocess.py` 仅保留共享原语：`nms / batched_nms / box_iou`（不依赖 torchvision.ops）。
+  - `detr_decode` → `models/detectors/base.py`（DETR / RT-DETR 共用，输出契约一致）；
+    `fcos_decode` → `models/detectors/fcos.py`；`retinanet_decode` → `models/detectors/retinanet.py`；
+    `yolo_decode` → `models/detectors/yolo.py`；`maskformer_decode` → `models/heads/segmentation/maskformer.py`。
+  - 各检测器 `decode()` 方法就近调用本文件 decode；`training/evaluation.py` 改为从模型侧导入。
+  - 顶层 API 兼容：`dvisionix.models.fcos_decode / retinanet_decode / yolo_decode / detr_decode / maskformer_decode`
+    仍可直接导入（detectors / heads 子包导出 + models/__init__ re-export）。
+  - 顺带修复重构隐患：retinanet_decode 内错误的惰性导入路径（`.detectors.anchors` 会导致运行时 ImportError，
+    且与模块级导入重复）；统一 detectors/base.py 的 `__all__`；补齐 fcos/yolo/retinanet 缺失的 `import torch`。
+
+## 二、heads 与 backbone/neck 组合性验证
+
+- 冒烟验证 27 组组合全部通过（CPU）：
+  - 检测：FCOS / RetinaNet / YOLO × {SequentialBackbone, TimmBackbone(resnet18)} × {无 neck, FPN, PANet}；
+    DETR × {seq, timm} × {无 neck, FPN}；RT-DETR × {seq, timm}（直连骨干多尺度）。
+  - 分割：Seg / FCN / DeepLabV3 / UNetDecoder / SegFormer / MaskFormer × {seq, timm}。
+  - 分类：LinearClassifier × {timm, seq} × {ClsHead / ArcFace / CosFace / SphereFace / AdaFace / MultiLabel}。
+- 结论：组件化装配器（SingleStageDetector / SegmentationModel / LinearClassifier）对不同 backbone / neck / head
+  即插即用，无需为具体模型改造；多尺度头（UNetDecoder / SegFormerHead / MaskFormerHead / RTDETRHead）自动注入
+  `in_channels_list`，单尺度头注入 `in_channels`。
+
+## 三、已知边界与后续优化
+
+- RT-DETR 目前直连骨干多尺度特征（hybrid encoder 承担特征融合），暂不支持 neck——属设计选择，已在文档明确。
+- 多尺度头识别目前靠装配器内硬编码名单（_LIST_INPUT_HEADS / rtdetr_head 特判），新增头易遗漏；
+  建议后续改为 head 类属性自声明（如 `input_style="multi_scale"`），装配器统一读取。
+- head 注册名风格不统一：检测头用 `fcos_head / retinanet_head / yolo_head / detr_head / rtdetr_head`，
+  分类头用 `arcface / cosface / sphereface / adaface / multi_label / cls_head`；建议统一命名规范
+  （小写 snake_case + 任务后缀）。
+
+## 四、验证
+
+- 全量测试 204 passed + 2 skipped；ruff / black 全绿（与 CI 一致）。
+- decode 函数位置断言：detr/fcos/retinanet/yolo/maskformer decode 均从对应模型文件导出。
+
+## 五、下一步计划
+
+- 多卡实机验证：`torchrun --nproc_per_node=2 tools/train.py --config ... --devices 0,1` + test_ddp_smoke.py（DDP 已隔离实现）。
+- DETR 系列：Deformable DETR（可变形注意力）、RT-DETR 完整版（neck 对齐 / 更强编码器）。
+- 分割：Mask2Former 实例/全景分割评估打通（mask 监督已就绪）；更多分割头（按任务目录每头一文件扩展）。
+- 检测：YOLO 系列扩展（YOLOv5 / v7 / v9 风格变体）、更多 anchor-free 检测器。
+- 组合性增强：多尺度头自声明机制、RT-DETR 可选 neck、head 注册名统一。
+- 指标：分类 / 分割指标全面迁移 torchmetrics（可选后端）。

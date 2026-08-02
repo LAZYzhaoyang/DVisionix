@@ -161,7 +161,7 @@ model = build_model({"type": "my_cnn", "num_classes": 10})
 
 ### 2.3 组件化组装（backbone + neck + head）
 
-复杂模型推荐用组件化模型把 backbone / neck / head 组合起来（分类 `linear_classifier`、分割 `segmentation_model`、检测 `fcos` / `retinanet`），各组件都可用配置指定：
+复杂模型推荐用组件化模型把 backbone / neck / head 组合起来（分类 `linear_classifier`、分割 `segmentation_model`、检测 `fcos` / `retinanet` / `yolo` / `detr` / `rtdetr`），各组件都可用配置指定：
 
 ```python
 from dvisionix.models import build_model
@@ -189,7 +189,11 @@ model = build_model({
 - 有 neck 时 `neck.out_channels`（取最后一层）→ `head.in_channels`；无 neck 时分类用 `backbone.num_features`、检测/分割用 `backbone.out_channels[-1]` → `head.in_channels`；
 - 非分类任务会自动给 backbone 设置 `features_only=True`（可在配置中显式覆盖）。
 
-> 提示：`in_channels` 由组件化模型自动注入到 head 配置中，因此 head 的构造函数必须接受 `in_channels` 参数（UNetDecoder 例外：注入 `in_channels_list`）。
+> 提示：`in_channels` 由组件化模型自动注入到 head 配置中，因此 head 的构造函数必须接受 `in_channels` 参数；
+> 多尺度头（`UNetDecoder` / `SegFormerHead` / `MaskFormerHead` / `RTDETRHead`）例外：注入 `in_channels_list`。
+
+> 自定义检测器 / 分割头时，专属 decode（预测 → boxes/scores/labels 或 masks）建议写在模型/head 同文件中
+> （如 `detectors/fcos.py` 的 `fcos_decode`），`postprocess.py` 只保留共享原语 `nms / batched_nms / box_iou`。
 
 ### 2.5 用 layers 拼装自定义 backbone（SequentialBackbone）
 

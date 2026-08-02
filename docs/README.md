@@ -12,7 +12,7 @@
 - [日志系统](logging.md) - 结构化日志 / JSONL / TensorBoard（TrainingLogger）
 - [模型导出 (ONNX)](model_export.md) - ONNXExporter 导出与精度验证
 - [语义分割任务](segmentation.md) - 分割数据格式与端到端训练
-- [目标检测任务](detection.md) - 网格检测器、collate 与端到端训练
+- [目标检测任务](detection.md) - 组件化检测器（FCOS/RetinaNet/YOLO/DETR/RT-DETR）、decode 与 mAP 评估
 
 ## 示例代码 (demos/)
 - `tools/train.py` - 配置驱动统一训练入口（分类/检测/分割，支持 resume / DDP / work_dir）

@@ -26,7 +26,7 @@
 
 ### 📊 完整的指标支持
 - 分类：Accuracy, Precision, Recall, F1
-- 分割：mIoU, Pixel Accuracy
+- 分割：mIoU, Pixel Accuracy, Mask mAP（实例/掩码评估）
 - 检测：COCO-style mAP@0.5, mAP@0.5:0.95
 
 ### 🎯 内置任务支持
@@ -36,7 +36,7 @@
 
 ---
 
-### 🏗️ 架构概览（v0.3.0）
+### 🏗️ 架构概览（v0.7.1）
 
 ```
 dvisionix/
@@ -47,8 +47,8 @@ dvisionix/
 │   ├── layers/          # 自定义层 + timm 层封装（ConvNormAct / SE / MLP / DropPath）
 │   ├── backbones/       # TimmBackbone / TimmClassifier / SequentialBackbone
 │   ├── necks/           # FPN / PANet
-│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel）· 分割（Seg/FCN/DeepLabV3/UNet/SegFormer/MaskFormer）· 检测（Det/FCOS/RetinaNet/YOLO/DETR）
-│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO / DETR
+│   ├── heads/           # 分类（Cls/ArcFace/CosFace/SphereFace/AdaFace/MultiLabel）· 分割（Seg/FCN/DeepLabV3/UNet/SegFormer/MaskFormer）· 检测（Det/FCOS/RetinaNet/YOLO/DETR/RT-DETR）
+│   ├── detectors/       # SingleStageDetector + FCOS / RetinaNet / YOLO / DETR / RT-DETR（decode 与模型同文件）
 │   ├── classifiers/     # LinearClassifier（backbone + 分类头组合）
 │   ├── segmenters/      # SegmentationModel（backbone + 分割头组合）
 │   ├── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel）
@@ -335,16 +335,14 @@ MIT License
 
 ## 📌 版本演进
 
-### 0.2.0（组件化重构）
-- 引入全局注册表与配置驱动入口 `tools/train.py`；模型组件化（backbone/neck/head）；
-  `BaseDataset` 归一化交给 transforms（唯一权威）。
-
-### 0.3.0（训练子系统重构）
-破坏性变更：
-- **Loss 迁移到模型层**：`dvisionix.models.losses`（`BaseLoss` 继承 + `LossComposer` 组合），删除 `dvisionix.training.losses`。
-- **Task 全面配置化**：optimizer / scheduler / loss / metrics 均由配置驱动；
-  `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
-- **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
+### 0.7.1（decode 归位 / 组合性验证）
+- 模型专属 decode 从共享 `postprocess.py` 移回各模型文件：`detr_decode`（detectors/base.py，DETR/RT-DETR 共用）、
+  `fcos_decode`（detectors/fcos.py）、`retinanet_decode`（detectors/retinanet.py）、`yolo_decode`（detectors/yolo.py）、
+  `maskformer_decode`（heads/segmentation/maskformer.py）；`postprocess.py` 只保留共享原语 `nms / batched_nms / box_iou`；
+- 顶层 API 保持兼容（`dvisionix.models.*_decode` 仍可直接导入）；
+- heads 与 backbone/neck 组合性冒烟验证 27 组全部通过（FCOS/RetinaNet/YOLO/DETR/RT-DETR × Sequential/Timm × 无 neck/FPN/PANet，
+  分割 6 头、分类 6 头同样验证）；
+- 文档同步：CodePlan 增补 v0.7.1 章节；docs/detection.md 重写为组件化检测器；segmentation/custom_models/docs 索引更新。
 
 ### 0.7.0（RT-DETR / mask mAP / 本地 lint 工具链）
 - 检测：新增 `RTDETRDetector`（RT-DETR-lite：混合编码器 + query 选择 + 解码器，复用 DETRLoss/decode）；
@@ -369,7 +367,7 @@ MIT License
 ### 0.4.0（模型模块丰富）
 - 删除 GeneralizedModel（三任务万能模型，契约弱、检测半成品），替换为具体模型 + 共享脚手架；
 - 检测：`FCOSDetector`（anchor-free）与 `RetinaNetDetector`（anchor-based）并存，
-  assigner 即插即用（FCOS / MaxIoU / ATSS），decode 进 postprocess；
+  assigner 即插即用（FCOS / MaxIoU / ATSS）；
 - 分割：`SegmentationModel` + `DeepLabV3Head`(ASPP) / `UNetDecoder` / `FCNHead`；
 - 分类：`LinearClassifier` + `ArcFaceHead` / `MultiLabelHead`（+ BCE 多标签损失）；
 - 颈部：新增 `PANet`（FPN + 自底向上路径）；
@@ -378,3 +376,14 @@ MIT License
 - `training/` 重组为 `tasks/` `callbacks/` `optim/` 子包（顶层 API 不变）；
 - Config 新增 schema 校验（未知键告警 / 类型校验），CLI 支持 list/dict；
 - `ONNXExporter` 支持多输入 / 多输出 / dict 输出 / `backend=trace|dynamo` / 归一化元数据。
+
+### 0.3.0（训练子系统重构）
+破坏性变更：
+- **Loss 迁移到模型层**：`dvisionix.models.losses`（`BaseLoss` 继承 + `LossComposer` 组合），删除 `dvisionix.training.losses`。
+- **Task 全面配置化**：optimizer / scheduler / loss / metrics 均由配置驱动；
+  `TensorBoardLogger`、`LearningRateScheduler` 回调与 `utils.visualization.Visualizer` 已移除，日志统一走 `utils.logging.TrainingLogger`。
+- **训练能力**：验证指标（acc / mAP / mIoU）进入 epoch 日志；DDP 多卡；work_dir 隔离（默认 `~/dvisionix_runs/<exp>/<ts>`，代码库外）；`--resume auto` 自动续训。
+
+### 0.2.0（组件化重构）
+- 引入全局注册表与配置驱动入口 `tools/train.py`；模型组件化（backbone/neck/head）；
+  `BaseDataset` 归一化交给 transforms（唯一权威）。

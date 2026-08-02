@@ -68,7 +68,7 @@ def evaluate_mask_ap(
     使用 dvisionix.metrics.MaskAveragePrecision。
     """
     from ..metrics import MaskAveragePrecision
-    from ..models.postprocess import maskformer_decode
+    from ..models.heads.segmentation.maskformer import maskformer_decode
 
     model.eval()
     metric = MaskAveragePrecision(num_classes=num_classes)
@@ -99,7 +99,8 @@ def evaluate_mask_ap(
             for m in batch["mask"]
         ]
         target_labels = [
-            lb.to(device) for lb in batch.get("labels", [torch.full_like(m, 1) for m in target_masks])
+            lb.to(device)
+            for lb in batch.get("labels", [torch.full_like(m, 1) for m in target_masks])
         ]
         metric.update(masks_list, scores_list, labels_list, target_masks, target_labels)
     return metric.compute()

@@ -77,4 +77,37 @@ class MaskFormerHead(BaseModel):
         return semantic
 
 
-__all__ = ["MaskFormerHead"]
+__all__ = ["MaskFormerHead", "maskformer_decode"]
+
+
+def maskformer_decode(
+    preds,
+    image_hw,
+    score_threshold: float = 0.3,
+    mask_threshold: float = 0.5,
+    max_detections: int = 100,
+):
+    """MaskFormerHead full 模式解码：逐 query mask + 类别 + 分数。
+
+    Returns:
+        (masks_list, scores_list, labels_list)：每张图 (K, H, W) bool / (K,) / (K,)。
+    """
+    logits, masks = preds["pred_logits"], preds["pred_masks"]  # (B,Q,C+1), (B,Q,H,W)
+    img_h, img_w = image_hw
+    masks = masks.sigmoid()
+    probs = torch.softmax(logits, dim=-1)[..., :-1]  # (B, Q, C)
+    scores, labels = probs.max(dim=-1)
+    masks_list, scores_list, labels_list = [], [], []
+    for b in range(scores.shape[0]):
+        keep = scores[b] >= score_threshold
+        m = masks[b][keep] > mask_threshold
+        s = scores[b][keep]
+        lb = labels[b][keep]
+        # 限制检测数
+        if m.shape[0] > max_detections:
+            _, idx = s.topk(max_detections)
+            m, s, lb = m[idx], s[idx], lb[idx]
+        masks_list.append(m)
+        scores_list.append(s)
+        labels_list.append(lb)
+    return masks_list, scores_list, labels_list

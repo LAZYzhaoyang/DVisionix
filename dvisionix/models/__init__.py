@@ -6,8 +6,9 @@
 
 - ``models.toy``：教学级模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel），
   仅用于演示与快速验证，生产请用组件化模型。
-- ``models.detectors``：SingleStageDetector 脚手架 + FCOSDetector（anchor-free）+
-  RetinaNetDetector（anchor-based）+ AnchorGenerator。
+- ``models.detectors``：SingleStageDetector 脚手架（backbone + neck + head 装配）+
+  FCOS / RetinaNet / YOLO / DETR / RT-DETR 检测器 + AnchorGenerator；各检测器自带
+  专属 decode（与 head 同文件，便于定位与维护）。
 - ``models.losses``：Loss 组件（BaseLoss 继承 + LossComposer 组合 + 检测 assigner/损失）。
 """
 
@@ -23,8 +24,13 @@ from .detectors import (
     DETRDetector,
     FCOSDetector,
     RetinaNetDetector,
+    RTDETRDetector,
     SingleStageDetector,
     YOLODetector,
+    detr_decode,
+    fcos_decode,
+    retinanet_decode,
+    yolo_decode,
 )
 from .heads import (
     AdaFaceHead,
@@ -44,6 +50,7 @@ from .heads import (
     SphereFaceHead,
     UNetDecoder,
     YOLOHead,
+    maskformer_decode,
 )
 from .layers import (
     MLP,
@@ -86,15 +93,7 @@ from .losses import (
     compute_loss,
 )
 from .necks import FPN, PANet
-from .postprocess import (
-    batched_nms,
-    box_iou,
-    detr_decode,
-    fcos_decode,
-    nms,
-    retinanet_decode,
-    yolo_decode,
-)
+from .postprocess import batched_nms, box_iou, nms
 from .segmenters import SegmentationModel
 from .toy import GridDetectionModel, SimpleCNN, SimpleSegmentationModel
 

@@ -4,8 +4,7 @@
 from typing import Any, Dict, Optional
 
 from ...registry import MODELS
-from ..postprocess import detr_decode
-from .base import SingleStageDetector
+from .base import SingleStageDetector, detr_decode
 
 
 @MODELS.register()

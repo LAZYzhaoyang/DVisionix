@@ -11,6 +11,7 @@ import torch
 
 from ...registry import BACKBONES, HEADS, NECKS
 from ..base import BaseModel
+from ..postprocess import batched_nms
 
 
 class SingleStageDetector(BaseModel):
@@ -79,4 +80,46 @@ class SingleStageDetector(BaseModel):
         raise NotImplementedError
 
 
-__all__ = ["SingleStageDetector"]
+def detr_decode(
+    preds,
+    image_hw,
+    score_threshold: float = 0.05,
+    iou_threshold: float = 0.5,
+    max_detections: int = 100,
+    topk: int = 300,
+):
+    """DETR 输出解码 -> (boxes_list, scores_list, labels_list)（含 NMS）。
+
+    preds: {"logits": (B, Q, C+1), "boxes": (B, Q, 4) 归一化 cxcywh}。
+    """
+    logits, boxes = preds["logits"], preds["boxes"]
+    img_h, img_w = image_hw
+    prob = torch.softmax(logits, dim=-1)[..., :-1]  # 去掉背景
+    scores, labels = prob.max(dim=-1)  # (B, Q)
+
+    x, y, w, h = boxes.unbind(dim=-1)
+    x1 = (x - w / 2) * img_w
+    y1 = (y - h / 2) * img_h
+    x2 = (x + w / 2) * img_w
+    y2 = (y + h / 2) * img_h
+    boxes_px = torch.stack([x1, y1, x2, y2], dim=-1)  # (B, Q, 4)
+
+    boxes_list, scores_list, labels_list = [], [], []
+    for b in range(scores.shape[0]):
+        keep = scores[b] >= score_threshold
+        bboxes = boxes_px[b][keep]
+        sc = scores[b][keep]
+        lb = labels[b][keep]
+        if bboxes.numel() > 0:
+            if bboxes.shape[0] > topk:
+                _, idx = sc.topk(topk)
+                bboxes, sc, lb = bboxes[idx], sc[idx], lb[idx]
+            keep2 = batched_nms(bboxes, sc, lb, iou_threshold)[:max_detections]
+            bboxes, sc, lb = bboxes[keep2], sc[keep2], lb[keep2]
+        boxes_list.append(bboxes)
+        scores_list.append(sc)
+        labels_list.append(lb)
+    return boxes_list, scores_list, labels_list
+
+
+__all__ = ["SingleStageDetector", "detr_decode"]

@@ -28,8 +28,17 @@ conda run -n dvisionix python tools/train.py --config configs/segmentation/demo_
 ```
 
 由 `configs/segmentation/demo_synthetic.yaml` 驱动，使用合成的 image+mask，
-流程：配置加载 -> 数据 -> `SimpleSegmentationModel` + `SegmentationTask` +
+流程：配置加载 -> 数据 -> `SegmentationModel`（backbone + 分割头）+ `SegmentationTask` +
 回调（ModelCheckpoint / EarlyStopping）-> 训练；验证日志输出 `mIoU / pixel_accuracy`。
+
+## 分割头
+
+组件化分割模型 `SegmentationModel`（注册名 `segmentation_model`）把 backbone 与分割头即插即用组合：
+
+- 单尺度头（自动注入 `in_channels`）：`seg_head`（1x1 卷积）/ `fcn_head` / `deeplabv3_head`（ASPP）。
+- 多尺度头（自动注入 `in_channels_list`）：`unet_decoder` / `segformer_head`（MLP 解码）/ `maskformer_head`（query 掩码解码）。
+- `MaskFormerHead` 支持 `output_mode="full"`：返回 `pred_logits / pred_masks / semantic_logits`，
+  配合 `MaskFormerLoss`（匈牙利 mask 匹配）与 `maskformer_decode`（models/heads/segmentation/maskformer.py）做实例级 mask 预测。
 
 ## SegmentationTask 说明
 - 默认损失：`CrossEntropy(ignore_index=255)`（忽略无效像素）；也可配置 `dice` / `combined_segmentation`。

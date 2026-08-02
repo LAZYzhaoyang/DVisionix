@@ -9,12 +9,12 @@
 """
 
 from .anchors import AnchorGenerator, bbox2delta, delta2bbox
-from .base import SingleStageDetector
+from .base import SingleStageDetector, detr_decode
 from .detr import DETRDetector
-from .fcos import FCOSDetector
-from .retinanet import RetinaNetDetector
+from .fcos import FCOSDetector, fcos_decode
+from .retinanet import RetinaNetDetector, retinanet_decode
 from .rtdetr import RTDETRDetector
-from .yolo import YOLODetector
+from .yolo import YOLODetector, yolo_decode
 
 __all__ = [
     "SingleStageDetector",
@@ -24,6 +24,10 @@ __all__ = [
     "FCOSDetector",
     "RetinaNetDetector",
     "YOLODetector",
+    "detr_decode",
+    "fcos_decode",
+    "retinanet_decode",
+    "yolo_decode",
     "DETRDetector",
     "RTDETRDetector",
 ]

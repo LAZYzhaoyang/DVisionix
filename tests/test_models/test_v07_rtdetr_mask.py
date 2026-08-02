@@ -7,9 +7,8 @@ torch = pytest.importorskip("torch")
 
 from dvisionix.data import detection_collate
 from dvisionix.metrics import MaskAveragePrecision
-from dvisionix.models import build_model
+from dvisionix.models import build_model, maskformer_decode
 from dvisionix.models.losses import DETRLoss
-from dvisionix.models.postprocess import maskformer_decode
 from dvisionix.registry import HEADS, METRICS, MODELS
 
 STAGES = [

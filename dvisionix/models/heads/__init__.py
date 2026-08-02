@@ -21,6 +21,7 @@ from .segmentation import (
     SegFormerHead,
     SegHead,
     UNetDecoder,
+    maskformer_decode,
 )
 
 __all__ = [
@@ -36,9 +37,11 @@ __all__ = [
     "UNetDecoder",
     "SegFormerHead",
     "MaskFormerHead",
+    "maskformer_decode",
     "DetHead",
     "FCOSHead",
     "RetinaNetHead",
-    "YOLOHead", "RTDETRHead",
+    "YOLOHead",
+    "RTDETRHead",
     "DETRHead",
 ]
