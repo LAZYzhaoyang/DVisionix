@@ -154,7 +154,8 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 ### 🔄 进行中 / 待办
 
-- 无阻塞性待办；后续新功能一律进入「未来规划」排期。
+- 当前进入 v1.1 稳定性与工程优化阶段，优先执行第七章 P0/P1 项目。
+- P0/P1 完成并通过验收前，暂停继续扩充模型家族，避免扩大未验证行为面。
 
 ---
 
@@ -188,7 +189,301 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 ---
 
-## 七、版本记录（精简）
+## 七、v1.1 稳定性与工程优化计划
+
+> 本节是 v1.0.0 基线之后的具体执行计划。优先修复会导致官方示例失败、训练结果错误、分布式评估错误和非 editable 安装失败的问题，再进行性能和发布能力建设。每项任务必须同时提交实现、回归测试和文档更新；未满足验收标准不得标记为完成。
+
+### 7.1 当前审查结论
+
+v1.0.0 的架构方向成立，但当前基线仍存在以下已确认或高风险问题：
+
+- `dvisionix/data/datasets/custom.py:39-44` 将 `staticmethod` 对象写入实例属性，检测/分割 `CustomDataset` 的 `collate_fn` 可能不可调用。
+- `dvisionix/config/schema.py:63` 未包含 `simclr`，但 `configs/classification/simclr_synthetic.yaml:4` 使用 `task_type: simclr`，官方 SimCLR 配置会在 schema 阶段失败。
+- `dvisionix/registry.py:99` 将构造参数 `name` 与 Registry 注册名混用，`TimmBackbone/TimmClassifier` 的模型名称可能被静默丢弃。
+- `dvisionix/training/trainer.py:54-63` 对 DDP 聚合后的嵌套 tuple 使用 `extend`，检测/实例分割的多字段预测结构会被破坏。
+- `dvisionix/models/losses/detection/losses.py:237,460` 的 FCOS/YOLO 回归损失在 `use_giou=True` 时同时累加 GIoU 与 L1，配置语义和实际训练信号不明确，需确认并修正。
+- `dvisionix/data/transforms/__init__.py:123-126` 检测管线先 resize 到目标尺寸再执行同尺寸 crop，随机裁剪实际不生效。
+- `dvisionix/data/transforms/image.py:175-189` 可能将 mask 转为 float，导致分割标签无法满足 `CrossEntropyLoss` 的 long dtype 契约。
+- `dvisionix/training/evaluation.py:94-100` 在首张图片无预测 mask 时把目标尺寸退化为 `(1, 1)`，mask AP 结果可能失真。
+- `dvisionix/export/onnx_exporter.py:29-40,150-176,253-273` 对检测模型嵌套输出、CUDA verify 和 dynamo 导出参数的支持不完整。
+- `dvisionix/models/heads/detection/dino.py:119-123` 硬编码 stride=4 推断图像尺寸，非 stride-4 backbone 的去噪目标可能错误。
+- `dvisionix/training/trainer.py:434-445,450-480` 的 DDP 检测聚合和独立 `validate()` 路径尚未形成统一的全局指标计算契约。
+- `setup.py:23-24` 未明确打包 `dvisionix/config/defaults/*.yaml`；非 editable wheel 安装后 `Config.from_default()` 存在失败风险。
+- `setup.py`、`requirements.txt` 和 `pyproject.toml` 的依赖、版本和检查配置存在多源维护；CI 不运行 mypy、coverage 和依赖安全扫描。
+- 当前环境执行 `python -m pytest tests -q` 时因未安装 pytest 无法复现 README 中的历史测试数字，因此 README/CodePlan 中的测试状态必须改为以 CI 运行结果为准。
+
+### 7.2 P0：核心正确性修复
+
+#### P0-1 修复 CustomDataset 的 collate 函数
+
+**涉及文件**：`dvisionix/data/datasets/custom.py`、`tests/test_data/test_data.py`。
+
+**实施步骤**：
+
+1. 将 detection/segmentation 分支分别改为直接保存 `detection_collate` 和 `segmentation_collate` 函数。
+2. 保留用户显式传入 `collate_fn` 的最高优先级。
+3. 构造后断言 `callable(ds.collate_fn)`，禁止静默返回不可调用对象。
+4. 使用 `DataLoader(..., collate_fn=ds.collate_fn)` 完成检测和分割 batch 冒烟测试。
+
+**验收标准**：三种任务的 `CustomDataset` 均可构造；检测/分割 DataLoader 能取出一个 batch；boxes、labels、mask 的结构和 dtype 正确。
+
+#### P0-2 修复 SimCLR 任务类型配置
+
+**涉及文件**：`dvisionix/config/schema.py`、`tools/train.py`、`tests/test_config/test_schema.py`、SimCLR 冒烟测试。
+
+**实施步骤**：
+
+1. 将任务类型常量集中到单一模块，schema 和训练入口共享同一来源。
+2. 将 `simclr` 加入合法任务类型。
+3. 为 SimCLR 增加 temperature、batch size 等关键参数校验。
+4. 用官方合成配置完成配置加载、数据构建、前向、反向和 checkpoint 保存。
+
+**验收标准**：`python tools/train.py --config configs/classification/simclr_synthetic.yaml --work-dir <tmp>` 能完成一个 epoch。
+
+#### P0-3 修复 Registry 的 `name` 参数冲突
+
+**涉及文件**：`dvisionix/registry.py`、timm backbone、Registry 测试。
+
+**实施步骤**：
+
+1. `type` 始终表示注册表键。
+2. 仅在没有 `type` 时使用 `_name_` 作为注册表键。
+3. 普通 `name` 原样传入构造函数。
+4. 对旧配置中使用 `name` 作为注册键的情况给出迁移错误，不再静默猜测。
+5. 测试 `type`、`_name_`、构造参数 `name` 和错误配置。
+
+**验收标准**：`BACKBONES.build({"type": "timm_backbone", "name": "resnet18"})` 必须实际构造 resnet18。
+
+#### P0-4 修复 DDP 嵌套结果聚合
+
+**涉及文件**：`dvisionix/training/trainer.py`、DDP 指标测试。
+
+**实施步骤**：
+
+1. 将 `_concat_objects` 改为递归合并：Tensor 使用 `torch.cat`，list/tuple 按位置递归，dict 按 key 递归。
+2. 对 rank 间结构、tuple 长度和 dict key 不一致显式报错。
+3. DDP 训练验证和 `Trainer.validate()` 复用同一 gather/reduce helper。
+4. 增加分类 Tensor、检测 `(boxes,scores,labels)` 和分割嵌套结构测试。
+5. 使用 CPU `gloo` 双进程作为 CI 回归路径，再在 GPU 环境验证 NCCL。
+
+**验收标准**：单进程与双进程全局指标在 `1e-6` 内一致；无死锁、解包错误或只统计 rank0 分片。
+
+#### P0-5 修复损失函数语义和归一化
+
+**涉及文件**：`dvisionix/models/losses/detection/losses.py`、检测 loss 测试。
+
+**实施步骤**：
+
+1. 明确 `use_giou=True` 是替代 L1 还是组合 GIoU+L1。
+2. 推荐改为显式 `giou_weight`、`l1_weight`，旧参数提供迁移逻辑。
+3. 统一 FCOS、YOLO、RetinaNet 的正样本归一化。
+4. 为无正样本 batch 定义无 NaN 的明确行为。
+5. 使用固定预测和目标手算期望，确认每个分量只计算一次。
+
+**验收标准**：测试可区分 GIoU、L1 和组合模式；空目标不产生 NaN；loss 下降测试继续通过。
+
+### 7.3 P1：训练、评估和导出可靠性
+
+#### P1-1 修复检测增强和裁剪尺寸契约
+
+**涉及文件**：transforms preset、image/geometric transforms 及其测试。
+
+**实施步骤**：
+
+1. 检测训练 pipeline 改为先放大再随机 crop，或删除无效 crop。
+2. `RandomCrop/CenterCrop` 增加 `on_small=error|pad|resize`，禁止静默返回错误尺寸。
+3. 几何变换校验 boxes 和 labels 数量一致。
+4. 增加图像、boxes、mask 同步变换的固定随机种子测试。
+
+**验收标准**：裁剪有非零偏移；输出尺寸一致；boxes 不越界；labels 与 boxes 数量一致。
+
+#### P1-2 修复 mask dtype 和 mask AP
+
+**涉及文件**：`image.py`、`labels.py`、`training/evaluation.py` 及测试。
+
+**实施步骤**：
+
+1. `ToTensor` 对 image 固定输出 float32，对 mask 固定输出 long。
+2. `MaskToTensor` 无论输入是否为 Tensor都校验并转换为 long。
+3. mask 加载校验维度、类别值和 ignore_index。
+4. `evaluate_mask_ap` 从原始 `pred_masks` 或真实 image size 获取目标尺寸。
+5. 覆盖首图、部分图片、全部图片零预测场景。
+
+**验收标准**：mask dtype 为 long；空预测不把 target 缩放到 1x1；指标结果稳定可解释。
+
+#### P1-3 修复 DINO 尺寸来源
+
+**涉及文件**：DINO head、detector/task 装配和 DINO 测试。
+
+**实施步骤**：
+
+1. 从 batch image 读取真实 `(H,W)`，显式传入 head。
+2. feature map 推断仅作兼容 fallback，且要求 stride 元信息。
+3. 覆盖 stride=2、stride=4 和非方形输入。
+
+**验收标准**：去除硬编码 `*4` 主路径，不同 stride 下 denoising target 坐标正确。
+
+#### P1-4 完善 ONNX 导出契约
+
+**涉及文件**：`dvisionix/export/onnx_exporter.py`、导出测试。
+
+**实施步骤**：
+
+1. 增加递归输出 flatten，支持 dict/list/tuple 嵌套，并保存输出路径映射。
+2. verify 统一使用 `detach().cpu().numpy()`。
+3. 保存并恢复模型 device 和 train/eval 状态。
+4. 明确 trace/dynamo 对 names 和 dynamic axes 的支持范围，不支持时显式报错。
+5. 为分类、分割和一个多尺度检测模型增加 ONNX Runtime 验证。
+
+**验收标准**：三类任务均可导出；动态 batch 可实际执行；导出器不改变原模型状态。
+
+#### P1-5 统一 Trainer 验证和 checkpoint 状态
+
+**涉及文件**：Trainer、EMA、checkpoint、resume 测试。
+
+**实施步骤**：
+
+1. 训练中验证和独立 `validate()` 复用同一 evaluator。
+2. checkpoint 增加 schema version、task/model type 和配置 hash。
+3. 支持 `ema_best.pt` 或保证 best checkpoint 包含对应 EMA 状态。
+4. EarlyStopping 的 best value、等待计数和恢复状态全部持久化。
+5. 默认拒绝配置不匹配的 resume，允许显式 override。
+6. 修正尾部不足一个 accumulation window 时的 loss 分母。
+
+**验收标准**：resume 前后 optimizer/scheduler/RNG/EMA/early stopping 一致；独立 validate 与训练时指标一致。
+
+### 7.4 P1：测试、CI 和发布基础设施
+
+#### P1-6 建立真实测试门禁
+
+**涉及文件**：`.github/workflows/ci.yml`、`pyproject.toml`、`tests/conftest.py` 和现有测试目录。
+
+**实施步骤**：
+
+1. CI 覆盖 Python 3.10、3.11、3.12。
+2. 增加 mypy，并将配置版本修正为项目最低 Python 版本。
+3. 增加 coverage，初始门槛 60%，稳定后提升至 75% 以上。
+4. 启用 strict markers/config，注册 unit/integration/slow/cuda/ddp marker。
+5. 按功能域整理 `test_v*.py`，不再用历史版本号表达覆盖范围。
+6. 增加四类任务 CLI 端到端测试和 CPU DDP 测试。
+
+**CI 顺序**：锁定依赖安装 -> ruff -> black -> mypy -> unit -> integration -> coverage -> wheel 安装测试 -> pip-audit。
+
+**验收标准**：PR 可直接看到测试、覆盖率、类型、打包和安全结果；测试状态以 CI 为准。
+
+#### P1-7 修复依赖和打包一致性
+
+**涉及文件**：`pyproject.toml`、`setup.py`、`requirements.txt`、package data、安装测试。
+
+**实施步骤**：
+
+1. 迁移到 `pyproject.toml [project]`，消除打包元数据双源。
+2. 依赖分为 core/dev/export/datasets extras。
+3. 使用 uv 或 pip-tools 生成 lockfile，CI 使用锁定版本。
+4. 明确 torch/torchvision 的兼容矩阵和 CPU/CUDA 安装策略。
+5. 将 `dvisionix/config/defaults/*.yaml` 纳入 wheel/sdist。
+6. 统一版本号来源，补充 LICENSE 和 CHANGELOG。
+7. 增加 wheel 干净环境安装后调用 `Config.from_default()` 的测试。
+
+**验收标准**：构建 wheel 后在新虚拟环境安装，默认配置加载和最小 import 均成功。
+
+#### P1-8 增加安全和发布流程
+
+**涉及文件**：CI、Dependabot、release workflow、checkpoint loader 和安全文档。
+
+**实施步骤**：
+
+1. CI 执行 pip-audit，增加 Dependabot。
+2. Actions 固定 SHA 或至少配置最小权限、超时和并发取消。
+3. 建立 tag -> build -> smoke test -> TestPyPI/PyPI 发布流程。
+4. 区分纯权重与完整 checkpoint：默认 `weights_only=True`；完整 pickle 状态需显式声明可信。
+5. checkpoint 加载前校验结构、版本和 tensor 类型。
+
+**验收标准**：发布 wheel 可在干净环境运行；不可信 checkpoint 风险和 API 策略有明确文档。
+
+### 7.5 P2：性能和长期维护
+
+#### P2-1 优化 EMA 和数据搬运
+
+1. EMA shadow tensor 原地更新，避免每 batch 新建 tensor。
+2. 区分浮点参数和非浮点 buffer。
+3. DataLoader 暴露 pin_memory、persistent_workers、prefetch_factor。
+4. 支持 non_blocking 设备搬运。
+5. 用 profiler 对 EMA、加载和拷贝建立基线。
+
+**验收标准**：EMA 开销低于训练总耗时 3%，或提供无法达到时的基准说明。
+
+#### P2-2 优化 DDP 评估通信
+
+1. 保留 `all_gather_object` 作为 fallback。
+2. Tensor 结果使用 padding + valid count + `dist.all_gather`。
+3. 大型检测评估支持 rank 分片落盘、rank0 汇总。
+4. 记录通信耗时和样本数量。
+
+**验收标准**：结果与单卡一致；无空预测/变长结果死锁；通信耗时有明确下降。
+
+#### P2-3 优化 mAP、PQ、matcher 和 assigner
+
+1. mAP 复用排序和 IoU 中间结果，减少阈值重复计算。
+2. PQ 使用类别过滤、bbox 粗筛和分块 overlap，禁止超大 `(P,G,H,W)` 中间张量。
+3. matcher 减少 GPU->CPU 同步，必要时先做候选裁剪。
+4. 向量化 TaskAlignedAssigner 和 OneToOneYOLOLoss 的 Python 循环。
+5. 用固定规模输入记录耗时、峰值内存和正确性。
+
+**验收标准**：优化前后指标在容差内一致；高分辨率全景评估无异常内存峰值。
+
+#### P2-4 完善运行时契约和 API
+
+1. 实现 `Sample._KNOWN_KEYS` 检查，或删除未实现的文档承诺。
+2. 明确 RGB/BGR，令 `ImageMode` 参与数据加载校验。
+3. 让 `provides_normalization` 真正阻止重复归一化。
+4. `BaseModel.get_device()` 处理无参数模型。
+5. `assert` 改显式异常，out_indices 越界禁止静默取模。
+6. MetricCollection 对重复名称报错。
+7. 库代码中的 `print()` 统一为 logger。
+8. 将 TensorBoard 标量真正接入 Trainer 生命周期。
+9. 减轻顶层 import，避免只使用 config 时无条件加载完整视觉栈。
+
+**验收标准**：错误输入在构建阶段失败；文档契约都有运行时代码或测试证明。
+
+### 7.6 执行顺序与完成定义
+
+**第一周：恢复正确性**
+
+- 完成 P0-1 至 P0-5。
+- 跑通分类、检测、分割、SimCLR 合成配置。
+- 每个缺陷都有回归测试。
+
+**第二周：训练与评估闭环**
+
+- 完成 P1-1 至 P1-5。
+- 建立 CPU DDP、resume、EMA、mask AP、ONNX 检测输出测试。
+
+**第三周：CI、依赖与打包**
+
+- 完成 P1-6 至 P1-8。
+- 建立 coverage、mypy、pip-audit 和 wheel 干净环境安装门禁。
+
+**第四周及以后：性能优化**
+
+- 完成 P2 项目；先建立 benchmark，再修改实现。
+- P0/P1 完成前暂停继续扩充模型家族，避免扩大未验证行为面。
+
+#### Definition of Done
+
+任务只有同时满足以下条件才可标记为完成：
+
+1. 实现已提交，没有通过静默 fallback 掩盖错误。
+2. 至少有一个针对原缺陷的回归测试。
+3. 相关单元和集成测试通过。
+4. 文档、配置示例和 API 行为一致。
+5. 性能改动有固定输入的前后 benchmark。
+6. 分布式改动有单卡/多卡一致性证据。
+7. 发布改动有干净环境 wheel 安装证据。
+
+---
+
+## 八、版本记录（精简）
 
 | 版本 | 里程碑 |
 |---|---|
