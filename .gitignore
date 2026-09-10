@@ -73,3 +73,7 @@ htmlcov/
 # DVisionix generated artifacts
 .cache/
 exports/
+
+# 本地开发留档（回退补丁、临时基线检出等），不入库
+.dev_archive/
+.dev_runs/

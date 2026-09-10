@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 import pytest
 import torch
+from torch.utils.data import DataLoader
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -130,6 +131,71 @@ class TestCollate:
         out = segmentation_collate([s1, s2])
         assert out["image"].shape == (2, 3, 8, 8)
         assert out["mask"].shape == (2, 8, 8)
+
+
+class TestCustomDatasetCollate:
+    """CustomDataset 的 collate_fn 契约（CodePlan 7.3 步骤 1-5）。
+
+    v1.0.0 用 ``staticmethod(detection_collate)`` 写实例属性。实例属性不经过描述符协议，
+    该值会以 staticmethod 对象原样存下来；它只在 Python 3.10+ 才可调用，
+    而项目最低版本恰好是 3.10，所以行为「碰巧正确」但依赖解释器版本。
+    现在改为直接存函数对象，并在构造期校验可调用性。
+    """
+
+    @staticmethod
+    def _detection_samples(n: int = 3):
+        return [
+            {
+                "image": torch.randn(3, 8, 8),
+                "boxes": torch.tensor([[0.0, 0.0, 4.0, 4.0]]),
+                "labels": torch.tensor([0]),
+            }
+            for _ in range(n)
+        ]
+
+    @staticmethod
+    def _segmentation_samples(n: int = 3):
+        return [
+            {"image": torch.randn(3, 8, 8), "mask": torch.zeros(8, 8, dtype=torch.long)}
+            for _ in range(n)
+        ]
+
+    def test_collate_fn_is_callable_for_every_task(self):
+        cls_ds = CustomDataset(
+            samples=[{"image": torch.randn(3, 8, 8), "label": 0}], task_type="classification"
+        )
+        # 分类沿用 PyTorch 默认 collate
+        assert cls_ds.collate_fn is None
+
+        det_ds = CustomDataset(samples=self._detection_samples(), task_type="detection")
+        seg_ds = CustomDataset(samples=self._segmentation_samples(), task_type="segmentation")
+        for ds in (det_ds, seg_ds):
+            assert callable(ds.collate_fn), f"collate_fn 不可调用: {type(ds.collate_fn)}"
+
+    def test_user_collate_fn_has_highest_priority(self):
+        def sentinel(batch):
+            return {"custom": True}
+
+        ds = CustomDataset(
+            samples=self._detection_samples(), task_type="detection", collate_fn=sentinel
+        )
+        assert ds.collate_fn is sentinel
+
+    def test_detection_dataloader_yields_one_batch(self):
+        ds = CustomDataset(samples=self._detection_samples(4), task_type="detection")
+        loader = DataLoader(ds, batch_size=2, collate_fn=ds.collate_fn)
+        batch = next(iter(loader))
+        assert batch["image"].shape == (2, 3, 8, 8)
+        assert isinstance(batch["boxes"], list) and len(batch["boxes"]) == 2
+        assert isinstance(batch["labels"], list) and len(batch["labels"]) == 2
+
+    def test_segmentation_dataloader_yields_long_mask(self):
+        ds = CustomDataset(samples=self._segmentation_samples(4), task_type="segmentation")
+        loader = DataLoader(ds, batch_size=2, collate_fn=ds.collate_fn)
+        batch = next(iter(loader))
+        assert batch["image"].shape == (2, 3, 8, 8)
+        assert batch["mask"].shape == (2, 8, 8)
+        assert batch["mask"].dtype == torch.long
 
 
 if __name__ == "__main__":

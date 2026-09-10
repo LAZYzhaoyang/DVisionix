@@ -43,7 +43,9 @@ from dvisionix.training import (
 )
 from dvisionix.utils import get_logger, set_seed
 
-_TASK_TYPES = ("classification", "detection", "segmentation", "simclr")
+# 任务类型 -> Task 类名。键集合必须与 dvisionix.config.schema.TASK_TYPES 完全一致；
+# 该不变量由 tests/test_config/test_schema.py::test_task_mapping_covers_all_task_types 守护。
+# （原先此处另有一份 _TASK_TYPES 常量，从未被引用，已删除以免与权威来源漂移。）
 _TASK_MAPPING = {
     "classification": "ClassificationTask",
     "detection": "DetectionTask",
@@ -99,6 +101,15 @@ def build_synthetic_dataset(
             mask_path = os.path.join(tmp_dir, f"mask_{i:04d}.png")
             cv2.imwrite(mask_path, mask)
             samples.append({"image": path, "mask": mask_path})
+        elif task_type == "simclr":
+            # 自监督：标签由 SimCLRTransforms 对同一图像生成的双视角（image1 / image2）提供，
+            # Sample 只需给出 image 即可，不需要 label / boxes / mask。
+            samples.append({"image": path})
+        else:
+            raise ValueError(
+                f"合成数据不支持 task_type={task_type!r}；"
+                f"可选: {sorted(_TASK_MAPPING)}。新增任务类型时必须同时在此登记。"
+            )
     return CustomDataset(samples=samples, task_type=task_type, transforms=transforms)
 
 

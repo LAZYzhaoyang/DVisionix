@@ -33,7 +33,9 @@ loss:
   _delete_: true
   type: "yolo_v10_detection"
   strides: [4, 8, 16, 32]
-  topk: 13
+  # 注意：OneToOneYOLOLoss 采用 one-to-one（每个 GT 只匹配一个最高质量预测）贪心匹配，
+  # 不存在 top-k 候选，因此**不要**传 topk —— 传了会直接 TypeError。
+  # topk 属 YOLOv9 / YOLOv11 的 TaskAligned 分配器参数，不适用于本损失。
 
 data:
   dataset: "synthetic"

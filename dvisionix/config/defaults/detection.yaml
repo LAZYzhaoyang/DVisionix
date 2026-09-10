@@ -4,7 +4,7 @@ _base_: "base.yaml"
 task_type: "detection"
 
 model:
-  name: "grid_detection"
+  type: "grid_detection"
   num_classes: 3
   in_channels: 3
   width: 64

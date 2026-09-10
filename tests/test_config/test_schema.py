@@ -63,6 +63,34 @@ def test_unknown_task_type_raises():
         cfg.validate_schema("foo")
 
 
+def test_simclr_task_type_is_supported():
+    """simclr 必须是合法训练任务类型（CodePlan 7.1.2 D3）。
+
+    v1.0.0 的 TASK_TYPES 只有 classification/detection/segmentation，
+    导致官方配置 configs/classification/simclr_synthetic.yaml 在 schema 阶段直接失败。
+    """
+    from dvisionix.config.schema import TASK_TYPES
+
+    assert "simclr" in TASK_TYPES
+    cfg = Config({**_base_config(), "task_type": "simclr"})
+    assert cfg.validate_schema("simclr") == []
+
+
+def test_task_mapping_covers_all_task_types():
+    """tools/train.py 的任务映射键集合必须与权威来源 TASK_TYPES 完全一致。
+
+    守护的不变量：新增训练任务类型时，schema 白名单与 Task 装配表必须同时更新，
+    否则会出现「配置合法但训练入口不认识」的静默漂移（v1.0.0 曾有三份不一致的常量）。
+    """
+    from dvisionix.config.schema import TASK_TYPES
+    from tools.train import _TASK_MAPPING
+
+    assert set(_TASK_MAPPING) == set(TASK_TYPES), (
+        f"任务类型不一致：仅存在于 TASK_TYPES 的 {sorted(set(TASK_TYPES) - set(_TASK_MAPPING))}，"
+        f"仅存在于 _TASK_MAPPING 的 {sorted(set(_TASK_MAPPING) - set(TASK_TYPES))}"
+    )
+
+
 def test_cli_parse_list_and_dict():
     assert parse_cli_options(["training.devices=[0,1]"])["training"]["devices"] == [0, 1]
     assert parse_cli_options(["training.optimizer={type: adam, lr: 0.01}"])["training"][

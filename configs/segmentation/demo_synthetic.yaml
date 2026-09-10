@@ -4,7 +4,7 @@ _base_: "../../dvisionix/config/defaults/segmentation.yaml"
 experiment_name: "demo_synthetic_seg"
 
 model:
-  name: "simple_segmentation"
+  type: "simple_segmentation"
   num_classes: 3
   in_channels: 3
 

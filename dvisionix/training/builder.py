@@ -7,12 +7,12 @@ import os
 from typing import List, Optional
 
 from ..utils.logging import TrainingLogger
-from .callbacks import Callback, EarlyStopping, ModelCheckpoint
+from .callbacks import EMA, Callback, EarlyStopping, ModelCheckpoint
 from .trainer import Trainer
 
 
 def build_callbacks(cfg, work_dir: Optional[str] = None) -> List[Callback]:
-    """根据配置构建回调列表（ModelCheckpoint / EarlyStopping）。"""
+    """根据配置构建回调列表（ModelCheckpoint / EarlyStopping / EMA）。"""
     callbacks: List[Callback] = []
 
     ckpt = cfg.get("checkpoint", {}) or {}
@@ -38,6 +38,22 @@ def build_callbacks(cfg, work_dir: Optional[str] = None) -> List[Callback]:
                 mode=es.get("mode", "min"),
                 patience=es.get("patience", 10),
                 min_delta=es.get("min_delta", 0.0),
+            )
+        )
+
+    # EMA：默认关闭（enabled: false），配置形如
+    #   training:
+    #     ema: {enabled: true, decay: 0.999, decay_warmup_epochs: 5, save_final: true}
+    # 此前 EMA 只有编程式入口，配置驱动路径无法开启，导致 README 的能力声明与实现脱节
+    # （CodePlan 7.1.2 D17）。
+    ema = training.get("ema", {}) or {}
+    if ema.get("enabled", False):
+        callbacks.append(
+            EMA(
+                decay=ema.get("decay", 0.999),
+                swap_for_validation=ema.get("swap_for_validation", True),
+                decay_warmup_epochs=ema.get("decay_warmup_epochs", 0),
+                save_final=ema.get("save_final", False),
             )
         )
     return callbacks

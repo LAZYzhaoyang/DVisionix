@@ -4,7 +4,7 @@ _base_: "base.yaml"
 task_type: "classification"
 
 model:
-  name: "simple_cnn"
+  type: "simple_cnn"
   num_classes: 10
   in_channels: 3
 

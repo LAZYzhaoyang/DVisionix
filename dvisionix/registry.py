@@ -18,6 +18,7 @@
     model = MODELS.build({"type": "MyModel", "num_classes": 10})
 """
 
+import warnings
 from typing import Any, Callable, Dict, Iterable, Optional
 
 
@@ -89,16 +90,46 @@ class Registry:
     def build(self, cfg: Dict[str, Any], **default_kwargs: Any) -> Any:
         """从配置字典构建实例。
 
-                配置必须包含 `type` 字段（或
-        ame`）指定注册名称，
-                其余字段作为构造参数传入。`default_kwargs` 会被配置覆盖。
+        选择注册表条目的字段优先级：
+
+        1. ``type`` —— **标准且推荐**，值可以是注册名（str）或可调用对象；
+        2. ``_name_`` —— 显式别名，语义等同 ``type``；用于配置中已存在构造参数
+           ``name``、又想明确表达「选择哪个组件」时；
+        3. ``name`` —— **兼容旧用法**：仅当上面两者都不存在、且该值确实是已注册名时才
+           作为注册名，同时发出 ``DeprecationWarning`` 提示迁移到 ``type``。
+
+        除被选中的键之外，其余字段一律原样作为构造参数传给构建目标。因此
+        ``{"type": "timm_backbone", "name": "resnet18"}`` 里的 ``name`` 会正常传给
+        ``TimmBackbone(name=...)``，不会被当作注册名消耗掉（这正是 v1.0.0 的行为，
+        也是 ``dvisionix/config/defaults/*.yaml`` 一直依赖的约定）。
+
+        ``default_kwargs`` 会被配置覆盖。
         """
         if not isinstance(cfg, dict):
             raise TypeError(f"cfg must be a dict, got {type(cfg)}")
         cfg = dict(cfg)
-        obj_type = cfg.pop("type", None) or cfg.pop("name", None)
+
+        obj_type = cfg.pop("type", None)
         if obj_type is None:
-            raise KeyError('cfg must contain a "type" (or "name") field.')
+            obj_type = cfg.pop("_name_", None)
+        if obj_type is None and "name" in cfg:
+            # 兼容路径：只有当 name 的值确实是本注册表的键（或可调用对象）时，
+            # 才把它当作选择器消费；否则原样留给构造函数。
+            candidate = cfg["name"]
+            if callable(candidate) or (isinstance(candidate, str) and candidate in self):
+                obj_type = cfg.pop("name")
+                warnings.warn(
+                    f'registry "{self._name}": 使用 "name" 作为注册表键已废弃，'
+                    f'请改为 "type": {obj_type!r}；'
+                    f'若确实想传构造参数，请同时用 "type" 显式指定组件。',
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+        if obj_type is None:
+            raise KeyError(
+                'cfg must contain a "type" field '
+                '(legacy "name" and explicit "_name_" are also accepted)'
+            )
         if isinstance(obj_type, str):
             builder = self.get(obj_type)
         elif callable(obj_type):

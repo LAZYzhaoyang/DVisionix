@@ -39,9 +39,18 @@ class CustomDataset(BaseDataset):
         if collate_fn is not None:
             self.collate_fn = collate_fn
         elif task_type == "detection":
-            self.collate_fn = staticmethod(detection_collate)
+            self.collate_fn = detection_collate
         elif task_type == "segmentation":
-            self.collate_fn = staticmethod(segmentation_collate)
+            self.collate_fn = segmentation_collate
+        # 构造期自检：collate_fn 不可调用时，DataLoader 要等到取第一个 batch 才炸，
+        # 定位成本高。注意这里**不要**用 staticmethod 包装 ——
+        # 实例属性不经过描述符协议，staticmethod 对象只在 Python 3.10+ 才可调用，
+        # 直接存函数对象才是正确且无版本依赖的写法。
+        if self.collate_fn is not None and not callable(self.collate_fn):
+            raise TypeError(
+                f"collate_fn 必须是可调用对象，当前为 {type(self.collate_fn).__name__}"
+                f"（task_type={task_type!r}）"
+            )
 
 
 __all__ = ["CustomDataset"]

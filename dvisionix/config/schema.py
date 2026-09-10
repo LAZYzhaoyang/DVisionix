@@ -45,6 +45,7 @@ TRAINING_KEYS = {
     "gradient_clip_val",
     "log_interval",
     "early_stopping",
+    "ema",
     "resume_from",
     "find_unused_parameters",
 }
@@ -60,7 +61,10 @@ EARLY_STOPPING_KEYS = {
     "restore_best_weights",
 }
 
-TASK_TYPES = ("classification", "detection", "segmentation")
+# 训练任务类型的**唯一权威来源**：schema 校验与训练入口（tools/train.py）共用同一份。
+# 注意：这与 models/base.py 的 TASK_TYPES 是**不同概念** ——
+# 前者是「训练任务」类型，后者是 BaseModel 自声明的「模型任务」类型（无 simclr）。
+TASK_TYPES = ("classification", "detection", "segmentation", "simclr")
 
 _INT_KEYS = ("num_epochs", "batch_size", "num_workers", "log_interval", "accumulate_grad_batches")
 _NUM_KEYS = ("learning_rate", "weight_decay")
@@ -149,6 +153,14 @@ def validate_schema(config: Dict[str, Any], task_type: Optional[str] = None) -> 
     es_mode = es.get("mode")
     if es_mode is not None and es_mode not in ("min", "max"):
         raise ValueError("training.early_stopping.mode 必须是 'min' 或 'max'")
+
+    # ---------------- ema ----------------
+    ema = training.get("ema", {})
+    if not isinstance(ema, dict):
+        raise ValueError("training.ema 必须是 dict")
+    ema_decay = ema.get("decay")
+    if ema_decay is not None and not (_is_num(ema_decay) and 0.0 < ema_decay < 1.0):
+        raise ValueError(f"training.ema.decay 必须在 (0, 1) 区间内，当前: {ema_decay!r}")
 
     # ---------------- model / data ----------------
     model = config.get("model", {})

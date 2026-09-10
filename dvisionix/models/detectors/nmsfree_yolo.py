@@ -42,9 +42,21 @@ class NMSFreeYOLODetector(SingleStageDetector):
         preds,
         image_hw,
         score_threshold: float = 0.3,
+        iou_threshold: float = 0.5,
         max_detections: int = 100,
     ):
-        """免 NMS 解码：逐层解码 + 跨层 top-k（one-to-one 训练保证单框）。"""
+        """免 NMS 解码：逐层解码 + 跨层 top-k（one-to-one 训练保证单框）。
+
+        Args:
+            preds: ``NMSFreeYOLOHead`` 输出 dict（``cls`` / ``reg``）。
+            image_hw: 原图 ``(H, W)``。
+            score_threshold: 置信度阈值。
+            iou_threshold: NMS 的 IoU 阈值。one-to-one 训练已保证同一目标只被一个预测
+                匹配，推理直接跨层 top-k 即可，不需要 NMS；该参数只为满足
+                ``DetectionTask.validation_step`` 的统一 decode 契约（R4）而接收，
+                **不参与计算**。
+            max_detections: 每张图最多保留的检测框数。
+        """
         cls_outs, reg_outs = preds["cls"], preds["reg"]
         img_h, img_w = image_hw
         device = cls_outs[0].device

@@ -40,9 +40,21 @@ class CenterNetDetector(SingleStageDetector):
         preds,
         image_hw,
         score_threshold: float = 0.3,
+        iou_threshold: float = 0.5,
         max_detections: int = 100,
     ):
-        """从热图取局部峰值 -> 中心（含偏移）+ 宽高 -> 像素框。"""
+        """从热图取局部峰值 -> 中心（含偏移）+ 宽高 -> 像素框。
+
+        Args:
+            preds: ``CenterNetHead`` 输出 dict（``heatmap`` / ``wh`` / ``offset``）。
+            image_hw: 原图 ``(H, W)``，用于把特征图坐标映射回像素坐标。
+            score_threshold: 峰值分数阈值，低于该值的中心点被丢弃。
+            iou_threshold: NMS 的 IoU 阈值。CenterNet 用 3x3 max-pool 做峰值抑制，
+                天然保证每个目标只有一个峰，不需要额外 NMS；该参数只为满足
+                ``DetectionTask.validation_step`` 的统一 decode 契约（R4）而接收，
+                **不参与计算**。
+            max_detections: 每张图最多保留的检测框数。
+        """
         hm = preds["heatmap"].sigmoid()
         wh = preds["wh"]
         offset = preds["offset"]

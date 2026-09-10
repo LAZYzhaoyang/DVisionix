@@ -29,3 +29,12 @@ no_implicit_optional = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+# 未注册的 marker 直接报错，避免拼写错误被静默忽略（CodePlan 7.2 步骤 0-5）
+addopts = "--strict-markers"
+markers = [
+    "unit: 纯单元测试，无外部依赖",
+    "integration: 组件装配级测试（构建 task/loss/trainer 等）",
+    "slow: 耗时测试（官方配置端到端门禁等），可用 -m 'not slow' 跳过",
+    "cuda: 需要 CUDA 设备",
+    "ddp: 需要多进程 / 多卡分布式环境",
+]

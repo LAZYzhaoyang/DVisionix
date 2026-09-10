@@ -178,8 +178,64 @@ def test_export_best_onnx_missing_ckpt(tmp_path):
     cfg = Config(
         {
             "task_type": "classification",
-            "model": {"name": "simple_cnn", "num_classes": 3, "in_channels": 3},
+            "model": {"type": "simple_cnn", "num_classes": 3, "in_channels": 3},
             "data": {"image_size": 32},
         }
     )
     assert train_tool.export_best_onnx(cfg, str(tmp_path)) is None
+
+
+# ---------------------------------------------------------------------------
+# EMA 配置化（CodePlan 7.3 步骤 1-5 / 7.1.2 D17）
+#
+# v1.0.0 的 build_callbacks 只构造 ModelCheckpoint 与 EarlyStopping，
+# EMA / DistillCallback 仅出现在 tests/ 中，而 README 与本文件第三章都把它们
+# 列为已实现能力 —— 文档承诺与配置入口脱节。
+# ---------------------------------------------------------------------------
+
+
+def _ema_cfg(ema_cfg):
+    return Config(
+        {
+            "task_type": "classification",
+            "experiment_name": "exp_ema",
+            "model": {"type": "simple_cnn", "num_classes": 3, "in_channels": 3},
+            "data": {"image_size": 32},
+            "training": {"num_epochs": 1, "device": "cpu", "ema": ema_cfg},
+            "checkpoint": {"save_dir": "checkpoints"},
+        }
+    )
+
+
+def test_ema_is_off_by_default(tmp_path):
+    from dvisionix.training import build_callbacks
+    from dvisionix.training.callbacks import EMA
+
+    cbs = build_callbacks(_ema_cfg({}), work_dir=str(tmp_path))
+    assert not any(isinstance(cb, EMA) for cb in cbs)
+
+
+def test_ema_can_be_enabled_from_config(tmp_path):
+    from dvisionix.training import build_callbacks
+    from dvisionix.training.callbacks import EMA
+
+    cbs = build_callbacks(
+        _ema_cfg({"enabled": True, "decay": 0.99, "decay_warmup_epochs": 2, "save_final": True}),
+        work_dir=str(tmp_path),
+    )
+    emas = [cb for cb in cbs if isinstance(cb, EMA)]
+    assert len(emas) == 1
+    assert emas[0].decay == 0.99
+    assert emas[0].decay_warmup_epochs == 2
+    assert emas[0].save_final is True
+
+
+def test_ema_decay_must_be_in_unit_interval():
+    cfg = _ema_cfg({"enabled": True, "decay": 1.5})
+    with pytest.raises(ValueError, match="ema.decay"):
+        cfg.validate_schema("classification")
+
+
+def test_ema_config_key_is_known():
+    """training.ema 必须是已知配置键，否则合法配置会被打出「未知配置键」告警。"""
+    assert _ema_cfg({"enabled": True}).validate_schema("classification") == []
