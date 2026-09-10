@@ -43,6 +43,65 @@ class PanopticQuality(BaseMetric):
         self._fp: Dict[int, int] = {}
         self._fn: Dict[int, int] = {}
 
+    @staticmethod
+    def _bbox(mask: np.ndarray):
+        """布尔掩码的紧致包围盒 ``(y0, x0, y1, x1)``；空掩码返回 None。"""
+        rows = np.flatnonzero(mask.any(axis=1))
+        cols = np.flatnonzero(mask.any(axis=0))
+        if rows.size == 0 or cols.size == 0:
+            return None
+        return int(rows[0]), int(cols[0]), int(rows[-1]) + 1, int(cols[-1]) + 1
+
+    @classmethod
+    def _iou_matrix(cls, p_masks, g_masks) -> np.ndarray:
+        """按类别计算 (P, G) 的 IoU 矩阵。
+
+        关键点：**不做全对全的像素级广播**。v1.0.0 的写法是
+
+            inter = (p_flat[:, None, :] & g_flat[None, :, :]).sum(axis=2)
+
+        这会实体化一个 ``(P, G, H*W)`` 的布尔张量：1024×1024 的图像上
+        每类 20 个实例就是 4 亿个布尔值（约 400MB）—— 高分辨率全景评估随时可能
+        直接 OOM（CodePlan 7.7 步骤 5-3「禁止超大 (P,G,H,W) 中间张量」）。
+
+        这里先用包围盒粗筛（不相交的实例对 IoU 必为 0，直接跳过），
+        再只在**包围盒交集区域**上做逻辑与，峰值内存与 ``P + G`` 张单通道掩码同阶。
+        """
+        p_count, g_count = len(p_masks), len(g_masks)
+        iou = np.zeros((p_count, g_count), dtype=np.float64)
+        if p_count == 0 or g_count == 0:
+            return iou
+
+        areas_p = [int(m.sum()) for m in p_masks]
+        areas_g = [int(m.sum()) for m in g_masks]
+        boxes_p = [cls._bbox(m) for m in p_masks]
+        boxes_g = [cls._bbox(m) for m in g_masks]
+
+        for pi in range(p_count):
+            bp = boxes_p[pi]
+            if bp is None or areas_p[pi] == 0:
+                continue
+            py0, px0, py1, px1 = bp
+            for gi in range(g_count):
+                bg = boxes_g[gi]
+                if bg is None or areas_g[gi] == 0:
+                    continue
+                gy0, gx0, gy1, gx1 = bg
+                # 包围盒粗筛：不相交则 IoU 必为 0
+                if py1 <= gy0 or gy1 <= py0 or px1 <= gx0 or gx1 <= px0:
+                    continue
+                iy0, ix0 = max(py0, gy0), max(px0, gx0)
+                iy1, ix1 = min(py1, gy1), min(px1, gx1)
+                inter = int(
+                    np.logical_and(
+                        p_masks[pi][iy0:iy1, ix0:ix1], g_masks[gi][iy0:iy1, ix0:ix1]
+                    ).sum()
+                )
+                union = areas_p[pi] + areas_g[gi] - inter
+                if union > 0:
+                    iou[pi, gi] = inter / union
+        return iou
+
     def update(self, pred_ids: torch.Tensor, gt_ids: torch.Tensor) -> None:
         """喂入一张全景图（或 batch 拆开逐张调用）。pred_ids / gt_ids: (H, W) int64。"""
         pred = pred_ids.detach().cpu().numpy().astype(np.int64)
@@ -64,13 +123,7 @@ class PanopticQuality(BaseMetric):
                 self._fn[cat] = self._fn.get(cat, 0) + len(g_masks)
                 continue
 
-            p_flat = np.stack([m.reshape(-1) for m in p_masks])  # (P, HW)
-            g_flat = np.stack([m.reshape(-1) for m in g_masks])  # (G, HW)
-            inter = (p_flat[:, None, :] & g_flat[None, :, :]).sum(axis=2)  # (P, G)
-            union = (p_flat[:, None, :].sum(axis=2) + g_flat[None, :, :].sum(axis=2) - inter).clip(
-                min=1
-            )
-            iou = inter / union  # (P, G)
+            iou = self._iou_matrix(p_masks, g_masks)  # (P, G)
 
             matched_gt = set()
             tp_iou = 0.0
