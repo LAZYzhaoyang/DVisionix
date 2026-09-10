@@ -118,3 +118,35 @@ training:
 - [骨干网络](backbones.md)
 - [日志系统](logging.md)
 - [模型导出（ONNX）](model_export.md)
+---
+
+## v1.1 变更要点
+
+> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+
+**安装方式**：依赖的唯一来源是 `pyproject.toml`（`setup.py` 已删除），
+按需选择 extras：
+
+```bash
+pip install -e .[full,dev]     # 全部能力 + 开发工具
+pip install -e .[export]       # 只要 ONNX 导出
+```
+
+**解释器**：`requires-python = ">=3.10"`，CI 覆盖 3.10 / 3.11 / 3.12。
+
+**测试**：
+
+```bash
+pytest tests/                    # 全量（含官方配置端到端门禁，约 2 分钟）
+pytest tests -m "not slow"       # 快速反馈
+```
+
+**新增性能基准工具**：
+
+```bash
+python tools/benchmark.py --list
+python tools/benchmark.py --scenario all --json bench.json
+```
+
+**Windows 提示**：请先 `conda activate dvisionix`。直接用解释器绝对路径时
+`Library\bin` 不在 `PATH`，子进程 `import torch` 会报 `DLL load failed`。

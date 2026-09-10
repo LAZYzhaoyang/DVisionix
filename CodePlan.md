@@ -162,11 +162,11 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 > 于 `conda env dvisionix`（Python 3.14.6 / torch 2.12.0 / CPU-only）实测，
 > 作为全部改动的对照基准。**任何任务的完成判定都必须与这组数字对比。**
 
-| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-4 完成后） |
+| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-5 全部完成后） |
 |---|---|---|
-| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `455 passed, 2 skipped`（97.3s 空载），collected = 457 |
-| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 24 + 契约/回归/CPU-DDP/导出/打包 共 169 |
-| 静态检查 | `ruff` / `black --check` 全绿 | `ruff` / `black --check` 全绿；`mypy` 可运行（基线 121 errors / 39 files，非阻断） |
+| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `481 passed, 2 skipped`（114.5s），collected = 483 |
+| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 24 + 契约/回归/CPU-DDP/导出/打包/性能 共 195 |
+| 静态检查 | `ruff` / `black --check` 全绿 | `ruff` / `black --check` 全绿；`mypy` 可运行（基线 121 errors，非阻断） |
 | 覆盖率 | 未统计 | **91%**（CI 门禁 ≥90%） |
 | 官方配置 E2E（19 个各跑 1 epoch） | **14 PASS / 3 FAIL / 2 模板不可跑** | **17 PASS / 0 FAIL / 2 模板不可跑** |
 | 跑不通的配置 | `classification/simclr_synthetic`、`detection/centernet_synthetic`、`detection/yolov10_synthetic` | 无 |
@@ -174,27 +174,41 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | CPU 双进程 DDP 一致性 | 无此测试（`test_ddp_smoke` 需 2+ GPU，恒跳过） | ✅ 单进程 vs 2 进程全局指标在 `1e-6` 内一致 |
 | 导出契约 | 嵌套输出崩溃、导出改动调用者模型 | ✅ 嵌套输出可导出并数值验证、导出不改变原模型状态 |
 | 发行物 | wheel 缺内置默认配置、混入 `tests/` | ✅ `config/defaults/*.yaml` 全部在包内、无 `tests/`；干净安装后 `Config.from_default()` 可用 |
+| 测试顺序依赖 | 未知（依赖顶层 eager import） | ✅ **56 个测试文件逐个独立运行全部通过** |
+
+### 📈 性能基准（`tools/benchmark.py`，CPU / torch 2.12）
+
+| 场景 | v1.0.0 | v1.1 | 倍数 |
+|---|---|---|---|
+| 匈牙利匹配（300 查询 × 30 GT） | 13 652 ms | **18.6 ms** | ~734× |
+| 全景质量 PQ（512×512 / 25 实例） | 582 ms | **123 ms** | ~4.7× |
+| EMA 开销（占训练总耗时） | 17.11% | **1.44%** | 目标 <3% ✅ |
+| 只导入 config | ~3–4 s | **0.10 s** | 顶层 import 惰性化 |
+| mAP（100 图 × 20 框） | 173 ms | 180 ms | 未优化（实测非瓶颈） |
+| TaskAligned 分配 | 1.1 ms | 1.0 ms | 未优化（实测非瓶颈） |
 
 > 说明：测试数从 288 增至 457 全部是**新增门禁与回归测试**，不是实现膨胀；
 > 其中 24 条为配置端到端门禁、2 条为 CPU gloo 双进程、3 条为打包契约、
 > 其余为契约与回归测试。无既有测试被删除；仅 1 条既有断言随契约修正同步更新
 > （`test_task_config.py` 的 `accuracy` → `val_accuracy`，并补上「不得为 0」的断言）。
 >
-> 耗时说明：表中当前值 97.3s 是空载实测；此前几轮记录为 150–190s，
-> 差异来自当时并行执行的其他命令争用 CPU，并非测试本身变化。
+> 耗时说明：表中当前值 114.5s 为空载实测；并发执行其他命令时会到 150–190s，
+> 差异来自 CPU 争用，并非测试本身变化。
 
 ### 🔄 当前状态：v1.1 稳定性与工程优化
 
 - **第七章是本项目唯一执行计划。**
-- **阶段 0-4 已全部完成**（门禁 → 配置修复 → P0 正确性 → 训练/评估/导出闭环 → 打包与 CI），
-  见 7.2 / 7.3 / 7.4 / 7.5 / 7.6 的完成标记。20 项已核实缺陷 D1-D20 全部修复并附回归测试；
-  官方配置由 14/17 可跑提升到 17/17 全绿。
-- **仅阶段 5（性能优化）未开始**，见 7.7；对照基线与门禁定义分别在第五章与 7.2/7.6。
-- 阶段 5 完成后即可进入第六章的 P1/P2/P3（模型库继续扩充等）。
+- **阶段 0-5 已全部完成**（门禁 → 配置修复 → P0 正确性 → 训练/评估/导出闭环 →
+  打包与 CI → 性能优化），见 7.2 / 7.3 / 7.4 / 7.5 / 7.6 / 7.7 的完成标记。
+  20 项已核实缺陷 D1-D20 全部修复并附回归测试；官方配置由 14/17 可跑提升到 **17/17 全绿**。
+- **v1.1 的开发工作到此结束**，可以进入第六章的 P1/P2/P3（模型库继续扩充等），
+  或按需把 mypy / pip-audit 从信息性门禁升级为阻断（见 7.6 的升级条件）。
 - **v1.1 早期一批未提交改动已整体回退**（回退原因与更正见 7.1.1，
   补丁留档于 `.dev_archive/wip-v1.1-partial.patch`，已在 `.gitignore` 中排除）。
-- 阶段 2 已重新实现该批次中**诊断正确且实现无误**的两项（DDP 递归聚合、FCOS/YOLO 重复累加 L1），
-  并补齐其缺失的归一化与测试。
+- 该批次中**诊断正确且实现无误**的两项（DDP 递归聚合、FCOS/YOLO 重复累加 L1）
+  已在阶段 2 重新实现，并补齐其缺失的归一化与测试。
+- **用户文档**：新增 [docs/v1.1_changes.md](docs/v1.1_changes.md)（迁移指南），
+  并为 7 篇专题文档补充「v1.1 变更要点」章节、更新文档索引与 README。
 
 ### ⏸️ 环境阻塞
 
@@ -248,7 +262,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 2. **度量先于修复**：先建立能自动暴露缺陷的门禁，再改代码。
    v1 版是在「286 测试全绿 + 2 个官方配置崩溃」的情况下推进的，说明测试网没盖住装配层。
 3. **测试退化防护**：禁止用新测试替换既有 `def test_*` 的函数头、禁止用缩进把测试体变成局部代码；
-   CI 校验 collected 测试数不低于基线（当前基线 **457**，见第五章实测表）。
+   CI 校验 collected 测试数不低于基线（当前基线 **483**，见第五章实测表）。
    v1 版执行中已实际静默丢失 4 条回归测试。
 8. **测试必须自播种**：「loss 下降」这类断言要在**构建模型之前**播种
    （模型初始权重也是随机的），否则会依赖此前测试消耗掉的全局 RNG 状态，
@@ -366,8 +380,6 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 **行为变更**：3-1（DINO 去噪坐标尺度）、3-2（history 列名与指标口径）、3-3（resume 校验与梯度累积分母）
 已登记入第八章。
 
-### 7.6 阶段 4：打包与 CI（2–3 天）
-
 ### 7.6 ✅ 阶段 4：打包与 CI（已完成）
 
 | 步骤 | 状态 | 实际实施与验收证据 |
@@ -390,23 +402,82 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 **阶段 4 门禁达成情况**：全量测试全绿 ✅、17 配置 E2E 全绿 ✅、`ruff`/`black` 全绿 ✅、
 wheel 载荷与干净安装验证通过 ✅、覆盖率 91% ≥ 90% ✅。
 
-### 7.7 阶段 5：性能（P2，最后）
 
-> 先建立 benchmark，再修改实现。阶段 0-4 未完成前不启动。
+### 7.7 ✅ 阶段 5：性能（已完成，先测后改）
 
-1. **EMA 与数据搬运**：shadow tensor 原地更新；区分浮点参数与非浮点 buffer；DataLoader 暴露 `pin_memory` /
-   `persistent_workers` / `prefetch_factor`；支持 `non_blocking` 设备搬运。
-2. **DDP 评估通信**：保留 `all_gather_object` 作为 fallback；Tensor 结果改用 padding + valid count + `dist.all_gather`；
-   大型检测评估支持 rank 分片落盘、rank0 汇总；记录通信耗时与样本数。
-3. **mAP / PQ / matcher / assigner**：mAP 复用排序与 IoU 中间结果；PQ 使用类别过滤、bbox 粗筛与分块 overlap，
-   禁止超大 `(P,G,H,W)` 中间张量；matcher 减少 GPU→CPU 同步；向量化 TaskAlignedAssigner 与 OneToOneYOLO 的 Python 循环。
-4. **运行时契约与 API**：实现或删除 `Sample._KNOWN_KEYS` 承诺；明确 RGB/BGR 并让 `ImageMode` 参与校验；
-   让 `provides_normalization` 真正阻止重复归一化；`BaseModel.get_device()` 处理无参数模型；
-   `assert` 改显式异常、`out_indices` 越界禁止静默取模；`MetricCollection` 对重复名称报错；
-   库代码 `print()` 统一为 logger；TensorBoard 标量真正接入 Trainer 生命周期；减轻顶层 import。
+> 新增 `tools/benchmark.py` 作为固定输入、可复现、可隔离测峰值内存的基准工具。
+> **所有优化都先有基线数据，再改实现，最后以数值对拍确认结果未变。**
 
-**验收**：优化前后指标在容差内一致；EMA 开销低于训练总耗时 3%，或提供无法达到时的基准说明；
-高分辨率全景评估无异常内存峰值；每项优化都有固定输入的前后 benchmark。
+#### 5-0 基准工具
+
+`tools/benchmark.py` 覆盖 7 个场景：`ema` / `pq` / `map` / `matcher` / `assigner` /
+`dataloader` / `import`。支持 `--isolate`（每场景独立子进程，用于干净地测峰值内存）
+与 `--json`（机器可读输出）。
+
+#### 5-1 EMA 与数据搬运 ✅
+
+| 项 | 实施 | 实测 |
+|---|---|---|
+| EMA 原地更新 | `shadow[k].mul_(decay).add_(v, alpha=1-decay)`，替换每步新建张量的 `decay*shadow + (1-decay)*v` | 开销 **17.11% → 1.44%**（目标 <3% ✅） |
+| 缓存张量引用 | `on_train_begin` 缓存 `(shadow, param)` 引用对，不再每步调用 `model.state_dict()` | 同上（这一步才是达标的关键） |
+| 只处理浮点张量 | 跳过整型 buffer（如 `num_batches_tracked`） | 数值语义更正确 |
+| **resume 保留 EMA** | `on_train_begin` 检测到已恢复的 shadow 时不再用当前权重重建 | 修复「续训把 EMA 状态清零」的隐藏缺陷 |
+| DataLoader 开关 | 配置暴露 `pin_memory` / `persistent_workers` / `prefetch_factor`，DDP 重包装时一并继承 | — |
+| `non_blocking` 搬运 | `move_to_device(..., non_blocking=)` + `BaseTask.to_device()`，由 `training.non_blocking` 下发 | CPU 上无收益也无副作用；需 pin_memory + CUDA 才有意义 |
+
+#### 5-2 DDP 评估通信 ✅（部分：以度量为主）
+
+- **已落地**：评估聚合增加耗时与样本数统计，`Trainer.gather_report()` 暴露
+  `calls / ms_total / ms_per_call / local_samples / ms_per_sample`，
+  分布式验证时打印一次；`tests/test_training/test_ddp_cpu.py` 断言这些字段确实被记录。
+- **未落地（如实记录）**：计划中的「Tensor 结果改用 padding + valid count +
+  `dist.all_gather`」**没有实现**。原因：本环境是 CPU + gloo、张量规模很小，
+  无法用基准证明相对 `all_gather_object` 有收益，这与本阶段「先测后改」的原则冲突；
+  在没有证据的情况下引入复杂度不符合 DoD。该优化应在有 2+ GPU + NCCL 的环境上
+  先用 `tools/benchmark.py` 建立通信基线再决定。
+
+#### 5-3 mAP / PQ / matcher / assigner ✅
+
+| 项 | 实测（前 → 后） | 数值一致性 |
+|---|---|---|
+| **matcher** | **13 652 ms → 18.6 ms** | 穷举对拍确认仍为最小代价；新增 11 条测试 |
+| **PQ** | **582 ms → 123 ms** | 与 v1.0.0 朴素实现逐位对拍（PQ/SQ/RQ 完全一致） |
+| mAP | 173 → 180 ms | 持平 |
+| assigner | 1.1 → 1.0 ms | 持平 |
+
+- **matcher**：该实现要求「行数 ≤ 列数」，v1.0.0 无论形状都把代价矩阵补成
+  `max(n,m)²` 方阵再跑纯 Python O(n²m)。转置后 300×30 变成 30×300，
+  规模下降两个数量级。
+- **PQ**：v1.0.0 的 `p_flat[:, None, :] & g_flat[None, :, :]` 会实体化
+  `(P, G, H*W)` 布尔张量（1024×1024 下约 400MB）。改为**包围盒粗筛 +
+  交集区域局部逻辑与**，峰值与 `P + G` 张单通道掩码同阶。
+- **mAP / assigner 未优化**：基准显示它们不是瓶颈（173 ms / 1 ms），
+  按「先测后改」原则不做无依据的改动。
+- 新增 `tests/test_metrics/test_panoptic_equivalence.py`（8 条）与
+  `tests/test_models/test_matcher_optimality.py`（11 条），把「优化不改变数值」固定下来。
+
+#### 5-4 运行时契约与 API ✅
+
+| 项 | 处理 |
+|---|---|
+| `Sample._KNOWN_KEYS` | **实现**：新增 `Sample.unknown_keys()` 与 `EXTENDED_KEYS`；`BaseDataset` 对每个未知字段名告警一次（捕捉 `bboxes` 这类静默失效的拼写错误） |
+| `provides_normalization` | **真正生效**：`TransformPipeline` 拒绝同一条流水线内出现两个归一化算子（此前该标记被聚合但从未被消费） |
+| `get_device()` | 无参数模型不再抛 `StopIteration`：依次看参数、buffer，都无则返回 CPU |
+| `out_indices` | 越界由**静默取模**改为显式报错（`backbones/feature.py`、`sequential.py`） |
+| `assert` → 异常 | 库代码 10 处 `assert` 全部改为显式 `ValueError` / `TypeError`（`assert` 在 `python -O` 下会被剥离） |
+| `MetricCollection` 重名 | 构造与 `add()` 时校验成员名唯一（重名会在汇总时静默互相覆盖） |
+| `print()` → logger | `load_backbone` 的告警改走 `dvisionix.checkpoint` logger |
+| TensorBoard | Trainer 每个 epoch 调用 `logger.log_metrics(..., console=False)`，标量首次真正写入 TB + JSONL |
+| 顶层 import | 改为惰性（PEP 562）：`from dvisionix.config import Config` **3~4 s → 0.10 s**；注册表取用前需显式导入对应子模块，已在文档说明 |
+| DDP 重复计算指标 | `fit()` 中重复调用 `on_validation_epoch_end()` 的分支已删除（第二次会在已重置的累加器上算出全 0） |
+| MaskFormer 目标 mask 尺寸 | `pred_hw` 空预测时由 `None` 改为 `image_hw`，与 `evaluate_mask_ap` 的 D11 修复保持一致 |
+| 文档 | 新增 [docs/v1.1_changes.md](docs/v1.1_changes.md) 迁移指南，并为 7 篇专题文档补充「v1.1 变更要点」 |
+
+**阶段 5 门禁达成情况**：全量测试 `481 passed, 2 skipped` 全绿 ✅、
+17 配置 E2E 全绿 ✅、`ruff`/`black` 全绿 ✅、
+EMA 开销 1.44% < 3% ✅、所有优化均有前后基准与数值对拍 ✅、
+**56 个测试文件逐个独立运行全部通过**（确认无测试顺序依赖）✅。
+
 
 ### 7.8 环境阻塞项
 
@@ -419,7 +490,7 @@ wheel 载荷与干净安装验证通过 ✅、覆盖率 91% ≥ 90% ✅。
 任务只有同时满足以下全部条件才可标记为完成：
 
 1. 实现已提交，没有通过静默 fallback 掩盖错误。
-2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（457）**。
+2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（483）**。
 3. 相关单元与集成测试通过，**17 个可训练官方配置 E2E 全绿**。
 4. `ruff` 与 `black --check` 全绿。
 5. 文档、配置示例与 API 行为一致（含 README 的能力声明）。
@@ -436,7 +507,7 @@ wheel 载荷与干净安装验证通过 ✅、覆盖率 91% ≥ 90% ✅。
 
 | 版本 | 里程碑 |
 |---|---|
-| v1.1（进行中） | 稳定性与工程优化：阶段 0-4 已完成（门禁 + 3 个官方配置 + 20 项缺陷 + 打包/CI），阶段 5 待办 |
+| v1.1（已完成） | 稳定性与工程优化：阶段 0-5 全部完成（门禁 + 3 个官方配置 + 20 项缺陷 + 打包/CI + 性能） |
 | v1.0.0 | 功能基线：全库审查/注释/文档规范化，API 冻结 |
 | v0.17.0 | 训练工程 P2+P3、DINO look-forward-twice |
 | v0.16.0 | DINO-lite、线性评估、训练工程 P1 |
@@ -470,3 +541,10 @@ wheel 载荷与干净安装验证通过 ✅、覆盖率 91% ≥ 90% ✅。
 | v1.1（已实施） | epoch 级指标统一以 `val_` 前缀写入 `history.csv`（对应 7.5 的 3-2） | **输出格式变更**：v1.0.0 的裸列 `accuracy/precision/recall/f1` 变为 `val_accuracy/...`，且不再出现「重复调用 `on_validation_epoch_end` 在已 reset 的累加器上算出的全 0」。解析 `history.csv` 的下游脚本需同步改名；`val_loss` / `val_acc` / `train_*` 名称不变 |
 | v1.1（已实施） | 梯度累积分母改为「所在窗口的实际长度」（对应 7.5 的 3-3） | **训练语义变更**：v1.0.0 一律除以 `accumulate_grad_batches`，末尾不足一窗时梯度被系统性低估（如 5 batch + accum=2 的尾窗）。修正后与 `accumulate_grad_batches` 配合的最优学习率需重新标定 |
 | v1.1（已实施） | resume 增加一致性校验（对应 7.5 的 3-3） | **行为变更**：`load_checkpoint` 现在默认**拒绝**配置哈希 / 任务类型 / 模型类型不匹配的 checkpoint，并拒绝纯 `state_dict`。依赖旧「无校验直接加载」行为的脚本需显式传 `allow_config_mismatch=True`（类型不匹配仍需匹配的配置） |
+| v1.1（已实施） | checkpoint 反序列化增加信任策略（对应 7.6 的 4-3） | **安全行为变更**：`load_backbone` 默认 `weights_only=True`（第三方权重按不可信处理），携带非张量状态的完整 checkpoint 需显式 `trusted=True`；`Trainer.load_checkpoint` 因断点续训必须 pickle，默认 `trusted=True` 并在 docstring 写明风险 |
+| v1.1（已实施） | `out_indices` 越界不再静默取模（对应 7.7 的 5-4） | **行为变更**：`out_indices=[5]` 配 3 个 stage 从「悄悄变成 [2]」改为抛 `ValueError`。现有官方配置均未越界（E2E 门禁已验证） |
+| v1.1（已实施） | `MetricCollection` 拒绝重复指标名（对应 7.7 的 5-4） | **行为变更**：重名成员此前会在 `compute()` 汇总时静默互相覆盖，现在构造与 `add()` 时抛 `ValueError` |
+| v1.1（已实施） | `TransformPipeline` 拒绝同流水线内重复归一化（对应 7.7 的 5-4） | **行为变更**：包含两个 `provides_normalization=True` 变换的管线此前会静默归一化两次，现在抛 `ValueError` |
+| v1.1（已实施） | 顶层 import 改为惰性（对应 7.7 的 5-4） | **API 语义变更**：`from dvisionix.config import Config` 不再加载 torch（3~4 s → 0.10 s）；组件注册发生在子模块被导入时，使用注册表前需显式 `import dvisionix.models`（或 training / metrics）。顶层便捷导出仍可用 |
+| v1.1（已实施） | 合成数据改为可复现（对应 7.7 的 5-1/5-4） | **行为变更**：`tools/train.py` 的合成数据由「每次运行随机」改为按 `(split, i)` 派生固定种子，同一划分多次运行结果一致 |
+| v1.1（已实施） | EMA 续训不再重置影子权重（对应 7.7 的 5-1） | **行为变更**：v1.0.0 的 `on_train_begin` 无条件用当前模型权重重建设 shadow，续训等于把 EMA 状态清零；现在会保留恢复出的影子。另外整型 buffer 不再参与滑动平均 |

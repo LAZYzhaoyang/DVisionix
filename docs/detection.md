@@ -150,3 +150,49 @@ print(metrics)   # {"mAP": ..., "mAP_50": ..., "mAP_75": ...}
 - 真实数据集：`build_dataset({"type": "coco_detection", ...})`，或用 `CustomDataset` 提供你自己的标注。
 - 教学级 `GridDetectionModel`（`models.toy`，骨干下采样 8 倍 + 网格单元单框预测）保留用于演示与快速验证，
   生产场景请使用上述组件化检测器。
+
+---
+
+## v1.1 变更要点
+
+> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+
+### 回归损失改为显式权重（默认只算 GIoU）
+
+```yaml
+loss:
+  type: "fcos_detection"
+  strides: [4, 8, 16, 32]
+  giou_weight: 1.0     # 新增，默认 1.0
+  l1_weight: 0.0       # 新增，默认 0.0（即不参与）
+```
+
+v1.0.0 的行为是 `total_reg += (giou if use_giou else l1) + l1`：
+`use_giou: true`（默认）实际是 **GIoU + L1**，`false` 是 **2 × L1**，
+参数名与真实训练信号不符且无法单独关闭某一项。旧开关仍可用（按字面意图迁移
+并发 `DeprecationWarning`），与显式权重同时给出会报错。
+
+同时修正正样本归一化：回归项不再随 batch size 与特征层数漂移。
+
+> ⚠️ v1.0.0 的 checkpoint 不可直接续训，既有超参需重新标定。
+
+### `decode()` 统一契约
+
+`DetectionTask.validation_step` 会无条件传入
+`score_threshold` / `iou_threshold` / `max_detections`。v1.0.0 中
+`centernet` 与 `nmsfree_yolo` 的 `decode()` 缺少 `iou_threshold`，
+**验证阶段必然抛 `TypeError`**；现在全部检测器都满足该契约，
+并由 `tests/test_model_contracts.py` 参数化守护 —— 新增检测器若签名不兼容会立刻失败。
+
+### DINO 去噪目标的图像尺寸
+
+v1.0.0 用 `feats[0].shape * 4` 推断图像尺寸。官方配置的骨干是 3 个 stride=2 的 stage，
+`feats[0]` 实为 stride 2，代理值成为真值的 2 倍，而去噪目标与 `DINOLoss`
+处在两个坐标系里。现在优先取 `batch["image"]` 的真实尺寸；
+`batch` 不含 `image` 时可用 head 的 `out_stride` 配置推断；两者皆无则**直接报错**。
+
+### 性能
+
+匈牙利匹配（300 查询 × 30 GT）从 **13.6 秒**降到 **18.6 毫秒**：
+旧实现把代价矩阵补齐成方阵后跑纯 Python O(n²m) 算法，规模被放大两个数量级。
+`tools/benchmark.py --scenario matcher` 可复现。

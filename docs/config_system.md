@@ -52,3 +52,42 @@ for w in warnings:
     print(w)
 cfg.dump("configs/_generated/effective.yaml")
 ```
+---
+
+## v1.1 变更要点
+
+> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+
+**新增 / 补登记的 `training` 配置键**（v1.0.0 里写了也不生效，或会打出
+「未知 training 配置键」的误导性告警）：
+
+```yaml
+training:
+  compile: false              # 补登记（v1.0.0 已在 base.yaml 中但 schema 未收录）
+  channels_last: false        # 同上
+  export_best_onnx: false     # 同上
+  non_blocking: false         # 新增：CPU→GPU 异步搬运，需配合 pin_memory
+  pin_memory: false           # 新增：锁页内存
+  persistent_workers: false   # 新增：仅在 num_workers > 0 时生效
+  prefetch_factor: null       # 新增
+  ema:                        # 新增：EMA 此前只能编程式使用
+    enabled: true
+    decay: 0.999
+    decay_warmup_epochs: 5
+    swap_for_validation: true
+    save_final: true
+```
+
+**Registry 选择器**：`type` 是标准写法；`name` 仍可用但会发出
+`DeprecationWarning`（v1.0.0 的 6 个官方配置已迁移到 `type`）；
+`_name_` 是 `type` 的显式别名，用于配置里同时存在构造参数 `name` 的场景。
+
+```yaml
+model:
+  type: "timm_backbone"   # 推荐
+  name: "resnet18"        # 这是构造参数，原样传给 TimmBackbone
+```
+
+**顶层导入改为惰性**：`from dvisionix.config import Config` 不再加载 torch
+（约 3–4 s → 0.1 s）。代价是组件注册发生在子模块被导入时 ——
+使用注册表前请显式 `import dvisionix.models`（或 `training` / `metrics`）。

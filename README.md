@@ -39,7 +39,8 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 
 ### 🛠️ 工具链
 - 超参搜索 `tools/hparam_search.py`（参数网格/随机采样，逐 trial 独立进程）
-- ONNX 导出 `ONNXExporter`（trace/dynamo 后端、精度验证、dict 多输出）
+- 性能基准 `tools/benchmark.py`（固定输入、可复现、可隔离测峰值内存）
+- ONNX 导出 `ONNXExporter`（trace/dynamo 后端、嵌套输出、精度验证）
 - 结构化日志（console + file + JSONL + TensorBoard）
 - 训练增强：warmup 调度器、梯度裁剪、EMA（`training.ema` 配置开启）、
   知识蒸馏（编程式 API：`DistillCallback`）、torch.compile、channels_last
@@ -220,8 +221,10 @@ CI 门禁顺序：`ruff` → `black` → `mypy`（信息性）→ 快速测试 �
 
 ## 📝 版本说明
 
-- **v1.1（进行中）**：稳定性与工程优化。已完成门禁建设、官方配置修复、P0 正确性、
-  训练/评估/导出闭环与打包/CI 收口；性能优化待办。详见 [CHANGELOG](CHANGELOG.md) 与 [CodePlan](CodePlan.md)。
+- **v1.1.0（当前）**：稳定性与工程优化。修复 20 项已核实缺陷，官方配置由 14/17 可跑
+  提升到 17/17；新增装配层门禁与性能基准；打包与 CI 收口。
+  **升级前请先读 [v1.1 变更与迁移指南](docs/v1.1_changes.md)** ——
+  其中有会改变训练结果与输出格式的变更。
 - **v1.0.0**：功能基线（配置驱动 + 组件化模型库 + 训练工程 + 工具链）确定，API 冻结进入稳定期。
 - 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)；规划与开发约束（R1-R7）见 [CodePlan](CodePlan.md)。
 

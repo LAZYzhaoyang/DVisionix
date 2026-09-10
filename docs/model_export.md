@@ -76,3 +76,46 @@ exporter.export("custom.onnx", dynamic_batch=False)
 - trace 后端在 PyTorch ≥2.9 会提示 TorchScript 导出已废弃（仍可用）；复杂自定义模型建议 `backend='dynamo'`。
 - `verify` 会随机采样对比 PyTorch 与 ONNX 输出（多输入/多输出逐一对比），最大误差通常在 1e-6 量级以内。
 - TensorRT 导出规划中：可先导出 ONNX，再用 `trtexec` 或 torch2trt 转换。
+---
+
+## v1.1 变更要点
+
+> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+
+**任意嵌套输出都支持。** v1.0.0 的 `_flatten_outputs` 只处理一层：
+检测模型常见的 `{"boxes": [t0, t1], ...}` 或
+`(boxes_list, scores_list, labels_list)` 会把 **list 本身**当成 Tensor 传给
+`.numpy()` 而直接崩溃。现在递归展平，并把「输出名 → 访问路径」映射写进
+ONNX `metadata_props.output_path_map`：
+
+```python
+import json, onnx
+model = onnx.load("model.onnx")
+props = {p.key: p.value for p in model.metadata_props}
+print(json.loads(props["output_path_map"]))
+# {'cls_0': 'cls[0]', 'cls_1': 'cls[1]', 'box_main': 'box.main'}
+```
+
+**导出器不再修改调用者模型。** v1.0.0 在 `__init__` 里直接
+`model.to(device).eval()`，导出一次就会永久改变原模型的设备与 train/eval 状态。
+现在只在 `export()` / `verify()` 期间临时切换，并用 `try/finally` 恢复
+（**失败路径同样恢复**）。
+
+**verify 更严格。** 统一 `detach().cpu().numpy()`（CUDA 或 requires_grad 的张量
+原本会抛错）；输出数量或形状不一致时**显式报错**，而不是被 `zip` 静默截断。
+
+**dynamo 后端的参数约束显式化。** dynamo 导出用 `dynamic_shapes` 描述动态维度，
+不支持 `dynamic_axes`：
+
+```python
+# 会抛 ValueError 并说明原因，而不是静默忽略 dynamic_axes
+exporter.export("m.onnx", backend="dynamo", dynamic_batch=True)
+
+# 正确用法
+exporter.export("m.onnx", backend="dynamo", dynamic_batch=False, dynamic_size=False)
+```
+
+另需安装 `onnxscript`（`pip install onnxscript`）。
+
+**性能**：匈牙利匹配从 13.6 秒降到 18.6 毫秒（300 查询 × 30 GT），
+详见 [v1.1 变更与迁移指南](v1.1_changes.md) 第 4 节。

@@ -318,3 +318,41 @@ ds = DepthEstimationDataset("./data/depth", transforms=pipeline)
 
 - `pytest tests/test_data/` - 数据模块单元测试
 - `pytest tests/` - 全量测试
+---
+
+## v1.1 变更要点
+
+> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+
+**裁剪契约**：尺寸不足时默认**直接报错**，不再静默返回错误尺寸。
+
+```python
+from dvisionix.data.transforms import RandomCrop, CenterCrop, BoxSyncRandomCrop
+
+RandomCrop((224, 224))                     # 输入 < 224 时抛 ValueError
+RandomCrop((224, 224), on_small="pad")     # 右下补零
+CenterCrop((224, 224), on_small="resize")  # 直接缩放
+BoxSyncRandomCrop((640, 640))              # 几何版只支持 "error" / "pad"
+```
+
+内置预设管线不受影响：分类与检测的训练管线现在都**先 resize 到 1.1× 再随机裁剪**
+（v1.0.0 的检测管线是「resize 到目标尺寸 → 同尺寸裁剪」，随机偏移恒为 0，
+增强完全没有生效）。
+
+**mask 一定是 long**：`ToTensor` 对 mask 与维度无关地输出 `torch.long`；
+`MaskToTensor` 无论输入是 numpy 还是 Tensor 都强制转 long，并会拒绝
+非整值浮点、负值与非法形状 —— 不再把错误推迟到 `CrossEntropyLoss`。
+
+**几何变换入口校验 boxes 与 labels 数量一致**，不一致直接报错，
+不会产出标签与框错位的样本。
+
+**合成数据**：`tools/train.py` 的 train / val 使用不同 split 前缀与独立随机种子
+（v1.0.0 中 val 就是 train 的前 N 张，指标含数据泄漏），且现在**可复现**。
+
+**Sample 字段名拼写检查**：`Sample.unknown_keys()` 返回契约外的字段名，
+`BaseDataset` 会为每个未知字段名告警一次（每个字段只报一次），
+用于捕捉 `bboxes` 这类会静默失效的拼写错误。自定义字段请加入
+`Sample.EXTENDED_KEYS`。
+
+**禁止流水线内重复归一化**：`TransformPipeline` 会拒绝包含两个
+`provides_normalization=True` 变换的组合（此前该标记被聚合但从未被消费）。

@@ -137,3 +137,34 @@ metrics = MetricCollection(["accuracy", {"type": "error_rate"}])
 
 - **训练循环接入**：当前 `Trainer`/`Task` 仍在 step 内内联计算简单指标（如分类 acc），本模块作为独立可组合工具提供；把可组合 metrics 正式接入验证循环将在后续 Trainer 改造中进行。
 - **检测后端**：`MeanAveragePrecision(use_torchmetrics=True)` 可切换到 `torchmetrics` 后端（需 `pip install torchmetrics[detection]`），内置实现仅用于快速验证。
+---
+
+## v1.1 变更要点
+
+> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+
+**`PanopticQuality` 不再实体化超大中间张量。**
+v1.0.0 用 `p_flat[:, None, :] & g_flat[None, :, :]` 计算逐类实例交集，
+会创建一个 `(P, G, H*W)` 的布尔张量：1024×1024 图像、每类 20 个实例
+就是约 4 亿个布尔值（~400MB），高分辨率全景评估随时可能 OOM。
+
+现在先做**包围盒粗筛**（不相交的实例对 IoU 必为 0，直接跳过），
+再只在包围盒交集区域上做逻辑与。数值完全不变（有与朴素实现逐位对拍的测试），
+512×512 / 25 实例的耗时从 582 ms 降到 123 ms。
+
+**`MetricCollection` 拒绝重复指标名。** `compute()` 是按成员名合并字典的，
+重名成员的键会互相覆盖且没有任何提示；现在构造与 `add()` 时都会校验。
+
+```python
+MetricCollection([Accuracy(), Accuracy()])   # 抛 ValueError
+MetricCollection([Accuracy(name="acc@1"), Accuracy(name="acc@2")])  # OK
+```
+
+**指标不再被重复计算。** v1.0.0 的 `fit()` 在评估之外又调用了一次
+`on_validation_epoch_end()`，第二次是在已重置的累加器上计算，得到全 0
+并覆盖正确值。现在 epoch 级指标只算一次，并以 `val_` 前缀并入 `history.csv`。
+
+```text
+v1.0.0:  accuracy, f1, precision, recall, train_acc, train_loss, val_loss
+v1.1:    val_accuracy, val_f1, val_precision, val_recall, train_acc, train_loss, val_loss
+```
