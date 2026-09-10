@@ -14,7 +14,8 @@ ONNX 模型导出器
 
 import json
 import os
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from contextlib import contextmanager
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -23,21 +24,47 @@ from ..utils import get_logger
 
 _logger = get_logger("dvisionix.export")
 
-TensorOrDict = Union[torch.Tensor, Dict[str, torch.Tensor], Sequence[torch.Tensor]]
 
+def _flatten_outputs(outputs: Any) -> Tuple[List[torch.Tensor], List[str], Dict[str, str]]:
+    """递归把模型输出展平为 ``(有序 Tensor 列表, 输出名列表, 输出名 -> 路径映射)``。
 
-def _flatten_outputs(outputs: TensorOrDict) -> Tuple[List[torch.Tensor], List[str]]:
-    """把模型输出归一化为 (有序 Tensor 列表, 名称列表)。"""
-    if isinstance(outputs, torch.Tensor):
-        return [outputs], ["output"]
-    if isinstance(outputs, dict):
-        names = list(outputs.keys())
-        tensors = [outputs[k] for k in names]
-        return tensors, [str(n) for n in names]
-    if isinstance(outputs, (list, tuple)):
-        tensors = list(outputs)
-        return tensors, [f"output_{i}" for i in range(len(tensors))]
-    raise TypeError(f"不支持的模型输出类型: {type(outputs)}（期望 Tensor / dict / list / tuple）")
+    v1.0.0 只处理**一层**的 Tensor / dict / list / tuple：检测模型的典型输出
+    ``{"boxes": [t0, t1], "scores": [...], "labels": [...]}`` 或
+    ``(boxes_list, scores_list, labels_list)`` 里含有 list 时，会把 list 本身当成
+    Tensor 传给 ``.numpy()`` 而直接崩；嵌套 dict 同理（CodePlan 7.1.2 D12）。
+
+    名称由访问路径生成（``boxes_0`` / ``aux_cls_1``），并返回
+    ``{输出名: "boxes[0]"}`` 形式的人类可读路径映射，便于落盘后回溯对应关系。
+    """
+    tensors: List[torch.Tensor] = []
+    names: List[str] = []
+    paths: Dict[str, str] = {}
+
+    def visit(value: Any, name: str, path: str) -> None:
+        if isinstance(value, torch.Tensor):
+            tensors.append(value)
+            names.append(name or "output")
+            paths[name or "output"] = path or "output"
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                child = f"{name}_{key}" if name else str(key)
+                visit(item, child, f"{path}.{key}" if path else str(key))
+            return
+        if isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                child = f"{name}_{index}" if name else f"output_{index}"
+                visit(item, child, f"{path}[{index}]" if path else f"[{index}]")
+            return
+        raise TypeError(
+            f"不支持的模型输出叶子类型: {type(value)}"
+            f"（路径 {path or '<root>'}；期望 Tensor / dict / list / tuple）"
+        )
+
+    visit(outputs, "", "")
+    if not tensors:
+        raise ValueError("模型输出不包含任何 Tensor")
+    return tensors, names, paths
 
 
 class ONNXExporter:
@@ -68,7 +95,10 @@ class ONNXExporter:
         task_type: Optional[str] = None,
         normalize: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.model = model.to(device).eval()
+        # 不在构造期修改调用者的模型：v1.0.0 的 `model.to(device).eval()` 会让导出
+        # 永久改变原模型的设备与 train/eval 状态。改为在 export/verify 内用
+        # _temporary_eval() 临时切换并在 finally 中恢复。
+        self.model = model
         self.device = torch.device(device)
         self.task_type = task_type
         self.normalize = normalize
@@ -88,6 +118,35 @@ class ONNXExporter:
         # 兼容旧 API：self.input_shape
         self.input_shape = tuple(self.dummy_inputs[0].shape[1:]) if self.single_input else None
         self.input_shapes = [tuple(t.shape[1:]) for t in self.dummy_inputs]
+
+    # ------------------------------------------------------------------
+    # 模型状态保护
+    # ------------------------------------------------------------------
+    def _model_device(self) -> torch.device:
+        """推断模型当前所在设备（无参数/无 buffer 时退回 CPU）。"""
+        for param in self.model.parameters():
+            return param.device
+        for buffer in self.model.buffers():
+            return buffer.device
+        return torch.device("cpu")
+
+    @contextmanager
+    def _temporary_eval(self):
+        """临时把模型切到目标设备的 eval 模式，退出时**恢复**原设备与 train/eval 状态。
+
+        v1.0.0 在 ``__init__`` 里直接 ``model.to(device).eval()``：导出一次就会永久
+        改变调用者的模型（搬到 CPU、关掉训练模式），调用方毫无察觉
+        （CodePlan 7.1.2 D12）。
+        """
+        device_before = self._model_device()
+        training_before = self.model.training
+        try:
+            self.model.to(self.device)
+            self.model.eval()
+            yield
+        finally:
+            self.model.to(device_before)
+            self.model.train(training_before)
 
     # ------------------------------------------------------------------
     # 导出
@@ -116,10 +175,10 @@ class ONNXExporter:
         parent = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(parent, exist_ok=True)
 
-        # 探测输出结构（dict / 多输出）
-        with torch.no_grad():
+        # 探测输出结构（dict / 多输出 / 嵌套）
+        with self._temporary_eval(), torch.no_grad():
             outputs = self.model(*self.dummy_inputs)
-        out_tensors, default_output_names = _flatten_outputs(outputs)
+        out_tensors, default_output_names, output_paths = _flatten_outputs(outputs)
 
         n_inputs = len(self.dummy_inputs)
         input_names = input_names or (
@@ -148,6 +207,14 @@ class ONNXExporter:
         args = self.dummy_inputs[0] if self.single_input else self.dummy_inputs
 
         if backend == "dynamo":
+            # 参数兼容性先判：dynamo 导出改用 dynamic_shapes 描述动态维度，
+            # 静默忽略 dynamic_axes 会让「动态 batch」的承诺失效（CodePlan 7.1.2 D12）。
+            if dynamic_axes:
+                raise ValueError(
+                    "backend='dynamo' 不支持 dynamic_axes —— dynamo 导出需用 dynamic_shapes "
+                    "描述动态维度。请显式传 dynamic_batch=False, dynamic_size=False，"
+                    "或改用 backend='trace'。（另：dynamo 后端还需额外安装 onnxscript）"
+                )
             try:
                 import onnxscript  # noqa: F401
             except ImportError as exc:  # pragma: no cover
@@ -159,23 +226,26 @@ class ONNXExporter:
                 args,
                 output_path,
                 opset_version=opset_version,
+                input_names=input_names,
+                output_names=output_names,
                 dynamo=True,
             )
         else:
-            torch.onnx.export(
-                self.model,
-                args,
-                output_path,
-                export_params=True,
-                opset_version=opset_version,
-                do_constant_folding=True,
-                input_names=input_names,
-                output_names=output_names,
-                dynamic_axes=dynamic_axes if dynamic_axes else None,
-                dynamo=False,
-            )
+            with self._temporary_eval():
+                torch.onnx.export(
+                    self.model,
+                    args,
+                    output_path,
+                    export_params=True,
+                    opset_version=opset_version,
+                    do_constant_folding=True,
+                    input_names=input_names,
+                    output_names=output_names,
+                    dynamic_axes=dynamic_axes if dynamic_axes else None,
+                    dynamo=False,
+                )
 
-        self._write_metadata(output_path, metadata)
+        self._write_metadata(output_path, metadata, extra={"output_path_map": output_paths})
         _logger.info(f"[OK] ONNX model exported: {output_path}")
 
         if simplify:
@@ -186,7 +256,12 @@ class ONNXExporter:
     # ------------------------------------------------------------------
     # 元数据
     # ------------------------------------------------------------------
-    def _write_metadata(self, onnx_path: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    def _write_metadata(
+        self,
+        onnx_path: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
         props: Dict[str, Any] = {}
         if self.normalize:
             props.update({f"normalize_{k}": json.dumps(v) for k, v in self.normalize.items()})
@@ -197,6 +272,8 @@ class ONNXExporter:
                     for k, v in metadata.items()
                 }
             )
+        if extra:
+            props.update({str(k): json.dumps(v) for k, v in extra.items()})
         if not props:
             return
         try:
@@ -255,28 +332,45 @@ class ONNXExporter:
         onnx_output_names = [out.name for out in session.get_outputs()]
 
         all_passed = True
-        for sample_idx in range(num_samples):
-            dummy = tuple(t.clone() for t in self.dummy_inputs)
-            with torch.no_grad():
-                torch_outs = _flatten_outputs(self.model(*dummy))[0]
+        with self._temporary_eval():
+            for sample_idx in range(num_samples):
+                dummy = tuple(t.clone() for t in self.dummy_inputs)
+                with torch.no_grad():
+                    torch_outs = _flatten_outputs(self.model(*dummy))[0]
 
-            feed = {name: t.numpy() for name, t in zip(onnx_input_names, dummy)}
-            onnx_outs = session.run(None, feed)
+                # CUDA / 需要梯度的张量必须 detach 且搬到 CPU 才能转 numpy
+                feed = {name: t.detach().cpu().numpy() for name, t in zip(onnx_input_names, dummy)}
+                onnx_outs = session.run(None, feed)
 
-            for out_idx, (torch_out, onnx_out) in enumerate(zip(torch_outs, onnx_outs)):
-                onnx_name = (
-                    onnx_output_names[out_idx]
-                    if out_idx < len(onnx_output_names)
-                    else f"#{out_idx}"
-                )
-                is_close = np.allclose(torch_out.numpy(), onnx_out, rtol=rtol, atol=atol)
-                max_diff = float(np.abs(torch_out.numpy() - onnx_out).max())
-                status = "[OK]" if is_close else "[FAIL]"
-                _logger.info(
-                    f"  {status} Sample {sample_idx + 1} output '{onnx_name}': max_diff={max_diff:.2e}"
-                )
-                if not is_close:
-                    all_passed = False
+                if len(torch_outs) != len(onnx_outs):
+                    raise ValueError(
+                        f"输出数量不一致：PyTorch {len(torch_outs)} 个，ONNX {len(onnx_outs)} 个。"
+                        f"（zip 会静默截断，因此这里直接报错）"
+                    )
+
+                for out_idx, (torch_out, onnx_out) in enumerate(zip(torch_outs, onnx_outs)):
+                    onnx_name = (
+                        onnx_output_names[out_idx]
+                        if out_idx < len(onnx_output_names)
+                        else f"#{out_idx}"
+                    )
+                    torch_array = torch_out.detach().cpu().numpy()
+                    if torch_array.shape != onnx_out.shape:
+                        _logger.error(
+                            f"  [FAIL] Sample {sample_idx + 1} output '{onnx_name}': "
+                            f"形状不一致 torch={torch_array.shape} onnx={onnx_out.shape}"
+                        )
+                        all_passed = False
+                        continue
+                    is_close = np.allclose(torch_array, onnx_out, rtol=rtol, atol=atol)
+                    max_diff = float(np.abs(torch_array - onnx_out).max())
+                    status = "[OK]" if is_close else "[FAIL]"
+                    _logger.info(
+                        f"  {status} Sample {sample_idx + 1} output '{onnx_name}': "
+                        f"max_diff={max_diff:.2e}"
+                    )
+                    if not is_close:
+                        all_passed = False
 
         if all_passed:
             _logger.info("[OK] ONNX accuracy verification passed")
