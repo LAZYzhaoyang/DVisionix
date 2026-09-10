@@ -7,7 +7,8 @@ GridDetectionLoss 内部使用 GridAssigner 做目标分配，再由
 objectness(BCE) / box(L1) / cls(CE) 三支损失组合而成，返回 dict 供 Task 与日志使用。
 """
 
-from typing import Any, Dict, Optional
+import warnings
+from typing import Any, Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -19,6 +20,49 @@ from ..base import BaseLoss
 from .assigner import ATSSAssigner, FCOSAssigner, GridAssigner, MaxIoUAssigner, TaskAlignedAssigner
 from .box_loss import GIoULoss
 from .matcher import HungarianMatcher
+
+
+def _resolve_reg_weights(
+    giou_weight: Optional[float],
+    l1_weight: Optional[float],
+    use_giou: Optional[bool],
+    owner: str,
+) -> Tuple[float, float]:
+    """解析框回归的 GIoU / L1 权重，并兼容已废弃的 ``use_giou`` 布尔开关。
+
+    v1.0.0 的实现是 ``total_reg += (giou if use_giou else l1) + l1``：
+    默认（``use_giou=True``）时实际为 **GIoU+L1**，``False`` 时是 **2×L1** ——
+    参数名与实际训练信号不符，且两种模式都无法单独关闭某一项
+    （CodePlan 7.1.2 D6）。
+
+    旧开关按其**字面意图**迁移（而不是复刻 bug）：
+
+    - ``use_giou=True``  -> ``giou_weight=1.0, l1_weight=0.0``（只算 GIoU）
+    - ``use_giou=False`` -> ``giou_weight=0.0, l1_weight=1.0``（只算 L1）
+
+    同时给出 ``use_giou`` 与任一显式权重会直接报错，避免「配了没生效」。
+
+    与同文件 ``DETRLoss`` 的 ``bbox_weight`` / ``giou_weight`` 约定保持一致。
+    """
+    if use_giou is None:
+        return (
+            1.0 if giou_weight is None else float(giou_weight),
+            0.0 if l1_weight is None else float(l1_weight),
+        )
+    if giou_weight is not None or l1_weight is not None:
+        raise ValueError(
+            f"{owner}: 'use_giou' 已废弃，不能与 giou_weight/l1_weight 同时指定；"
+            f"请只保留 giou_weight / l1_weight。"
+        )
+    warnings.warn(
+        f"{owner}: 'use_giou' 已废弃 —— 它在 v1.0.0 会重复累加 L1"
+        f"（True 时实为 GIoU+L1，False 时实为 2×L1）。"
+        f"按字面意图迁移为 giou_weight={1.0 if use_giou else 0.0}, "
+        f"l1_weight={0.0 if use_giou else 1.0}。",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return (1.0, 0.0) if use_giou else (0.0, 1.0)
 
 
 @LOSSES.register()
@@ -150,7 +194,9 @@ class FCOSDetectionLoss(BaseLoss):
         cls_weight: float = 1.0,
         reg_weight: float = 1.0,
         center_weight: float = 1.0,
-        use_giou: bool = True,
+        giou_weight: Optional[float] = None,
+        l1_weight: Optional[float] = None,
+        use_giou: Optional[bool] = None,
         weight: float = 1.0,
     ):
         super().__init__(weight)
@@ -166,7 +212,9 @@ class FCOSDetectionLoss(BaseLoss):
         self.cls_weight = float(cls_weight)
         self.reg_weight = float(reg_weight)
         self.center_weight = float(center_weight)
-        self.use_giou = use_giou
+        self.giou_weight, self.l1_weight = _resolve_reg_weights(
+            giou_weight, l1_weight, use_giou, "FCOSDetectionLoss"
+        )
         self.focal = SigmoidFocalLoss()
         self.giou = GIoULoss()
 
@@ -196,6 +244,7 @@ class FCOSDetectionLoss(BaseLoss):
         total_reg = torch.tensor(0.0, device=device)
         total_center = torch.tensor(0.0, device=device)
         num_pos = 0
+        num_cls_terms = 0
 
         for b in range(len(batch["boxes"])):
             boxes = batch["boxes"][b].to(device).float()
@@ -218,9 +267,11 @@ class FCOSDetectionLoss(BaseLoss):
                     cls_target[pos, lbl[pos] - 1] = 1.0
 
                 total_cls = total_cls + self.focal(cls_flat, cls_target)
+                num_cls_terms += 1
 
                 if pos.any():
-                    num_pos += int(pos.sum())
+                    n_pos = int(pos.sum())
+                    num_pos += n_pos
                     locs = self._locations(cls_l.shape[1], cls_l.shape[2], stride, device)
                     pred_ltrb = torch.exp(reg_flat[pos].clamp(min=-8, max=8)) * stride
                     pred_boxes = torch.stack(
@@ -232,12 +283,28 @@ class FCOSDetectionLoss(BaseLoss):
                         ],
                         dim=1,
                     )
-                    giou_loss = self.giou(pred_boxes, box_t[pos])
-                    l1_loss = F.l1_loss(reg_flat[pos], reg_t[pos])
-                    total_reg = total_reg + (giou_loss if self.use_giou else l1_loss) + l1_loss
-                    total_center = total_center + F.binary_cross_entropy_with_logits(
-                        cen_flat[pos], cnt_t[pos]
+                    # 各分量先乘回正样本数还原成"和"，循环结束后统一除以总正样本数，
+                    # 使回归/中心度损失成为**跨正样本的真实均值**，
+                    # 不再随 batch size 与层数漂移（CodePlan 7.1.2 D7）。
+                    if self.giou_weight > 0.0:
+                        total_reg = (
+                            total_reg + self.giou_weight * self.giou(pred_boxes, box_t[pos]) * n_pos
+                        )
+                    if self.l1_weight > 0.0:
+                        total_reg = (
+                            total_reg
+                            + self.l1_weight * F.l1_loss(reg_flat[pos], reg_t[pos]) * n_pos
+                        )
+                    total_center = (
+                        total_center
+                        + F.binary_cross_entropy_with_logits(cen_flat[pos], cnt_t[pos]) * n_pos
                     )
+
+        # 归一化：cls 取所有 (图, 层) 项的均值；reg / center 取所有正样本的均值。
+        # 空目标时 num_pos == 0，分子也是 0，max(...,1) 保证不产生 NaN。
+        total_cls = total_cls / max(num_cls_terms, 1)
+        total_reg = total_reg / max(num_pos, 1)
+        total_center = total_center / max(num_pos, 1)
 
         total = (
             self.cls_weight * total_cls
@@ -369,7 +436,9 @@ class YOLOLoss(BaseLoss):
         topk: int = 13,
         cls_weight: float = 1.0,
         reg_weight: float = 1.0,
-        use_giou: bool = True,
+        giou_weight: Optional[float] = None,
+        l1_weight: Optional[float] = None,
+        use_giou: Optional[bool] = None,
         weight: float = 1.0,
     ):
         super().__init__(weight)
@@ -378,7 +447,9 @@ class YOLOLoss(BaseLoss):
         self.assigner = TaskAlignedAssigner(num_classes, topk=topk)
         self.cls_weight = float(cls_weight)
         self.reg_weight = float(reg_weight)
-        self.use_giou = use_giou
+        self.giou_weight, self.l1_weight = _resolve_reg_weights(
+            giou_weight, l1_weight, use_giou, "YOLOLoss"
+        )
         self.focal = SigmoidFocalLoss()
         self.giou = GIoULoss()
 
@@ -401,6 +472,7 @@ class YOLOLoss(BaseLoss):
         total_cls = torch.tensor(0.0, device=device)
         total_reg = torch.tensor(0.0, device=device)
         num_pos = 0
+        num_cls_terms = 0
 
         for b in range(len(batch["boxes"])):
             boxes = batch["boxes"][b].to(device).float()
@@ -441,9 +513,11 @@ class YOLOLoss(BaseLoss):
                 if pos.any():
                     cls_target[pos, lbl[pos] - 1] = 1.0
                 total_cls = total_cls + self.focal(cls_flat, cls_target)
+                num_cls_terms += 1
 
                 if pos.any():
-                    num_pos += int(pos.sum())
+                    n_pos = int(pos.sum())
+                    num_pos += n_pos
                     locs = centers_l[lvl][pos]
                     ltrb_t = torch.stack(
                         [
@@ -455,9 +529,20 @@ class YOLOLoss(BaseLoss):
                         dim=1,
                     ).clamp(min=0)
                     pred_boxes = pred_boxes_l[lvl][pos]
-                    giou_loss = self.giou(pred_boxes, box_t[pos])
-                    l1_loss = F.l1_loss(reg_flat[pos], ltrb_t / stride)
-                    total_reg = total_reg + (giou_loss if self.use_giou else l1_loss) + l1_loss
+                    # 同 FCOS：先乘回正样本数还原成"和"，循环末尾统一除以总正样本数，
+                    # 使回归损失成为跨正样本的真实均值，不随 batch size / 层数漂移（D7）。
+                    if self.giou_weight > 0.0:
+                        total_reg = (
+                            total_reg + self.giou_weight * self.giou(pred_boxes, box_t[pos]) * n_pos
+                        )
+                    if self.l1_weight > 0.0:
+                        total_reg = (
+                            total_reg
+                            + self.l1_weight * F.l1_loss(reg_flat[pos], ltrb_t / stride) * n_pos
+                        )
+
+        total_cls = total_cls / max(num_cls_terms, 1)
+        total_reg = total_reg / max(num_pos, 1)
 
         total = self.cls_weight * total_cls + self.reg_weight * total_reg
         return {
