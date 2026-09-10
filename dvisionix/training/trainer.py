@@ -17,6 +17,7 @@
 
 import os
 import random
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -29,6 +30,28 @@ from ..utils import get_device, set_seed
 from ..utils.logging import TrainingLogger
 from .callbacks import Callback, CallbackList, ModelCheckpoint, ProgressBar
 from .tasks import BaseTask
+
+#: 完整 checkpoint 的结构版本。
+#: 只要 checkpoint 的字段结构发生变化就必须递增，使旧文件被**明确拒绝**，
+#: 而不是按错误的结构解出一份看似正常的训练状态（CodePlan 7.5 步骤 3-3）。
+CHECKPOINT_SCHEMA_VERSION = 1
+
+
+def _unwrap_module(model: Any) -> Any:
+    """剥掉 DDP / torch.compile 的包装，拿到真正的模型对象。
+
+    ``save_checkpoint`` 时 ``self.model`` 可能已被 DDP 或 ``torch.compile`` 包装，
+    直接取类名会得到 ``DistributedDataParallel`` / ``OptimizedModule``，
+    让「模型类型一致性」校验在单卡/多卡之间误报。
+    """
+    seen = set()
+    while model is not None and id(model) not in seen:
+        seen.add(id(model))
+        inner = getattr(model, "module", None) or getattr(model, "_orig_mod", None)
+        if inner is None or inner is model:
+            break
+        model = inner
+    return model
 
 
 def _make_scaler(amp: bool, device: torch.device):
@@ -44,11 +67,23 @@ def _make_scaler(amp: bool, device: torch.device):
             return None
 
 
-def _infer_batch_size(step_result, batch) -> int:
-    try:
-        return int(batch["image"].shape[0])
-    except Exception:
-        return 1
+def _infer_batch_size(batch: Dict[str, Any]) -> int:
+    """从 batch 取样本数，用于按样本数加权指标的均值。
+
+    只认明确的图像键（``image`` / SimCLR 的 ``image1``），取不到就**显式报错**。
+    v1.0.0 用的是「遍历 step_result 与 batch 的所有值、取第一个带 batch 维的张量」，
+    当 ``preds``/``targets`` 是 ``(Tensor, Tensor)`` 形态时会返回 **tuple 的长度 2**
+    作为 batch size；``except: return 1`` 也会把错误静默成「每个 batch 记 1 个样本」。
+    """
+    if isinstance(batch, dict):
+        for key in ("image", "image1", "image2"):
+            value = batch.get(key)
+            if value is not None and hasattr(value, "shape") and value.dim() > 0:
+                return int(value.shape[0])
+    raise ValueError(
+        "无法从 batch 推断 batch size：batch 必须含形如 (B, ...) 的 'image' 键"
+        "（SimCLR 可用 'image1'/'image2'）。自定义任务请确保 batch 携带 image。"
+    )
 
 
 def _values_equal(a: Any, b: Any) -> bool:
@@ -195,6 +230,7 @@ class Trainer:
         compile: bool = False,
         channels_last: bool = False,
         logger: Optional[TrainingLogger] = None,
+        config_hash: Optional[str] = None,
     ):
         self.task = task
         self.train_loader = train_loader
@@ -211,6 +247,8 @@ class Trainer:
         self.find_unused_parameters = find_unused_parameters
         self.compile = compile
         self.channels_last = channels_last
+        # 解析后配置的哈希：写入 checkpoint 并在 resume 时校验配置一致性
+        self.config_hash = config_hash
 
         # 分布式状态
         self.strategy = strategy
@@ -399,11 +437,10 @@ class Trainer:
                 **{f"val_{k}": v for k, v in val_logs.items()},
             }
 
-            # 任务级 epoch 指标（MetricCollection）
-            if self.val_loader is not None and not self.is_distributed:
-                epoch_logs.update(self.task.on_validation_epoch_end())
-            elif self.is_distributed and self.rank == 0:
-                epoch_logs.update(self.task.on_validation_epoch_end())
+            # 任务级 epoch 指标（accuracy / f1 / mAP ...）已在 _evaluate 内由
+            # `on_validation_epoch_end()` 计算并 reset，并以 val_ 前缀并入 val_logs。
+            # 这里**不能**再调用一次：它在已重置的累加器上会算出全 0
+            # 并覆盖上面的正确值（v1.0.0 的 history.csv 里那列裸 accuracy 正是这么来的）。
 
             # 学习率调度（epoch 级）
             if self.scheduler is not None:
@@ -452,13 +489,14 @@ class Trainer:
         self.optimizer.zero_grad()
 
     def _run_epoch(self, mode: str) -> Dict[str, float]:
-        if mode == "train":
-            self.model.train()
-            loader = self.train_loader
-        else:
-            self.model.eval()
-            loader = self.val_loader
-            self.callbacks.on_validation_begin(self)
+        if mode != "train":
+            # 验证一律走 _evaluate —— 与独立 validate() 同一实现
+            if self.val_loader is None:
+                raise ValueError("No validation loader provided")
+            return self._evaluate(self.val_loader)
+
+        self.model.train()
+        loader = self.train_loader
 
         metric_sums: Dict[str, float] = {}
         metric_counts: Dict[str, int] = {}
@@ -469,34 +507,71 @@ class Trainer:
         for batch_idx, batch in enumerate(loader):
             self.callbacks.on_batch_begin(self, batch_idx, mode, batch)
 
-            if mode == "train":
-                with torch.autocast(device_type=self.device.type, enabled=bool(self.scaler)):
-                    step_result = self.task.training_step(self.model, batch, self.device)
-                loss = step_result["loss"] / self.accumulate_grad_batches
-                if self.scaler is not None:
-                    loss = self.scaler.scale(loss)
-                loss.backward()
-                if (batch_idx + 1) % self.accumulate_grad_batches == 0 or (
-                    batch_idx + 1
-                ) == total_batches:
-                    self._optimizer_step()
-                    self.global_step += 1
-            else:
-                with torch.no_grad():
-                    step_result = self.task.validation_step(self.model, batch, self.device)
-                self._update_metrics_for_step(step_result)
+            with torch.autocast(device_type=self.device.type, enabled=bool(self.scaler)):
+                step_result = self.task.training_step(self.model, batch, self.device)
+            loss = step_result["loss"] / self._accumulation_divisor(batch_idx, total_batches)
+            if self.scaler is not None:
+                loss = self.scaler.scale(loss)
+            loss.backward()
+            if (batch_idx + 1) % self.accumulate_grad_batches == 0 or (
+                batch_idx + 1
+            ) == total_batches:
+                self._optimizer_step()
+                self.global_step += 1
 
-            # 标量日志按 batch size 加权累积（与 validate() 共用同一实现）
             step_logs = self._accumulate_step_logs(
-                step_result, _infer_batch_size(step_result, batch), metric_sums, metric_counts
+                step_result, _infer_batch_size(batch), metric_sums, metric_counts
             )
-
             self.callbacks.on_batch_end(self, batch_idx, step_logs, mode, batch)
 
-        if mode == "val":
-            self.callbacks.on_validation_end(self)
-        avg_metrics = {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
-        return avg_metrics
+        return {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
+
+    def _accumulation_divisor(self, batch_idx: int, total_batches: int) -> int:
+        """当前 micro-batch 所在累积窗口的**实际长度**，作为梯度累积分母。
+
+        v1.0.0 一律除以 ``accumulate_grad_batches``，于是末尾不足一个完整窗口时
+        梯度被系统性低估：例如 5 个 batch + accum=2 的窗口是 2/2/1，
+        尾窗只有 1 个 batch 却仍除以 2（CodePlan 7.5 步骤 3-3）。
+
+        分母必须是**所在窗口**的长度而不是「从当前位置到末尾的剩余数」——
+        否则 4 batch + accum=2 时最后一个 batch 会被误算成 /1。
+        """
+        accum = self.accumulate_grad_batches
+        if accum <= 1:
+            return 1
+        window_start = (batch_idx // accum) * accum
+        return max(1, min(accum, total_batches - window_start))
+
+    def _evaluate(self, loader: DataLoader) -> Dict[str, float]:
+        """在给定 loader 上评估，返回按 batch size 加权的指标与 epoch 级指标。
+
+        **训练中验证与独立 ``validate()`` 共用本实现**，因此两条路径口径完全一致，
+        并且独立 ``validate()`` 也会触发 ``on_validation_begin`` / ``on_validation_end``
+        —— EMA 回调在这两个钩子里交换/恢复权重，v1.0.0 的 ``validate()`` 完全不走回调，
+        所以它报的是**未交换 EMA 权重**的指标（CodePlan 7.1.2 D8）。
+        """
+        self.model.eval()
+        self.task.reset_metrics()
+        metric_sums: Dict[str, float] = {}
+        metric_counts: Dict[str, int] = {}
+
+        self.callbacks.on_validation_begin(self)
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(loader):
+                self.callbacks.on_batch_begin(self, batch_idx, "val", batch)
+                step_result = self.task.validation_step(self.model, batch, self.device)
+                self._update_metrics_for_step(step_result)
+                step_logs = self._accumulate_step_logs(
+                    step_result, _infer_batch_size(batch), metric_sums, metric_counts
+                )
+                self.callbacks.on_batch_end(self, batch_idx, step_logs, "val", batch)
+        self.callbacks.on_validation_end(self)
+
+        avg = {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
+        # on_validation_epoch_end 同时负责 compute 与 reset：
+        # 必须**只调用一次**，否则第二次会在已重置的累加器上算出全 0
+        avg.update(self.task.on_validation_epoch_end())
+        return avg
 
     def _gather_and_update_metrics(self, step_result: Dict[str, Any]) -> None:
         """分布式：all_gather 各 rank 结果，仅 rank0 用全局结果更新指标。"""
@@ -549,29 +624,17 @@ class Trainer:
     def validate(
         self, model: nn.Module, val_loader: Optional[DataLoader] = None
     ) -> Dict[str, float]:
-        """独立验证：对给定模型与验证集计算指标并返回。"""
+        """独立验证：对给定模型与验证集计算指标并返回。
+
+        走与训练中验证完全相同的 ``_evaluate`` 实现：
+        分布式下给出**全局指标**（不再只统计 rank0 分片），
+        并正常触发 ``on_validation_begin/end``（EMA 权重交换依赖它们）。
+        """
         self.model = model.to(self.device)
         loader = val_loader or self.val_loader
         if loader is None:
             raise ValueError("No validation loader provided")
-
-        self.model.eval()
-        metric_sums: Dict[str, float] = {}
-        metric_counts: Dict[str, int] = {}
-        self.task.reset_metrics()
-
-        with torch.no_grad():
-            for batch in loader:
-                step_result = self.task.validation_step(self.model, batch, self.device)
-                # 与训练中验证共用同一指标更新与日志累积实现，保证两条路径口径一致
-                self._update_metrics_for_step(step_result)
-                self._accumulate_step_logs(
-                    step_result, _infer_batch_size(step_result, batch), metric_sums, metric_counts
-                )
-
-        avg = {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
-        avg.update(self.task.on_validation_epoch_end())
-        return avg
+        return self._evaluate(loader)
 
     # ------------------------------------------------------------------
     # 推理
@@ -609,7 +672,7 @@ class Trainer:
             torch.cuda.set_rng_state_all(cuda_state)
 
     def save_checkpoint(self, path: str) -> None:
-        """保存完整检查点（model/optimizer/scheduler/scaler/rng/callbacks/task）。"""
+        """保存完整检查点（model/optimizer/scheduler/scaler/rng/callbacks/task + 元信息）。"""
         if not self._is_rank0():
             return
         checkpoint = {
@@ -618,6 +681,7 @@ class Trainer:
             "model_state_dict": self.model.state_dict() if self.model else None,
             "optimizer_state_dict": self.optimizer.state_dict() if self.optimizer else None,
             "rng_state": self._collect_rng_state(),
+            **self._checkpoint_meta(),
         }
         if self.scaler is not None:
             checkpoint["scaler_state_dict"] = self.scaler.state_dict()
@@ -636,16 +700,97 @@ class Trainer:
         torch.save(checkpoint, path)
         self.logger.info(f"Checkpoint saved to: {path}")
 
-    def load_checkpoint(self, path: str, model: nn.Module, strict: bool = True) -> None:
+    def _checkpoint_meta(self) -> Dict[str, Any]:
+        """写成 checkpoint 的运行元信息，供 resume 时做兼容性校验。"""
+        model = _unwrap_module(self.model)
+        return {
+            "schema_version": CHECKPOINT_SCHEMA_VERSION,
+            "task_type": type(self.task).__name__ if self.task is not None else None,
+            "model_type": type(model).__name__ if model is not None else None,
+            "config_hash": self.config_hash,
+        }
+
+    @staticmethod
+    def _verify_checkpoint_meta(
+        saved: Dict[str, Any],
+        current: Dict[str, Any],
+        path: str,
+        allow_config_mismatch: bool,
+    ) -> None:
+        """校验 checkpoint 与当前运行是否兼容。
+
+        v1.0.0 的 resume 完全不检查任何元信息：拿另一个任务的 checkpoint 续训同一个
+        Trainer 会静默加载形状兼容但语义不同的权重，得到没有意义的结果
+        （CodePlan 7.5 步骤 3-3）。
+        """
+        schema = saved.get("schema_version")
+        if schema is None:
+            warnings.warn(
+                f"checkpoint {path} 缺少 schema_version（v1.0.0 之前保存的旧格式），"
+                f"已按当前结构加载；建议用当前版本重新保存。",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        elif int(schema) > CHECKPOINT_SCHEMA_VERSION:
+            raise ValueError(
+                f"checkpoint {path} 的 schema_version={schema} 高于当前支持的 "
+                f"{CHECKPOINT_SCHEMA_VERSION}；请升级代码后再加载。"
+            )
+
+        for key, label in (("task_type", "任务类型"), ("model_type", "模型类型")):
+            saved_value, current_value = saved.get(key), current.get(key)
+            if saved_value and current_value and saved_value != current_value:
+                raise ValueError(
+                    f"checkpoint {path} 的{label}为 {saved_value!r}，当前为 {current_value!r}；"
+                    f"该 checkpoint 不属于当前任务，拒绝加载。"
+                )
+
+        saved_hash, current_hash = saved.get("config_hash"), current.get("config_hash")
+        if saved_hash and current_hash and saved_hash != current_hash and not allow_config_mismatch:
+            raise ValueError(
+                f"checkpoint {path} 的配置哈希为 {saved_hash}，当前配置为 {current_hash}；"
+                f"配置不一致的 resume 可能静默产生无意义的训练结果。"
+                f"确认确实要续训请显式传 allow_config_mismatch=True。"
+            )
+
+    def load_checkpoint(
+        self,
+        path: str,
+        model: nn.Module,
+        strict: bool = True,
+        allow_config_mismatch: bool = False,
+    ) -> None:
+        """加载检查点并恢复训练状态（断点续训）。
+
+        Args:
+            path: checkpoint 路径。
+            model: 目标模型（``self.model`` 为空时使用）。
+            strict: 传给 ``load_state_dict`` 的 strict 开关。
+            allow_config_mismatch: 显式允许配置哈希不一致的续训（默认拒绝）。
+        """
         # torch 2.6 起默认 weights_only=True，导致完整 checkpoint 无法反序列化
-        """加载检查点并恢复训练状态（断点续训）。"""
         try:
             checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         except TypeError:  # pragma: no cover
             checkpoint = torch.load(path, map_location=self.device)
 
+        if not isinstance(checkpoint, dict) or not any(
+            key in checkpoint
+            for key in ("model_state_dict", "optimizer_state_dict", "epoch", "global_step")
+        ):
+            raise ValueError(
+                f"{path} 不是完整 checkpoint（缺少 model_state_dict / epoch 等字段）。"
+                f"纯 state_dict 请改用 dvisionix.training.load_backbone 加载骨干权重，"
+                f"或显式包装为 {{'model_state_dict': state_dict}}。"
+            )
+
+        # 先挂上模型，_checkpoint_meta 才能取到真实的模型类名用于一致性校验
         if self.model is None:
             self.model = model.to(self.device)
+
+        self._verify_checkpoint_meta(
+            checkpoint, self._checkpoint_meta(), path, allow_config_mismatch
+        )
 
         if checkpoint.get("model_state_dict"):
             self.model.load_state_dict(checkpoint["model_state_dict"], strict=strict)

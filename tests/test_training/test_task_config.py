@@ -87,7 +87,13 @@ def test_optimizer_and_scheduler_registries():
 
 
 def test_validation_metrics_integration():
-    """Trainer 验证循环应产出任务指标（accuracy 等）。"""
+    """Trainer 验证循环应产出任务指标（accuracy 等）。
+
+    契约（CodePlan 7.5 步骤 3-2）：epoch 级指标以 ``val_`` 前缀并入 history，
+    与 ``val_loss`` 命名一致；不再出现裸 ``accuracy`` 列 ——
+    v1.0.0 那列裸名来自 fit() 在 ``_evaluate`` 之外**重复调用**
+    ``on_validation_epoch_end()``，第二次是在已 reset 的累加器上算出的全 0。
+    """
     from dvisionix.models import SimpleCNN
     from dvisionix.training import Trainer
 
@@ -101,5 +107,7 @@ def test_validation_metrics_integration():
     result = trainer.fit(SimpleCNN(num_classes=3))
     last_epoch = result["history"][-1]
     assert "train_loss" in last_epoch and "val_loss" in last_epoch
-    assert "accuracy" in last_epoch  # MetricCollection 指标
+    assert "val_accuracy" in last_epoch  # MetricCollection 指标（带 val_ 前缀）
+    assert "accuracy" not in last_epoch, "epoch 级指标不应再以裸名出现"
+    assert last_epoch["val_accuracy"] > 0.0, "指标被算成 0 说明被重复计算（二次调用）"
     assert "history" in result and len(result["history"]) == 1

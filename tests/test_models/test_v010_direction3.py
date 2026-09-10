@@ -55,6 +55,9 @@ def test_eelan_layer():
 
 
 def test_yolov10_forward_decode_and_loss():
+    # 必须在 build_model **之前**播种：模型初始权重也是随机的，
+    # 否则本测试会依赖此前测试消耗掉的全局 RNG 状态（顺序相关的偶发失败）。
+    torch.manual_seed(0)
     assert "yolo_v10" in MODELS and "yolo_v10_head" in HEADS and "yolo_v10_detection" in LOSSES
     model = build_model(
         {
@@ -70,7 +73,6 @@ def test_yolov10_forward_decode_and_loss():
     boxes, scores, labels = model.decode(preds, (128, 128), score_threshold=0.0)
     assert len(boxes) == 1 and boxes[0].shape[1] == 4
 
-    torch.manual_seed(0)
     loss_fn = OneToOneYOLOLoss(num_classes=3, strides=(2, 4, 8))
     opt = torch.optim.Adam(model.parameters(), lr=1e-4)
     first = last = None
@@ -89,6 +91,8 @@ def test_yolov10_forward_decode_and_loss():
 
 
 def test_centernet_forward_decode_and_loss():
+    # 同 yolov10：模型初始权重也是随机的，播种必须在 build_model 之前
+    torch.manual_seed(0)
     assert "centernet" in MODELS and "centernet_head" in HEADS and "centernet_detection" in LOSSES
     bb = {
         "type": "sequential_backbone",
@@ -112,7 +116,6 @@ def test_centernet_forward_decode_and_loss():
     boxes, scores, labels = model.decode(preds, (128, 128), score_threshold=0.0)
     assert len(boxes) == 1 and boxes[0].shape[1] == 4
 
-    torch.manual_seed(0)
     loss_fn = CenterNetLoss(num_classes=3, stride=8)
     opt = torch.optim.Adam(model.parameters(), lr=1e-3)
     first = last = None

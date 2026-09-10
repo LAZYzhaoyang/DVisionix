@@ -9,6 +9,7 @@ from typing import List, Optional
 from ..utils.logging import TrainingLogger
 from .callbacks import EMA, Callback, EarlyStopping, ModelCheckpoint
 from .trainer import Trainer
+from .workdir import hash_config
 
 
 def build_callbacks(cfg, work_dir: Optional[str] = None) -> List[Callback]:
@@ -93,6 +94,7 @@ def build_trainer(
         compile=training.get("compile", False),
         channels_last=training.get("channels_last", False),
         logger=logger,
+        config_hash=hash_config(cfg),
     )
 
 
