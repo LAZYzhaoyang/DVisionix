@@ -68,25 +68,36 @@ def build_transforms(task_type, image_size, train):
 
 
 def build_synthetic_dataset(
-    task_type, num_samples, num_classes, image_size, transforms, cache_dir=None
+    task_type, num_samples, num_classes, image_size, transforms, cache_dir=None, split="train"
 ):
-    """生成内存合成数据集（便于无网络环境快速验证）。"""
+    """生成内存合成数据集（便于无网络环境快速验证）。
+
+    Args:
+        split: 数据集划分标识（``train`` / ``val``）。**必须区分** ——
+            v1.0.0 的 train 与 val 共用同一目录和 ``img_%04d.png`` 命名，
+            于是验证集的前 N 张就是训练集的前 N 张，验证指标天然含泄漏
+            （CodePlan 7.1.2 D13）。
+    """
     import cv2
 
     tmp_dir = cache_dir or os.path.join(".cache", "synthetic", task_type)
     os.makedirs(tmp_dir, exist_ok=True)
+    # 稳定的划分种子；不能用内置 hash()（对 str 按进程随机化）
+    split_seed = sum(ord(c) for c in str(split)) * 100003
     samples = []
     for i in range(num_samples):
-        img = np.random.randint(0, 255, (image_size, image_size, 3), dtype=np.uint8)
-        path = os.path.join(tmp_dir, f"img_{i:04d}.png")
+        rng = np.random.default_rng([split_seed, i])
+        img = rng.integers(0, 255, (image_size, image_size, 3), dtype=np.uint8)
+        path = os.path.join(tmp_dir, f"{split}_img_{i:04d}.png")
         if not os.path.exists(path):
             cv2.imwrite(path, img)
         if task_type == "classification":
             samples.append({"image": path, "label": i % num_classes})
         elif task_type == "detection":
-            x1, y1 = np.random.randint(0, image_size // 2, 2)
-            x2 = x1 + np.random.randint(10, image_size // 2)
-            y2 = y1 + np.random.randint(10, image_size // 2)
+            half = max(2, image_size // 2)
+            x1, y1 = (int(v) for v in rng.integers(0, half, 2))
+            x2 = x1 + int(rng.integers(1, half))
+            y2 = y1 + int(rng.integers(1, half))
             samples.append(
                 {
                     "image": path,
@@ -97,8 +108,8 @@ def build_synthetic_dataset(
                 }
             )
         elif task_type == "segmentation":
-            mask = (np.random.rand(image_size, image_size) * num_classes).astype(np.uint8)
-            mask_path = os.path.join(tmp_dir, f"mask_{i:04d}.png")
+            mask = (rng.random((image_size, image_size)) * num_classes).astype(np.uint8)
+            mask_path = os.path.join(tmp_dir, f"{split}_mask_{i:04d}.png")
             cv2.imwrite(mask_path, mask)
             samples.append({"image": path, "mask": mask_path})
         elif task_type == "simclr":
@@ -132,11 +143,12 @@ def build_data(cfg, work_dir=None):
         n_train = data_cfg.get("num_samples", 64)
         n_val = data_cfg.get("val_samples", 16)
         cache_dir = os.path.join(work_dir, ".cache", "synthetic", task_type) if work_dir else None
+        # train / val 必须用不同 split，否则二者共用文件名序列、验证集成为训练集子集
         train_ds = build_synthetic_dataset(
-            task_type, n_train, num_classes, image_size, train_tf, cache_dir
+            task_type, n_train, num_classes, image_size, train_tf, cache_dir, split="train"
         )
         val_ds = build_synthetic_dataset(
-            task_type, n_val, num_classes, image_size, val_tf, cache_dir
+            task_type, n_val, num_classes, image_size, val_tf, cache_dir, split="val"
         )
     else:
         root = data_cfg.get("root", "./data")

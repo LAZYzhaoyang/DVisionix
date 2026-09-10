@@ -98,6 +98,50 @@ def test_config_discovery_is_sane():
         assert any(rel.startswith(task_dir) for rel in TRAINABLE_CONFIGS), task_dir
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("task_type", ["classification", "detection", "segmentation", "simclr"])
+def test_synthetic_train_and_val_splits_do_not_overlap(task_type, tmp_path):
+    """D13：合成数据的 train / val 不能共用样本文件。
+
+    v1.0.0 两者共用同一目录与 ``img_%04d.png`` 命名，于是 val 的前 N 张
+    恰好就是 train 的前 N 张 —— 所有 demo 的 ``val_loss`` / ``val_acc``
+    都带数据泄漏，指标偏乐观且无意义。
+    """
+    from tools import train as train_tool
+
+    cache = str(tmp_path / "cache")
+    train_ds = train_tool.build_synthetic_dataset(task_type, 4, 3, 32, None, cache, split="train")
+    val_ds = train_tool.build_synthetic_dataset(task_type, 4, 3, 32, None, cache, split="val")
+
+    def _paths(ds):
+        keys = ["image"] + (["mask"] if task_type == "segmentation" else [])
+        return {tuple(os.path.basename(s[k]) for k in keys) for s in ds.samples}
+
+    train_paths, val_paths = _paths(train_ds), _paths(val_ds)
+    assert len(train_paths) == 4 and len(val_paths) == 4
+    assert not (train_paths & val_paths), f"train/val 共用样本：{train_paths & val_paths}"
+
+
+@pytest.mark.unit
+def test_synthetic_dataset_is_reproducible(tmp_path):
+    """同一 split 重复构建必须得到完全相同的样本路径与标签（便于复现与缓存）。"""
+    from tools import train as train_tool
+
+    cache = str(tmp_path / "cache")
+    first = train_tool.build_synthetic_dataset("classification", 3, 3, 32, None, cache, "train")
+    second = train_tool.build_synthetic_dataset("classification", 3, 3, 32, None, cache, "train")
+    assert [s["image"] for s in first.samples] == [s["image"] for s in second.samples]
+    assert [s["label"] for s in first.samples] == [s["label"] for s in second.samples]
+
+
+@pytest.mark.unit
+def test_synthetic_dataset_rejects_unknown_task_type(tmp_path):
+    from tools import train as train_tool
+
+    with pytest.raises(ValueError, match="不支持 task_type"):
+        train_tool.build_synthetic_dataset("nope", 2, 3, 32, None, str(tmp_path), "train")
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 @pytest.mark.parametrize("rel", [_param(r) for r in TRAINABLE_CONFIGS])
