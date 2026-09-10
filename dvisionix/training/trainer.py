@@ -759,6 +759,7 @@ class Trainer:
         model: nn.Module,
         strict: bool = True,
         allow_config_mismatch: bool = False,
+        trusted: bool = True,
     ) -> None:
         """加载检查点并恢复训练状态（断点续训）。
 
@@ -767,12 +768,28 @@ class Trainer:
             model: 目标模型（``self.model`` 为空时使用）。
             strict: 传给 ``load_state_dict`` 的 strict 开关。
             allow_config_mismatch: 显式允许配置哈希不一致的续训（默认拒绝）。
+            trusted: **安全开关**。断点续训需要恢复优化器 / 回调 / RNG 等非张量状态，
+                这些状态只能通过 pickle 反序列化，因此这里默认 ``True``
+                —— 前提是该文件由本项目的 ``save_checkpoint`` 产出。
+                **不要**对来源不明的文件使用默认值：反序列化 pickle 等于执行任意代码。
+                若只需读取模型权重，请用 ``dvisionix.training.load_backbone``
+                （默认安全模式），或显式传 ``trusted=False``
+                （此时使用 ``weights_only=True``，携带非张量状态的完整 checkpoint 会加载失败）。
+
+        Notes:
+            加载前会校验 checkpoint 结构、schema 版本、任务/模型类型与配置哈希；
+            ``model_state_dict`` 的值必须全部是张量。
         """
-        # torch 2.6 起默认 weights_only=True，导致完整 checkpoint 无法反序列化
         try:
-            checkpoint = torch.load(path, map_location=self.device, weights_only=False)
-        except TypeError:  # pragma: no cover
-            checkpoint = torch.load(path, map_location=self.device)
+            checkpoint = torch.load(path, map_location=self.device, weights_only=not trusted)
+        except Exception as exc:
+            if trusted:
+                raise
+            raise ValueError(
+                f"以安全模式（weights_only=True）加载 {path} 失败：{type(exc).__name__}: {exc}\n"
+                f"完整训练状态（优化器 / 回调 / RNG）无法在安全模式下反序列化。"
+                f"如果确认文件由本项目产出且来源可信，请传 trusted=True。"
+            ) from exc
 
         if not isinstance(checkpoint, dict) or not any(
             key in checkpoint
@@ -791,6 +808,16 @@ class Trainer:
         self._verify_checkpoint_meta(
             checkpoint, self._checkpoint_meta(), path, allow_config_mismatch
         )
+
+        # 结构校验：model_state_dict 必须只含张量
+        state = checkpoint.get("model_state_dict")
+        if state:
+            invalid = [k for k, v in state.items() if not isinstance(v, torch.Tensor)]
+            if invalid:
+                raise ValueError(
+                    f"checkpoint {path} 的 model_state_dict 含非张量条目"
+                    f"（示例：{invalid[:3]}，共 {len(invalid)} 个）；文件结构可能已损坏或被篡改。"
+                )
 
         if checkpoint.get("model_state_dict"):
             self.model.load_state_dict(checkpoint["model_state_dict"], strict=strict)

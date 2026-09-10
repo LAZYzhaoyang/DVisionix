@@ -160,3 +160,62 @@ def test_unwrap_module_peels_ddp_and_compile_wrappers():
     assert _unwrap_module(_Compiled(_DDP(inner))) is inner
     assert _unwrap_module(inner) is inner
     assert _unwrap_module(None) is None
+
+
+class _WithBackbone(torch.nn.Module):
+    """带 ``.backbone`` 子模块的最小模型，用于 load_backbone 契约测试。"""
+
+    def __init__(self):
+        super().__init__()
+        self.backbone = torch.nn.Linear(4, 4)
+
+
+@pytest.mark.unit
+class TestLoadTrustPolicy:
+    """反序列化 pickle 等于执行任意代码，因此第三方权重默认按不可信处理。"""
+
+    def test_load_backbone_accepts_pure_state_dict_in_safe_mode(self, tmp_path):
+        from dvisionix.training import load_backbone
+
+        path = os.path.join(str(tmp_path), "backbone.pt")
+        torch.save(_WithBackbone().state_dict(), path)
+
+        model = _WithBackbone()
+        out = load_backbone(model, path)
+        assert out["missing"] == [] and out["unexpected"] == []
+
+    def test_load_backbone_rejects_untrusted_full_checkpoint_by_default(self, tmp_path):
+        """完整 Trainer checkpoint 携带非张量状态，安全模式下必须报错并给出指引。"""
+        from dvisionix.training import load_backbone
+
+        # 由本项目的 save_checkpoint 产出：含 rng_state（numpy RNG 状态等）
+        path = _save(tmp_path, config_hash="hash")
+        with pytest.raises(ValueError, match="trusted=True"):
+            load_backbone(_WithBackbone(), path)
+
+        # 显式声明可信后放行（本测试里文件确实由本项目产出）
+        out = load_backbone(_WithBackbone(), path, trusted=True)
+        assert isinstance(out["missing"], list)
+
+    def test_trainer_safe_mode_rejects_full_state(self, tmp_path):
+        path = _save(tmp_path)
+        model = SimpleCNN(num_classes=NUM_CLASSES, in_channels=3)
+        with pytest.raises(ValueError, match="trusted=True"):
+            _trainer().load_checkpoint(path, model, trusted=False)
+
+    def test_trainer_default_mode_can_resume_full_state(self, tmp_path):
+        path = _save(tmp_path)
+        model = SimpleCNN(num_classes=NUM_CLASSES, in_channels=3)
+        _trainer().load_checkpoint(path, model)  # 默认 trusted=True，不应抛错
+
+
+@pytest.mark.unit
+def test_load_checkpoint_rejects_non_tensor_model_state(tmp_path):
+    """结构校验：model_state_dict 必须只含张量。"""
+    path = _save(tmp_path)
+    ckpt = _load_raw(path)
+    ckpt["model_state_dict"]["evil"] = "not-a-tensor"
+    torch.save(ckpt, path)
+
+    with pytest.raises(ValueError, match="非张量"):
+        _trainer().load_checkpoint(path, SimpleCNN(num_classes=NUM_CLASSES, in_channels=3))
