@@ -60,11 +60,27 @@ class MetricCollection:
             if metrics is None:
                 raise ValueError("MetricCollection 需要 metrics 列表或 task_type。")
             self.metrics = [build_single_metric(s) for s in metrics]
+        self._check_unique_names()
         self.reset()
+
+    def _check_unique_names(self) -> None:
+        """校验成员名唯一。
+
+        ``compute()`` 是按成员名合并字典的，重名成员的键会互相覆盖 ——
+        结果里只剩最后一个，而且不会有任何提示（CodePlan 7.7 步骤 5-4）。
+        """
+        names = [getattr(m, "name", None) or type(m).__name__ for m in self.metrics]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(
+                f"MetricCollection 中存在重复的指标名 {duplicates}："
+                f"汇总时这些键会互相覆盖，请给成员设置不同的 name。"
+            )
 
     def add(self, spec: MetricSpec) -> "MetricCollection":
         """追加一个指标成员，返回自身以支持链式调用。"""
         self.metrics.append(build_single_metric(spec))
+        self._check_unique_names()
         return self
 
     def reset(self) -> None:

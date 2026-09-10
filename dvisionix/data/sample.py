@@ -32,11 +32,28 @@ class ImageMode(str, Enum):
 class Sample(dict):
     """样本字典——基于 ``dict`` 的轻量包装，便于 IDE 提示与字段校验。
 
-    支持以 ``sample.image`` 或 ``sample["image"]`` 两种方式访问，``set/get`` 时会做
-    字段名拼写检查（不在约定字段名列表中只警告，不抛错，方便自定义字段）。
+    支持以 ``sample.image`` 或 ``sample["image"]`` 两种方式访问。
+
+    字段名拼写检查：``unknown_keys()`` 返回不在契约内的字段名。
+    ``BaseDataset`` 会为每个未知字段名**只告警一次**，用于捕捉
+    ``bboxes`` / ``label`` vs ``labels`` 这类拼写错误。
+    自定义字段请加进 ``EXTENDED_KEYS``，或忽略该告警。
     """
 
-    _KNOWN_KEYS: List[str] = ["image", "label", "boxes", "labels", "mask", "meta"]
+    #: 契约字段（见模块 docstring）
+    KNOWN_KEYS: List[str] = ["image", "label", "boxes", "labels", "mask", "meta"]
+    #: 内置任务 / 评估流程会消费的扩展字段，不触发告警
+    EXTENDED_KEYS: List[str] = [
+        "image1",
+        "image2",
+        "panoptic",
+        "instance_masks",
+        "instance_labels",
+        "depth",
+        "keypoints",
+    ]
+    #: 兼容 v1.0.0 的私有命名
+    _KNOWN_KEYS: List[str] = KNOWN_KEYS
 
     def __getattr__(self, key: str) -> Any:
         if key.startswith("_") or key not in self:
@@ -45,6 +62,11 @@ class Sample(dict):
 
     def __setattr__(self, key: str, value: Any) -> None:
         self[key] = value
+
+    def unknown_keys(self) -> List[str]:
+        """返回不在契约内的字段名（忽略以下划线开头的内部字段）。"""
+        known = set(self.KNOWN_KEYS) | set(self.EXTENDED_KEYS)
+        return [str(k) for k in self if not str(k).startswith("_") and k not in known]
 
 
 @dataclass

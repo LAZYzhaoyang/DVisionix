@@ -20,7 +20,11 @@ class PANet(BaseModel):
 
     def __init__(self, in_channels, out_channels=256, num_outs=None):
         super().__init__()
-        assert isinstance(in_channels, list) and len(in_channels) >= 1
+        if not isinstance(in_channels, list) or len(in_channels) < 1:
+            raise TypeError(
+                f"PANet 需要非空的 in_channels 列表，当前为 {type(in_channels).__name__}: "
+                f"{in_channels!r}"
+            )
         self.in_channels = list(in_channels)
         self.out_channels = out_channels
         self.num_outs = num_outs or len(in_channels)
@@ -47,7 +51,8 @@ class PANet(BaseModel):
 
     def forward(self, inputs):
         """PANet 前向：多尺度特征 -> FPN + 自底向上路径增强的特征列表。"""
-        assert isinstance(inputs, (list, tuple)), "PANet expects a list of feature maps"
+        if not isinstance(inputs, (list, tuple)):
+            raise TypeError(f"PANet expects a list of feature maps, got {type(inputs).__name__}")
         laterals = [conv(x) for conv, x in zip(self.lateral_convs, inputs)]
 
         for i in range(len(laterals) - 1, 0, -1):

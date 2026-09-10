@@ -23,8 +23,11 @@ import torch
 from torch.utils.data import Dataset
 
 from ..registry import DATASETS
+from ..utils import get_logger
 from .sample import Sample
 from .transforms import TransformPipeline
+
+_logger = get_logger("dvisionix.data")
 
 # collate_fn 可选：默认 None，DataLoader 会用 PyTorch 默认 collate；
 # 检测/分割如需变长 pad，dataset 自己在 ``collate_fn`` 属性上挂。
@@ -70,6 +73,24 @@ class BaseDataset(Dataset):
         self.load_image_fn = load_image
         self.collate_fn = collate_fn
         self.return_meta = return_meta
+        # 每个未知字段名只告警一次，避免逐样本刷屏
+        self._warned_unknown_keys: set = set()
+
+    def _check_sample_keys(self, sample: Dict[str, Any]) -> None:
+        """对 Sample 契约外的字段名告警（每个字段名只报一次）。
+
+        用于捕捉 ``bboxes`` 之类会静默失效的拼写错误：写错的字段不会被任何
+        transform / collate / loss 消费，训练照常跑但数据没生效。
+        """
+        for key in Sample(sample).unknown_keys():
+            if key in self._warned_unknown_keys:
+                continue
+            self._warned_unknown_keys.add(key)
+            _logger.warning(
+                f"{type(self).__name__}: 样本包含契约外的字段名 {key!r}"
+                f"（已知字段见 dvisionix.data.sample.Sample.KNOWN_KEYS；"
+                f"自定义字段请加入 EXTENDED_KEYS）。该字段不会被内置组件消费。"
+            )
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -119,6 +140,7 @@ class BaseDataset(Dataset):
             raw["mask"] = self.load_mask(raw)
         if not self.return_meta and "meta" in raw:
             raw.pop("meta", None)
+        self._check_sample_keys(raw)
         if self.transforms is not None:
             raw = self.transforms(raw)
         return raw

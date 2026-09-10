@@ -64,8 +64,16 @@ class BaseModel(nn.Module):
             param.requires_grad = True
 
     def get_device(self) -> torch.device:
-        """获取模型所在的设备"""
-        return next(self.parameters()).device
+        """获取模型所在的设备。
+
+        无参数模型（例如只由 buffer 或纯函数构成的模型）不会让 ``next(...)`` 抛
+        ``StopIteration``：先看参数、再看 buffer，都没有则返回 CPU。
+        """
+        for param in self.parameters():
+            return param.device
+        for buffer in self.buffers():
+            return buffer.device
+        return torch.device("cpu")
 
 
 __all__ = ["BaseModel", "TASK_TYPES"]

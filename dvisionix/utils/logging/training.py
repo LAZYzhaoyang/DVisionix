@@ -64,10 +64,22 @@ class TrainingLogger:
     # 指标
     # ------------------------------------------------------------------
     def log_metrics(
-        self, step: int, mode: str, metrics: Dict[str, float], precision: int = 4
+        self,
+        step: int,
+        mode: str,
+        metrics: Dict[str, float],
+        precision: int = 4,
+        console: bool = True,
     ) -> None:
-        """记录一组指标：console 摘要 + JSONL 事件 + TensorBoard 标量。"""
-        self.logger.info(f"[{mode}][step {step}] {format_metrics(metrics, precision)}")
+        """记录一组指标：console 摘要 + JSONL 事件 + TensorBoard 标量。
+
+        Args:
+            console: 是否同时打印 console 摘要。Trainer 在每个 epoch 结束时会
+                调用本方法写入 TensorBoard / JSONL，但 epoch 摘要已经单独打印过，
+                因此那里传 ``console=False`` 避免重复刷屏。
+        """
+        if console:
+            self.logger.info(f"[{mode}][step {step}] {format_metrics(metrics, precision)}")
 
         if self.jsonl_path is not None:
             self._write_jsonl(

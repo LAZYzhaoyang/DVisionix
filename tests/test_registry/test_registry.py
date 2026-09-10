@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
 # 作者: Zhaoyang Li
 # 用途: 注册表与配置驱动构建的单元测试。
-"""注册表与配置驱动构建的单元测试。"""
+"""注册表与配置驱动构建的单元测试。
+
+注意：``dvisionix`` 的顶层导入是**惰性**的（见 dvisionix/__init__.py 的 PEP 562
+说明），组件的注册发生在各子模块被导入时。因此本文件必须显式导入会填充注册表的
+子模块 —— 不能依赖「导入 dvisionix 就自动注册好一切」，那会让本文件的结果取决于
+测试执行顺序（此前正是因为顺序凑巧才一直通过）。
+"""
 
 import pytest
 
+# 显式导入以完成注册：models -> MODELS/BACKBONES/HEADS/NECKS/LAYERS，
+# training -> TASKS，metrics -> METRICS，models.losses -> LOSSES
+import dvisionix.metrics  # noqa: F401
+import dvisionix.models  # noqa: F401
+import dvisionix.training  # noqa: F401
 from dvisionix.registry import LOSSES, METRICS, MODELS, TASKS, Registry, build_from_cfg
 
 

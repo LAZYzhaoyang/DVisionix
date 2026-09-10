@@ -21,6 +21,7 @@ import torch.nn as nn
 from ...registry import BACKBONES
 from ..base import BaseModel
 from ..layers import build_layer
+from .feature import _validate_out_indices
 
 StageCfg = Union[Dict[str, Any], Sequence[Dict[str, Any]]]
 
@@ -66,7 +67,7 @@ class SequentialBackbone(BaseModel):
         num_stages = len(self.stages)
         if out_indices is None:
             out_indices = list(range(num_stages))
-        self.out_indices = [i % num_stages for i in out_indices]
+        self.out_indices = _validate_out_indices(out_indices, num_stages)
 
         stage_channels = self._infer_channels(in_channels, input_size)
         self._all_channels = stage_channels

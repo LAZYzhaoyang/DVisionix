@@ -12,6 +12,25 @@ from ...registry import BACKBONES
 from ..base import BaseModel
 
 
+def _validate_out_indices(out_indices: Sequence[int], num_stages: int) -> List[int]:
+    """校验 ``out_indices`` 在有效范围内，返回普通 list。
+
+    v1.0.0 用 ``i % num_stages`` 静默取模：``out_indices=[5]`` 配 3 个 stage 会
+    悄悄变成 ``[2]``，配置写错却没有任何提示，选出来的特征层与预期完全不同
+    （CodePlan 7.7 步骤 5-4「out_indices 越界禁止静默取模」）。
+    """
+    indices = [int(i) for i in out_indices]
+    if not indices:
+        raise ValueError("out_indices 不能为空；如需全部 stage 请传 None。")
+    invalid = [i for i in indices if not 0 <= i < num_stages]
+    if invalid:
+        raise ValueError(
+            f"out_indices 越界 {invalid}：有效范围是 0..{num_stages - 1}"
+            f"（当前骨干共 {num_stages} 个 stage）。"
+        )
+    return indices
+
+
 @BACKBONES.register()
 @BACKBONES.register(name="feature_backbone_base")
 class FeatureBackboneBase(BaseModel):
@@ -37,7 +56,7 @@ class FeatureBackboneBase(BaseModel):
         num_stages = len(self.stages)
         if out_indices is None:
             out_indices = list(range(num_stages))
-        self.out_indices = [i % num_stages for i in out_indices]
+        self.out_indices = _validate_out_indices(out_indices, num_stages)
         stage_channels = self._infer_channels(in_channels, input_size)
         self.out_channels = [stage_channels[i] for i in self.out_indices]
         self.num_features = stage_channels[-1]

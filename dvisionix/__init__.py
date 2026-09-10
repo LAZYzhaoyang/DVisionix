@@ -23,9 +23,73 @@ DVisionix: 深度学习算法库
     from dvisionix.training import build_task, Trainer
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
-from . import config, data, export, metrics, models, training, utils
+# 子模块改为**按需导入**（PEP 562）。
+#
+# v1.0.0 在顶层无条件 `from . import config, data, export, metrics, models, training, utils`，
+# 于是连 `from dvisionix.config import Config` 这种只想要配置的场景也会被迫加载
+# torch / torchvision / cv2 等完整视觉栈（实测 import 时间相差一个数量级）。
+#
+# 现在：`import dvisionix` 不再拉起任何重依赖；访问 `dvisionix.models` 或
+# `from dvisionix.models import build_model` 时才真正导入该子模块。
+# 注意副作用：注册表（MODELS / HEADS / ...）在对应子模块被导入后才填充 ——
+# 需要用到某个注册表时请显式导入对应子模块。
+_SUBMODULES = ("config", "data", "export", "metrics", "models", "training", "utils")
+
+#: 便捷导出 -> (提供该名字的子模块, 属性名)
+_BUILDERS = {
+    "build_model": ("models", "build_model"),
+    "build_loss": ("models.losses", "build_loss"),
+    "build_metric": ("metrics", "build_metric"),
+    "build_dataset": ("data", "build_dataset"),
+    "build_task": ("training", "build_task"),
+}
+
+#: 注册表对象：取用前必须先导入会向它们注册组件的子模块，
+#: 否则会拿到一个空注册表（这是懒加载带来的语义变化，已在文档中说明）。
+_REGISTRY_ATTRS = (
+    "MODELS",
+    "BACKBONES",
+    "NECKS",
+    "HEADS",
+    "LOSSES",
+    "DATASETS",
+    "TRANSFORMS",
+    "METRICS",
+    "TASKS",
+    "Registry",
+    "build_from_cfg",
+)
+
+
+def __getattr__(name: str):
+    """按需导入子模块与便捷导出（PEP 562 模块级 __getattr__）。"""
+    import importlib
+
+    if name in _BUILDERS:
+        module_name, attr = _BUILDERS[name]
+        module = importlib.import_module(f".{module_name}", __name__)
+        value = getattr(module, attr)
+    elif name in _REGISTRY_ATTRS:
+        # 组件的注册发生在各子模块被导入时，所以先导入它们再取注册表对象
+        for submodule in ("data", "models", "metrics", "training"):
+            importlib.import_module(f".{submodule}", __name__)
+        from . import registry as _registry
+
+        value = getattr(_registry, name)
+    elif name in _SUBMODULES:
+        value = importlib.import_module(f".{name}", __name__)
+    else:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_SUBMODULES) | set(_BUILDERS) | set(_REGISTRY_ATTRS))
+
 
 __all__ = [
     "data",
@@ -36,42 +100,16 @@ __all__ = [
     "config",
     "export",
     "__version__",
-]
-
-
-# =============================================================================
-# 注册表与构建入口（配置驱动）
-# =============================================================================
-from .data import build_dataset
-from .metrics import build_metric
-from .models import build_model
-from .models.losses import build_loss
-from .registry import (
-    BACKBONES,
-    DATASETS,
-    HEADS,
-    LOSSES,
-    METRICS,
-    MODELS,
-    NECKS,
-    TASKS,
-    TRANSFORMS,
-    Registry,
-    build_from_cfg,
-)
-from .training import build_task
-
-__all__ = __all__ + [
     "Registry",
     "build_from_cfg",
     "MODELS",
     "BACKBONES",
     "NECKS",
     "HEADS",
+    "LOSSES",
     "DATASETS",
     "TRANSFORMS",
     "TASKS",
-    "LOSSES",
     "METRICS",
     "build_model",
     "build_task",

@@ -53,7 +53,8 @@ class MultiScaleDeformableAttention(nn.Module):
         """query: (B, N, C)；value_list: List[(B, C, H, W)]（各层特征）；reference_points: (B, N, 2) 归一化。"""
         B, N, C = query.shape
         L = len(value_list)
-        assert L == self.num_levels
+        if L != self.num_levels:
+            raise ValueError(f"value_list 层数 {L} 与 num_levels {self.num_levels} 不一致")
 
         offset = self.sampling_offsets(query).reshape(B, N, self.num_heads, L, self.num_points, 2)
         offset = offset * 0.1  # 归一化坐标下的小位移，保持稳定
@@ -107,7 +108,8 @@ class MultiScaleDeformableAttentionV2(MultiScaleDeformableAttention):
         """多尺度可变形注意力：query/value/reference -> 加权聚合特征。"""
         B, N, C = query.shape
         L = len(value_list)
-        assert L == self.num_levels
+        if L != self.num_levels:
+            raise ValueError(f"value_list 层数 {L} 与 num_levels {self.num_levels} 不一致")
 
         offset = self.sampling_offsets(query).reshape(B, N, self.num_heads, L, self.num_points, 2)
         ref = reference_points.unsqueeze(2).unsqueeze(3).unsqueeze(4)  # (B, N, 1, 1, 1, 2)

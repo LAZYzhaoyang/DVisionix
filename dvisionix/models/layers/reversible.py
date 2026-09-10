@@ -23,7 +23,8 @@ class ReversibleBlock(nn.Module):
 
     def __init__(self, channels: int, num_layers: int = 2, act: str = "silu"):
         super().__init__()
-        assert channels % 2 == 0, "channels 须为偶数"
+        if channels % 2 != 0:
+            raise ValueError(f"channels 须为偶数，当前 {channels}")
         self.hidden = channels // 2
         self.F = nn.Sequential(
             *[

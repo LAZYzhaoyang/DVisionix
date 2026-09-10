@@ -48,6 +48,15 @@ TRAINING_KEYS = {
     "ema",
     "resume_from",
     "find_unused_parameters",
+    # 性能开关（base.yaml 默认提供；v1.0.0 漏登记，导致每次运行都被打出
+    # 「未知 training 配置键」的误导性告警）
+    "compile",
+    "channels_last",
+    "export_best_onnx",
+    "non_blocking",
+    "pin_memory",
+    "persistent_workers",
+    "prefetch_factor",
 }
 
 CHECKPOINT_KEYS = {"save_dir", "monitor", "mode", "save_best_only", "save_last"}

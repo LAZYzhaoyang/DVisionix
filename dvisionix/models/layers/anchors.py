@@ -19,7 +19,10 @@ class AnchorGenerator:
         ratios: Tuple[float, ...] = (0.5, 1.0, 2.0),
         scales: Tuple[float, ...] = (1.0, 1.26, 1.587),
     ):
-        assert len(strides) == len(base_sizes), "strides 与 base_sizes 长度必须一致"
+        if len(strides) != len(base_sizes):
+            raise ValueError(
+                f"strides 与 base_sizes 长度必须一致，当前 {len(strides)} vs {len(base_sizes)}"
+            )
         self.strides = list(strides)
         self.ratios = list(ratios)
         self.scales = list(scales)
@@ -41,7 +44,10 @@ class AnchorGenerator:
 
     def grid_anchors(self, feature_maps: List[torch.Tensor]) -> List[torch.Tensor]:
         """由特征图形状生成各层 anchors（每层 (H*W*A, 4)）。"""
-        assert len(feature_maps) == len(self.strides)
+        if len(feature_maps) != len(self.strides):
+            raise ValueError(
+                f"特征图层数 {len(feature_maps)} 与 strides 数 {len(self.strides)} 不一致"
+            )
         outs = []
         for feat, stride, base in zip(feature_maps, self.strides, self.base_anchors):
             _, _, h, w = feat.shape

@@ -150,7 +150,8 @@ class _MaskedCrossAttention(nn.Module):
 
     def __init__(self, d_model, num_heads, dropout):
         super().__init__()
-        assert d_model % num_heads == 0
+        if d_model % num_heads != 0:
+            raise ValueError(f"d_model({d_model}) 必须能被 num_heads({num_heads}) 整除")
         self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Linear(d_model, d_model)
         self.v_proj = nn.Linear(d_model, d_model)

@@ -52,9 +52,24 @@ class TransformPipeline:
             self.transforms: List[BaseTransform] = []
         else:
             self.transforms = [build_transform(t) for t in transforms]
-        self.provides_normalization = any(
-            getattr(t, "provides_normalization", False) for t in self.transforms
-        )
+        self.provides_normalization = self._check_normalization()
+
+    def _check_normalization(self) -> bool:
+        """聚合 ``provides_normalization``，并阻止流水线内**重复归一化**。
+
+        ``provides_normalization`` 此前只是一个被聚合但从未被消费的标记。
+        同一条流水线里出现两个归一化算子（例如手写 pipeline 里既有
+        ``ImageNormalize`` 又叠了一个自带归一化的组合变换）会把像素值归一化两次，
+        得到量级完全错误、却不会报错的输入（CodePlan 7.7 步骤 5-4）。
+        """
+        normalizers = [t for t in self.transforms if getattr(t, "provides_normalization", False)]
+        if len(normalizers) > 1:
+            raise ValueError(
+                f"TransformPipeline 中有 {len(normalizers)} 个变换声明了 provides_normalization"
+                f"（{[type(t).__name__ for t in normalizers]}）："
+                f"重复归一化会破坏像素值范围，请只保留一个归一化算子。"
+            )
+        return bool(normalizers)
 
     def __call__(self, sample: Sample) -> Sample:
         for t in self.transforms:
@@ -68,13 +83,11 @@ class TransformPipeline:
         return iter(self.transforms)
 
     def append(self, transform: Any) -> "TransformPipeline":
-        """向变换流水线追加一个变换。"""
+        """向变换流水线追加一个变换（同样检查重复归一化）。"""
         from .builder import build_transform
 
         self.transforms.append(build_transform(transform))
-        self.provides_normalization = self.provides_normalization or getattr(
-            self.transforms[-1], "provides_normalization", False
-        )
+        self.provides_normalization = self._check_normalization()
         return self
 
     def __repr__(self) -> str:
