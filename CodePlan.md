@@ -162,27 +162,29 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 > 于 `conda env dvisionix`（Python 3.14.6 / torch 2.12.0 / CPU-only）实测，
 > 作为全部改动的对照基准。**任何任务的完成判定都必须与这组数字对比。**
 
-| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-2 完成后） |
+| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-3 完成后） |
 |---|---|---|
-| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `403 passed, 2 skipped`（186.2s），collected = 405 |
-| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 17 + 契约/回归/CPU-DDP 共 100 |
+| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `447 passed, 2 skipped`（188.7s），collected = 449 |
+| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 17 + 契约/回归/CPU-DDP/导出 共 144 |
 | 静态检查 | `ruff` / `black --check` 全绿 | `ruff` / `black --check` 全绿 |
 | 官方配置 E2E（19 个各跑 1 epoch） | **14 PASS / 3 FAIL / 2 模板不可跑** | **17 PASS / 0 FAIL / 2 模板不可跑** |
 | 跑不通的配置 | `classification/simclr_synthetic`、`detection/centernet_synthetic`、`detection/yolov10_synthetic` | 无 |
 | 不可跑的模板（非缺陷） | `classification/hparam_search`（用 `tools/hparam_search.py`）、`classification/linear_eval`（占位 checkpoint 路径） | 同左 |
 | CPU 双进程 DDP 一致性 | 无此测试（`test_ddp_smoke` 需 2+ GPU，恒跳过） | ✅ 单进程 vs 2 进程全局指标在 `1e-6` 内一致 |
+| 导出契约 | 嵌套输出崩溃、导出改动调用者模型 | ✅ 嵌套输出可导出并数值验证、导出不改变原模型状态 |
 
-> 说明：测试数从 288 增至 405 全部是**新增门禁与回归测试**，不是实现膨胀；
+> 说明：测试数从 288 增至 449 全部是**新增门禁与回归测试**，不是实现膨胀；
 > 其中 17 条为配置端到端门禁（`-m "not slow"` 可跳过）、2 条为 CPU gloo 双进程、
-> 其余为契约与回归测试。无既有测试被删除或替换。
+> 其余为契约与回归测试。无既有测试被删除；仅 1 条既有断言随契约修正同步更新
+> （`test_task_config.py` 的 `accuracy` → `val_accuracy`，并补上「不得为 0」的断言）。
 
 ### 🔄 当前状态：v1.1 稳定性与工程优化
 
 - **第七章是本项目唯一执行计划。**
-- **阶段 0（门禁）、阶段 1（修复跑不通的官方配置）、阶段 2（P0 正确性）已完成**，
-  见 7.2 / 7.3 / 7.4 的完成标记。官方配置由 14/17 可跑提升到 17/17 全绿；
-  CPU 双进程 DDP 一致性已建立。
-- **阶段 3-5 未开始**。阶段 3 完成前仍暂停扩充模型家族。
+- **阶段 0（门禁）、阶段 1（配置修复）、阶段 2（P0 正确性）、阶段 3（训练/评估/导出闭环）已完成**，
+  见 7.2 / 7.3 / 7.4 / 7.5 的完成标记。官方配置由 14/17 可跑提升到 17/17 全绿；
+  CPU 双进程 DDP 一致性、统一 Evaluator、checkpoint 契约与 ONNX 契约均已落地。
+- **阶段 4（打包与 CI）与阶段 5（性能）未开始**。阶段 4 完成前仍暂停扩充模型家族。
 - **v1.1 早期一批未提交改动已整体回退**（回退原因与更正见 7.1.1，
   补丁留档于 `.dev_archive/wip-v1.1-partial.patch`，已在 `.gitignore` 中排除）。
 - 阶段 2 已重新实现该批次中**诊断正确且实现无误**的两项（DDP 递归聚合、FCOS/YOLO 重复累加 L1），
@@ -240,8 +242,11 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 2. **度量先于修复**：先建立能自动暴露缺陷的门禁，再改代码。
    v1 版是在「286 测试全绿 + 2 个官方配置崩溃」的情况下推进的，说明测试网没盖住装配层。
 3. **测试退化防护**：禁止用新测试替换既有 `def test_*` 的函数头、禁止用缩进把测试体变成局部代码；
-   CI 校验 collected 测试数不低于基线（当前基线 **405**，见第五章实测表）。
+   CI 校验 collected 测试数不低于基线（当前基线 **449**，见第五章实测表）。
    v1 版执行中已实际静默丢失 4 条回归测试。
+8. **测试必须自播种**：「loss 下降」这类断言要在**构建模型之前**播种
+   （模型初始权重也是随机的），否则会依赖此前测试消耗掉的全局 RNG 状态，
+   表现为顺序相关的偶发失败 —— 阶段 3 已实际遇到一次。
 4. **行为变更登记**：任何改变训练语义或指标口径的改动，必须在第八章登记并说明影响（历史 checkpoint 可比性）。
 5. **提交粒度**：一项任务 = 实现 + 回归测试 + 文档 + lint，一次提交；禁止跨任务混合提交。
 6. **验收以官方配置为准**：每个阶段的门禁都包含「19 个官方配置 E2E」，不允许只做单点组件验收。
@@ -288,9 +293,8 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | D19 | docstring 机械损坏 3 处：`` `name` `` 被切成「反引号 + 换行 + ame」 | `registry.py:93`、`data/base.py:17`、`metrics/base.py:16` | 低 |
 | D20 | 测试只「构建模型」不「运行配置」，造成配置已覆盖的假象：`test_new_detection_configs_load` 点名了 yolov10 与 centernet，却只做 `build_model()`，从不构建 loss、从不跑 `validation_step`，因此 D1/D2 全部漏网 | `tests/test_models/test_v010_direction3.py:130-136`（另有 4 处同模式） | 中 |
 
-> **修复进度（截至阶段 2）**：D1、D2、D3、D5、D6、D7、D8、D9、D10、D11、D13、D17、D18、D19、D20
-> 共 15 项**已修复并附回归测试**；
-> 剩余 5 项按计划归属：D4 与 D12 → 阶段 3（7.5），D14 / D15 / D16 → 阶段 4（7.6）。
+> **修复进度（截至阶段 3）**：**D1-D13、D17-D20 共 18 项已修复并附回归测试**；
+> 剩余 D14 / D15 / D16 三项（打包与 CI）归属**阶段 4**（7.6）。
 
 #### 7.1.3 诚实评价：v1.0.0 的真实成色
 
@@ -339,14 +343,19 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 **行为变更**：2-2（损失语义与归一化）、2-3（检测裁剪增强真实生效）、2-5（合成数据口径）
 均已登记入第八章「行为变更登记」。
 
-### 7.5 阶段 3：训练 / 评估 / 导出闭环（3–4 天）
+### 7.5 ✅ 阶段 3：训练 / 评估 / 导出闭环（已完成）
 
-| 步骤 | 涉及文件 | 实施 | 验收 |
-|---|---|---|---|
-| 3-1 **DINO 尺寸来源**（修 D4） | `heads/detection/dino.py`、`detectors/dino.py`、`training/tasks/` | `image_hw` 由 task 显式传入 head（或 head 直接取 `batch["image"].shape[-2:]`，head 已收到 batch）；`*4` 仅保留为 stride 感知的兼容 fallback | 去除硬编码 `*4` 主路径；stride=2 / stride=4 / 非方形输入下去噪目标坐标正确；**行为变更登记** |
-| 3-2 **统一 Evaluator**（修 D8） | `training/trainer.py`、`training/evaluation.py` | 抽出 `Evaluator`，训练中验证与独立 `validate()` 共用；`validate()` 补 DDP 分支（`DistributedSampler` + 复用 gather helper）；放弃启发式 batch-size 推断，回归 `int(batch["image"].shape[0])` | 独立 `validate()` 与训练中指标一致；DDP 下 `validate()` 给出全局指标而非 rank0 分片 |
-| 3-3 **checkpoint 契约** | `training/{trainer,checkpoint,workdir}.py` | checkpoint 增加 `schema_version` / `task_type` / `config_hash`（复用 `workdir.py:57-64` 的 `hash_config`）；resume 默认拒绝配置不匹配并提供显式 override；修正梯度累积尾窗口分母（尾部不足一窗时不应继续除以 `accumulate_grad_batches`） | resume 前后 optimizer / scheduler / RNG / EMA / early-stopping 一致；5 batch + accum=2 的尾窗梯度正确 |
-| 3-4 **ONNX 契约**（修 D12） | `export/onnx_exporter.py`、tests | 递归 flatten（支持 dict/list/tuple 任意嵌套）并落盘输出路径映射；verify 统一 `detach().cpu().numpy()`；dynamo 路径传 `input_names`/`output_names`/`dynamic_axes`，不支持时显式报错；**用 `try/finally` 保存并恢复模型 device 与 train/eval 状态**；清理未用导入 | 分类 / 分割 / 多尺度检测均可导出；动态 batch 可执行；导出器不改变原模型状态；ONNX Runtime 数值验证 |
+| 步骤 | 状态 | 实际实施与验收证据 |
+|---|---|---|
+| 3-1 **DINO 尺寸来源**（修 D4） | ✅ | `DINODetrHead` 新增 `_resolve_image_hw`：优先取 `batch["image"].shape[-2:]`（`needs_batch=True`，训练时 batch 一定带 image）；其次用显式配置的 `out_stride` 推断；**两者皆无则直接报错**，不再静默猜尺寸。硬编码 `*4` 主路径已删除。新增 `tests/test_models/test_dino_image_hw.py`：stride=2 / stride=4 / 非方形输入下去噪目标必须等于按真实尺寸归一化的结果，并额外断言「按 4 倍特征图推断会得到不同结果」以确保该测试真能区分对错 |
+| 3-2 **统一 Evaluator**（修 D8） | ✅ | 抽出 `Trainer._evaluate(loader)`，训练中验证与独立 `validate()` 共用同一实现；`validate()` 因此获得：DDP 全局指标（不再只算 rank0）、`on_validation_begin/end` 回调（**EMA 权重交换依赖它**，v1.0.0 的 `validate()` 报的是未交换权重的指标）、统一的 `reset_metrics` 生命周期。删除 `_infer_batch_size` 的启发式（原实现会在 `preds=(Tensor,Tensor)` 时把 tuple 长度当 batch size，并以 `except: return 1` 静默兜底），改为只认 `image`/`image1`/`image2` 且取不到就报错。另修正 `fit()` 里**重复调用** `on_validation_epoch_end()` 的问题（第二次在已 reset 的累加器上算出全 0，正是 history.csv 里那列裸 `accuracy` 的来历），epoch 级指标现统一以 `val_` 前缀并入 | 
+| 3-3 **checkpoint 契约** | ✅ | checkpoint 增加 `schema_version`（当前 1）/ `task_type` / `model_type` / `config_hash`（复用 `hash_config`，由 `build_trainer` 注入）。resume 时校验：schema 过高直接拒绝、任务/模型类型不符直接拒绝、配置哈希不符**默认拒绝**并提供 `allow_config_mismatch=True` 显式 override、旧格式（无 schema_version）给出 `DeprecationWarning` 后放行、纯 state_dict 明确拒绝。新增 `_unwrap_module` 剥掉 DDP / `torch.compile` 包装以免类型校验在单卡多卡间误报。**梯度累积分母按所在窗口长度计算**（`_accumulation_divisor`），修掉尾窗梯度被系统性低估的问题 |
+| 3-4 **ONNX 契约**（修 D12） | ✅ | ① `_flatten_outputs` 改为递归，并额外返回「输出名 → 访问路径」映射，落盘到 ONNX `metadata_props.output_path_map`；② `__init__` 不再改动调用者模型，新增 `_temporary_eval()` 上下文管理器，用 `try/finally` 恢复 device 与 train/eval 状态（**失败路径也恢复**）；③ verify 统一 `detach().cpu().numpy()`，输出数量不一致或形状不一致时显式报错而非被 `zip` 静默截断；④ dynamo 路径传 `input_names`/`output_names`，并在 `dynamic_axes` 非空时**显式报错**（dynamo 用 `dynamic_shapes`，静默忽略会让动态 batch 承诺失效）；⑤ 清理未用导入。新增 `tests/test_export/test_onnx_contract.py`（17 条）覆盖递归展平、状态保护、失败恢复、dynamo 参数契约，以及分类 / 嵌套检测输出 / 分割风格输出 / 动态 batch 的 ONNX Runtime 数值验证 |
+
+**阶段 3 门禁达成情况**：全量测试全绿 ✅、17 配置 E2E 全绿 ✅、`ruff`/`black` 全绿 ✅。
+
+**行为变更**：3-1（DINO 去噪坐标尺度）、3-2（history 列名与指标口径）、3-3（resume 校验与梯度累积分母）
+已登记入第八章。
 
 ### 7.6 阶段 4：打包与 CI（2–3 天）
 
@@ -386,7 +395,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 任务只有同时满足以下全部条件才可标记为完成：
 
 1. 实现已提交，没有通过静默 fallback 掩盖错误。
-2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（405）**。
+2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（449）**。
 3. 相关单元与集成测试通过，**17 个可训练官方配置 E2E 全绿**。
 4. `ruff` 与 `black --check` 全绿。
 5. 文档、配置示例与 API 行为一致（含 README 的能力声明）。
@@ -403,7 +412,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 | 版本 | 里程碑 |
 |---|---|
-| v1.1（进行中） | 稳定性与工程优化：阶段 0-2 已完成（门禁 + 3 个官方配置 + 15 项缺陷），阶段 3-5 待办 |
+| v1.1（进行中） | 稳定性与工程优化：阶段 0-3 已完成（门禁 + 3 个官方配置 + 18 项缺陷），阶段 4-5 待办 |
 | v1.0.0 | 功能基线：全库审查/注释/文档规范化，API 冻结 |
 | v0.17.0 | 训练工程 P2+P3、DINO look-forward-twice |
 | v0.16.0 | DINO-lite、线性评估、训练工程 P1 |
@@ -433,4 +442,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | v1.1（已实施） | 检测训练管线改为先 resize 到 1.1× 再随机裁剪（对应 7.4 的 2-3） | **训练语义变更**：v1.0.0 的「resize 到目标尺寸 → 同尺寸裁剪」使随机裁剪退化为恒等操作，**增强完全未生效**；修正后训练数据分布改变，等价于引入了此前缺失的数据增强 |
 | v1.1（已实施） | `RandomCrop` / `CenterCrop` / `BoxSyncRandomCrop` 在输入小于目标尺寸时**默认直接报错**（`on_small="error"`）（对应 7.4 的 2-3） | **行为变更**：v1.0.0 是静默返回错误尺寸（`CenterCrop` 经负索引切片返回更小的图）。依赖旧行为的自定义管线需显式传 `on_small="pad"`。内置预设管线不受影响（resize 后尺寸恒满足） |
 | v1.1（已实施） | 合成数据 train / val 使用不同 split 前缀与独立随机种子（对应 7.4 的 2-5） | **指标口径变更**：v1.0.0 的 val 前 N 张就是 train 前 N 张，demo 指标含数据泄漏、偏乐观；修正后 `val_loss` / `val_acc` 会明显变差，属预期修正。同时合成数据变为可复现（原为每次运行随机） |
-| v1.1（待实施） | DINO 去噪目标改用真实 `image_hw`（对应 7.5 的 3-1） | **训练语义变更**：去噪分支坐标尺度修正（官方配置下原为 2 倍误差），需重新训练评估效果 |
+| v1.1（已实施） | DINO 去噪目标改用真实 `image_hw`（对应 7.5 的 3-1） | **训练语义变更**：官方配置（3×stride2 骨干）下原代理值是真实尺寸的 **2 倍**，去噪分支与主分支的 `bbox_embed` 被训练在两个坐标系里；修正后需重新训练评估效果。若在 batch 无 `image` 且未配置 `out_stride` 的场景调用，会**直接报错**而不是静默猜尺寸 |
+| v1.1（已实施） | epoch 级指标统一以 `val_` 前缀写入 `history.csv`（对应 7.5 的 3-2） | **输出格式变更**：v1.0.0 的裸列 `accuracy/precision/recall/f1` 变为 `val_accuracy/...`，且不再出现「重复调用 `on_validation_epoch_end` 在已 reset 的累加器上算出的全 0」。解析 `history.csv` 的下游脚本需同步改名；`val_loss` / `val_acc` / `train_*` 名称不变 |
+| v1.1（已实施） | 梯度累积分母改为「所在窗口的实际长度」（对应 7.5 的 3-3） | **训练语义变更**：v1.0.0 一律除以 `accumulate_grad_batches`，末尾不足一窗时梯度被系统性低估（如 5 batch + accum=2 的尾窗）。修正后与 `accumulate_grad_batches` 配合的最优学习率需重新标定 |
+| v1.1（已实施） | resume 增加一致性校验（对应 7.5 的 3-3） | **行为变更**：`load_checkpoint` 现在默认**拒绝**配置哈希 / 任务类型 / 模型类型不匹配的 checkpoint，并拒绝纯 `state_dict`。依赖旧「无校验直接加载」行为的脚本需显式传 `allow_config_mismatch=True`（类型不匹配仍需匹配的配置） |
