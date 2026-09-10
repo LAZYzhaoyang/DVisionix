@@ -90,12 +90,16 @@ def evaluate_mask_ap(
             score_threshold=score_threshold,
             mask_threshold=mask_threshold,
         )
-        # 目标 mask 对齐预测分辨率
-        target_size = masks_list[0].shape[-2:] if masks_list and masks_list[0].numel() else (1, 1)
-        import torch.nn.functional as _F
+        image_hw = (images.shape[2], images.shape[3])
+        # 目标 mask 对齐到模型输出分辨率；**空预测时退化为输入图像尺寸**。
+        # v1.0.0 在首图无预测 mask 时退化成 (1, 1)，会把 GT 缩成单像素，
+        # 让 mask AP 完全失真（CodePlan 7.1.2 D11）。
+        target_size = (
+            tuple(masks_list[0].shape[-2:]) if masks_list and masks_list[0].numel() else image_hw
+        )
 
         target_masks = [
-            _F.interpolate(
+            F.interpolate(
                 m.to(device).float().unsqueeze(0).unsqueeze(0), size=target_size, mode="nearest"
             ).bool()  # (1, H, W)
             for m in batch["mask"]

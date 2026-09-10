@@ -120,7 +120,13 @@ class DetectionTransforms(TransformPipeline):
         mean=(0.485, 0.456, 0.406),
         std=(0.229, 0.224, 0.225),
     ):
-        ops = [BoxSyncResize((image_size, image_size))]
+        # 训练时先放大再随机裁剪：直接把图 resize 到目标尺寸再裁剪会退化成恒等操作
+        # （随机偏移恒为 0），数据增强完全失效（CodePlan 7.1.2 D9）。
+        # 1.1x 与分类预置管线 _build_classification_pipeline 保持一致。
+        resize_to = (
+            (int(image_size * 1.1), int(image_size * 1.1)) if train else (image_size, image_size)
+        )
+        ops = [BoxSyncResize(resize_to)]
         if train:
             ops += [BoxSyncRandomHorizontalFlip(p=0.5), BoxSyncRandomCrop((image_size, image_size))]
         ops += [ImageNormalize(mean, std), ToTensor(keys=("image",)), BoxesToTensor()]

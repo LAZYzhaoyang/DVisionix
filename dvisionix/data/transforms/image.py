@@ -68,22 +68,65 @@ class RandomVerticalFlip(BaseTransform):
         return sample
 
 
+def _ensure_crop_size(img: np.ndarray, size: Tuple[int, int], on_small: str, op: str) -> np.ndarray:
+    """确保图像不小于裁剪尺寸，按 ``on_small`` 策略处理过小的输入。
+
+    v1.0.0 的行为是**静默返回原图**（``RandomCrop``）或**静默返回更小的裁剪**
+    （``CenterCrop``：负索引切片），两者都会产出尺寸错误的张量而没有提示
+    （CodePlan 7.1.2 D9）。现在把策略显式化。
+
+    Args:
+        img: (H, W, C) 输入图像。
+        size: 目标裁剪尺寸 ``(th, tw)``。
+        on_small: 输入小于目标时的行为。``error``（默认）直接报错；``pad`` 右下补零；
+            ``resize`` 直接缩放到目标尺寸。
+        op: 调用方名称，用于错误信息定位。
+
+    Returns:
+        不小于 ``size`` 的图像（``error`` 策略下尺寸不足时抛错）。
+    """
+    import cv2
+
+    h, w = img.shape[:2]
+    th, tw = size
+    if h >= th and w >= tw:
+        return img
+    if on_small == "error":
+        raise ValueError(
+            f"{op}: 输入尺寸 {h}x{w} 小于目标裁剪尺寸 {th}x{tw}。"
+            f"请先用 resize 放大到至少 {th}x{tw}，"
+            f"或显式设置 on_small='pad' / on_small='resize'。"
+        )
+    if on_small == "pad":
+        return cv2.copyMakeBorder(
+            img, 0, max(0, th - h), 0, max(0, tw - w), cv2.BORDER_CONSTANT, value=0
+        )
+    if on_small == "resize":
+        return cv2.resize(img, (tw, th))
+    raise ValueError(f"{op}: on_small 必须是 'error' / 'pad' / 'resize'，当前 {on_small!r}")
+
+
 @TRANSFORMS.register()
 @TRANSFORMS.register(name="random_crop")
 class RandomCrop(BaseTransform):
-    """随机裁剪（仅 image）。"""
+    """随机裁剪（仅 image）。
+
+    Args:
+        size: 目标 ``(H, W)``。
+        on_small: 输入小于目标尺寸时的行为，见 ``_ensure_crop_size``。
+            v1.0.0 为静默返回原图（输出尺寸错误），现默认 ``error``。
+    """
 
     name = "random_crop"
 
-    def __init__(self, size: Tuple[int, int] = (224, 224)):
+    def __init__(self, size: Tuple[int, int] = (224, 224), on_small: str = "error"):
         self.size = size
+        self.on_small = on_small
 
     def __call__(self, sample: Sample) -> Sample:
-        img = sample["image"]
+        img = _ensure_crop_size(sample["image"], self.size, self.on_small, "RandomCrop")
         h, w = img.shape[:2]
         th, tw = self.size
-        if h < th or w < tw:
-            return sample
         y = np.random.randint(0, h - th + 1)
         x = np.random.randint(0, w - tw + 1)
         sample["image"] = img[y : y + th, x : x + tw]
@@ -93,13 +136,22 @@ class RandomCrop(BaseTransform):
 @TRANSFORMS.register()
 @TRANSFORMS.register(name="center_crop")
 class CenterCrop(BaseTransform):
+    """中心裁剪（仅 image）。
+
+    Args:
+        size: 目标 ``(H, W)``。
+        on_small: 输入小于目标尺寸时的行为，见 ``_ensure_crop_size``。
+            v1.0.0 无任何检查，会经负索引切片静默返回更小的图，现默认 ``error``。
+    """
+
     name = "center_crop"
 
-    def __init__(self, size: Tuple[int, int] = (224, 224)):
+    def __init__(self, size: Tuple[int, int] = (224, 224), on_small: str = "error"):
         self.size = size
+        self.on_small = on_small
 
     def __call__(self, sample: Sample) -> Sample:
-        img = sample["image"]
+        img = _ensure_crop_size(sample["image"], self.size, self.on_small, "CenterCrop")
         h, w = img.shape[:2]
         th, tw = self.size
         y = (h - th) // 2
@@ -179,12 +231,18 @@ class ToTensor(BaseTransform):
             if k not in sample:
                 continue
             v = sample[k]
-            if isinstance(v, np.ndarray):
-                if v.ndim == 3:
-                    t = torch.from_numpy(np.ascontiguousarray(v.transpose(2, 0, 1))).float()
-                else:
-                    t = torch.from_numpy(np.ascontiguousarray(v))
-                    if t.dtype != torch.float32 and k in ("image", "mask"):
-                        t = t.float()
-                sample[k] = t
+            if not isinstance(v, np.ndarray):
+                continue
+            if k == "mask":
+                # 分割标签必须满足 CrossEntropyLoss 的 **long** 契约。
+                # v1.0.0 只在 2 维分支做 dtype 处理，3 维 mask 会走上面的 float 分支
+                # 而静默变成 float32（CodePlan 7.1.2 D10）；这里对 mask 单独短路，
+                # 与 ndim 无关地保持 long，也不做通道前置（长整型标签不需要 C,H,W 布局）。
+                sample[k] = torch.from_numpy(np.ascontiguousarray(v)).long()
+                continue
+            if v.ndim == 3:
+                sample[k] = torch.from_numpy(np.ascontiguousarray(v.transpose(2, 0, 1))).float()
+            else:
+                t = torch.from_numpy(np.ascontiguousarray(v))
+                sample[k] = t.float() if k == "image" else t
         return sample

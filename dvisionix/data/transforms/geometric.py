@@ -20,13 +20,71 @@ from ..sample import Sample
 from .base import BaseTransform
 
 
+def _validate_boxes_labels(
+    boxes: Optional[np.ndarray], labels: Optional[np.ndarray], op: str
+) -> None:
+    """校验 boxes 与 labels 数量一致。
+
+    几何变换靠「同一个布尔掩码同时裁剪 boxes 和 labels」维持二者的对应关系；
+    一旦长度不一致，任何裁剪都会让标签与框静默错位。因此必须在入口就失败，
+    而不是产出「看起来正常」的错误样本（CodePlan 7.4 步骤 2-3）。
+    """
+    if boxes is None or labels is None:
+        return
+    if len(boxes) != len(labels):
+        raise ValueError(
+            f"{op}: boxes 与 labels 数量不一致（boxes={len(boxes)}, labels={len(labels)}），"
+            f"几何变换会破坏二者的对应关系"
+        )
+
+
 def _filter_invalid_boxes(boxes: np.ndarray, labels: Optional[np.ndarray]):
     """过滤退化的 box（w<=0 或 h<=0），并同步裁剪 labels。"""
     valid = (boxes[:, 2] > boxes[:, 0]) & (boxes[:, 3] > boxes[:, 1])
     boxes = boxes[valid]
-    if labels is not None and len(labels) == len(valid):
+    if labels is not None:
+        if len(labels) != len(valid):
+            raise ValueError(
+                f"boxes 与 labels 数量不一致（boxes={len(valid)}, labels={len(labels)}），"
+                f"无法同步过滤"
+            )
         labels = labels[valid]
     return boxes, labels
+
+
+def _ensure_crop_size(sample: Sample, size: Tuple[int, int], on_small: str, op: str) -> None:
+    """确保 image/mask 不小于裁剪尺寸，按 ``on_small`` 就地调整 sample。
+
+    Args:
+        sample: 待处理的 Sample（就地修改 ``image`` / ``mask``）。
+        size: 目标裁剪尺寸 ``(th, tw)``。
+        on_small: ``error``（默认）尺寸不足直接报错；``pad`` 右下补零（boxes 坐标
+            仍在原图范围内，因此依然有效）；``resize`` 会被拒绝 —— 缩放会改变
+            boxes 坐标，几何管线应改用 ``BoxSyncResize`` 显式放大。
+        op: 调用方名称，用于错误信息定位。
+    """
+    img = sample["image"]
+    h, w = img.shape[:2]
+    th, tw = size
+    if h >= th and w >= tw:
+        return
+    if on_small == "error":
+        raise ValueError(
+            f"{op}: 输入尺寸 {h}x{w} 小于目标裁剪尺寸 {th}x{tw}。"
+            f"请先用 BoxSyncResize 放大，或显式设置 on_small='pad'。"
+        )
+    if on_small == "pad":
+        pad_h, pad_w = max(0, th - h), max(0, tw - w)
+        sample["image"] = cv2.copyMakeBorder(img, 0, pad_h, 0, pad_w, cv2.BORDER_CONSTANT, value=0)
+        if "mask" in sample:
+            sample["mask"] = np.pad(sample["mask"], ((0, pad_h), (0, pad_w)), constant_values=0)
+        return
+    if on_small == "resize":
+        raise ValueError(
+            f"{op}: 不支持 on_small='resize' —— 缩放会改变 boxes 坐标，"
+            f"请改用 BoxSyncResize 放大图像，或用 on_small='pad'。"
+        )
+    raise ValueError(f"{op}: on_small 必须是 'error' / 'pad' / 'resize'，当前 {on_small!r}")
 
 
 @TRANSFORMS.register()
@@ -42,6 +100,7 @@ class BoxSyncResize(BaseTransform):
         self.size, self.max_size = size, max_size
 
     def __call__(self, sample: Sample) -> Sample:
+        _validate_boxes_labels(sample.get("boxes"), sample.get("labels"), "BoxSyncResize")
         img = sample["image"]
         h, w = img.shape[:2]
         if self.size is not None:
@@ -88,6 +147,9 @@ class BoxSyncRandomHorizontalFlip(BaseTransform):
         self.p = p
 
     def __call__(self, sample: Sample) -> Sample:
+        _validate_boxes_labels(
+            sample.get("boxes"), sample.get("labels"), "BoxSyncRandomHorizontalFlip"
+        )
         if np.random.random() >= self.p:
             return sample
         img = sample["image"]
@@ -105,19 +167,29 @@ class BoxSyncRandomHorizontalFlip(BaseTransform):
 @TRANSFORMS.register()
 @TRANSFORMS.register(name="box_sync_random_crop")
 class BoxSyncRandomCrop(BaseTransform):
-    """随机裁剪 image，丢弃越界后为空的 box。"""
+    """随机裁剪 image/mask，同步平移 boxes 并丢弃越界后为空的 box。
+
+    Args:
+        size: 目标 ``(H, W)``。
+        on_small: 输入小于目标尺寸时的行为，见 ``_ensure_crop_size``。
+            v1.0.0 为静默返回原图（裁剪完全失效），现默认 ``error``。
+
+    注意：要真正产生随机偏移，输入必须先大于目标尺寸 —— 检测预置管线
+    因此先用 ``BoxSyncResize`` 放大到 1.1 倍再裁剪（CodePlan 7.1.2 D9）。
+    """
 
     name = "box_sync_random_crop"
 
-    def __init__(self, size: Tuple[int, int]):
+    def __init__(self, size: Tuple[int, int], on_small: str = "error"):
         self.size = size
+        self.on_small = on_small
 
     def __call__(self, sample: Sample) -> Sample:
+        _validate_boxes_labels(sample.get("boxes"), sample.get("labels"), "BoxSyncRandomCrop")
+        _ensure_crop_size(sample, self.size, self.on_small, "BoxSyncRandomCrop")
         img = sample["image"]
         h, w = img.shape[:2]
         th, tw = self.size
-        if h < th or w < tw:
-            return sample
         y = np.random.randint(0, h - th + 1)
         x = np.random.randint(0, w - tw + 1)
         sample["image"] = img[y : y + th, x : x + tw]
