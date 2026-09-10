@@ -162,33 +162,45 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 > 于 `conda env dvisionix`（Python 3.14.6 / torch 2.12.0 / CPU-only）实测，
 > 作为全部改动的对照基准。**任何任务的完成判定都必须与这组数字对比。**
 
-| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0/1 完成后） |
+| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-2 完成后） |
 |---|---|---|
-| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `342 passed, 2 skipped`（152.6s），collected = 344 |
-| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 17 + 契约/回归 39 |
+| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `403 passed, 2 skipped`（186.2s），collected = 405 |
+| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 17 + 契约/回归/CPU-DDP 共 100 |
 | 静态检查 | `ruff` / `black --check` 全绿 | `ruff` / `black --check` 全绿 |
 | 官方配置 E2E（19 个各跑 1 epoch） | **14 PASS / 3 FAIL / 2 模板不可跑** | **17 PASS / 0 FAIL / 2 模板不可跑** |
 | 跑不通的配置 | `classification/simclr_synthetic`、`detection/centernet_synthetic`、`detection/yolov10_synthetic` | 无 |
 | 不可跑的模板（非缺陷） | `classification/hparam_search`（用 `tools/hparam_search.py`）、`classification/linear_eval`（占位 checkpoint 路径） | 同左 |
+| CPU 双进程 DDP 一致性 | 无此测试（`test_ddp_smoke` 需 2+ GPU，恒跳过） | ✅ 单进程 vs 2 进程全局指标在 `1e-6` 内一致 |
 
-> 说明：测试数从 288 增至 344 是**新增门禁**所致，不是实现膨胀；
-> 其中 17 条为配置端到端门禁（`-m "not slow"` 可跳过），39 条为契约与回归测试。
+> 说明：测试数从 288 增至 405 全部是**新增门禁与回归测试**，不是实现膨胀；
+> 其中 17 条为配置端到端门禁（`-m "not slow"` 可跳过）、2 条为 CPU gloo 双进程、
+> 其余为契约与回归测试。无既有测试被删除或替换。
 
 ### 🔄 当前状态：v1.1 稳定性与工程优化
 
 - **第七章是本项目唯一执行计划。**
-- **阶段 0（门禁）与阶段 1（修复跑不通的官方配置）已完成**，见 7.2 / 7.3 的完成标记。
-  官方配置由 14/17 可跑提升到 17/17 全绿。
-- **阶段 2-5 未开始**。阶段 2/3 完成前仍暂停扩充模型家族。
+- **阶段 0（门禁）、阶段 1（修复跑不通的官方配置）、阶段 2（P0 正确性）已完成**，
+  见 7.2 / 7.3 / 7.4 的完成标记。官方配置由 14/17 可跑提升到 17/17 全绿；
+  CPU 双进程 DDP 一致性已建立。
+- **阶段 3-5 未开始**。阶段 3 完成前仍暂停扩充模型家族。
 - **v1.1 早期一批未提交改动已整体回退**（回退原因与更正见 7.1.1，
   补丁留档于 `.dev_archive/wip-v1.1-partial.patch`，已在 `.gitignore` 中排除）。
-- 该批次中**诊断正确且实现无误**的两项（DDP 递归聚合、FCOS/YOLO 重复累加 L1）
-  将在阶段 2（7.4）重新实现。
+- 阶段 2 已重新实现该批次中**诊断正确且实现无误**的两项（DDP 递归聚合、FCOS/YOLO 重复累加 L1），
+  并补齐其缺失的归一化与测试。
 
 ### ⏸️ 环境阻塞
 
 - 多卡 NCCL 验证（原第六章 P0）：当前环境 `torch.cuda.is_available() == False`，无法执行；
-  替代方案与解除条件见 **7.8**。
+  替代方案（CPU gloo 双进程）已落地，解除条件见 **7.8**。
+
+### ⚠️ Windows 运行须知（影响 CPU 分布式测试）
+
+在 Windows 上直接用解释器绝对路径运行（**未激活 conda 环境**）时，
+`Library\bin` 不在 `PATH`，子进程 `import torch` 会随机报
+`ImportError: DLL load failed while importing _C`。
+请先激活环境（`conda activate dvisionix`）再运行测试；
+`tests/test_training/test_ddp_cpu.py` 已内置探测：环境不可用时给出明确原因并 skip，
+而不是抛出难以理解的 spawn 失败。
 
 ---
 
@@ -228,7 +240,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 2. **度量先于修复**：先建立能自动暴露缺陷的门禁，再改代码。
    v1 版是在「286 测试全绿 + 2 个官方配置崩溃」的情况下推进的，说明测试网没盖住装配层。
 3. **测试退化防护**：禁止用新测试替换既有 `def test_*` 的函数头、禁止用缩进把测试体变成局部代码；
-   CI 校验 collected 测试数不低于基线（当前基线 **344**，见第五章实测表）。
+   CI 校验 collected 测试数不低于基线（当前基线 **405**，见第五章实测表）。
    v1 版执行中已实际静默丢失 4 条回归测试。
 4. **行为变更登记**：任何改变训练语义或指标口径的改动，必须在第八章登记并说明影响（历史 checkpoint 可比性）。
 5. **提交粒度**：一项任务 = 实现 + 回归测试 + 文档 + lint，一次提交；禁止跨任务混合提交。
@@ -276,6 +288,10 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | D19 | docstring 机械损坏 3 处：`` `name` `` 被切成「反引号 + 换行 + ame」 | `registry.py:93`、`data/base.py:17`、`metrics/base.py:16` | 低 |
 | D20 | 测试只「构建模型」不「运行配置」，造成配置已覆盖的假象：`test_new_detection_configs_load` 点名了 yolov10 与 centernet，却只做 `build_model()`，从不构建 loss、从不跑 `validation_step`，因此 D1/D2 全部漏网 | `tests/test_models/test_v010_direction3.py:130-136`（另有 4 处同模式） | 中 |
 
+> **修复进度（截至阶段 2）**：D1、D2、D3、D5、D6、D7、D8、D9、D10、D11、D13、D17、D18、D19、D20
+> 共 15 项**已修复并附回归测试**；
+> 剩余 5 项按计划归属：D4 与 D12 → 阶段 3（7.5），D14 / D15 / D16 → 阶段 4（7.6）。
+
 #### 7.1.3 诚实评价：v1.0.0 的真实成色
 
 - **成立的部分**：分层调用规则 R1–R7、Registry 注册即用、组合器目录化、10 篇专题文档、286 条测试与 69 秒的反馈速度，是扎实且少见的基线。
@@ -307,15 +323,21 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 **阶段 1 门禁达成情况**：17 配置 E2E 全绿 ✅、契约测试全绿 ✅、`xfail` 清空 ✅、
 `ruff`/`black` 全绿 ✅、collected 由 288 升至 344 ✅。
 
-### 7.4 阶段 2：P0 正确性（3–4 天）
+### 7.4 ✅ 阶段 2：P0 正确性（已完成）
 
-| 步骤 | 涉及文件 | 实施 | 验收 |
-|---|---|---|---|
-| 2-1 **DDP 递归聚合**（重做 D5） | `training/trainer.py`、tests | `_concat_objects` 改为递归：Tensor 用 `torch.cat`，list 按元素拼接，tuple 按位置递归，dict 按 key 递归；对结构/tuple 长度/dict key 不一致显式报错；训练中验证与 `validate()` 复用同一 gather/reduce helper | 覆盖分类 Tensor、检测 `(boxes,scores,labels)`、分割嵌套结构；**CPU `gloo` 双进程**与单进程全局指标在 `1e-6` 内一致，无死锁 |
-| 2-2 **损失语义**（重做 D6 + 修 D7） | `models/losses/detection/losses.py`、tests | ① 引入显式 `giou_weight` / `l1_weight`（与同文件 `RetinaNetDetectionLoss:484` 的既有约定一致），`use_giou` 提供迁移逻辑 + 告警；② 统一正样本归一化（除以 `num_pos` 或改 mean），消除 loss 随 batch size / 层数漂移；③ 用固定预测与目标手算期望，测试可区分 GIoU / L1 / 组合三种模式；④ 空正样本 batch 无 NaN（`pos.any()` 守卫已存在，补测试固化） | 三模式可区分；空目标无 NaN；loss 不再随 batch size 漂移；**两处行为变更登记入第八章** |
-| 2-3 **几何变换契约**（修 D9） | `data/transforms/{__init__,image,geometric}.py`、tests | ① 检测管线改为先放大再随机 crop（沿用分类 `transforms/__init__.py:74` 的 1.1× 约定并补注释）；② `RandomCrop` / `CenterCrop` 增加 `on_small=error\|pad\|resize`，**默认 `error`**，禁止静默返回错误尺寸；③ 几何变换校验 boxes 与 labels 数量一致 | 裁剪有非零偏移；输出尺寸一致；boxes 不越界；labels 与 boxes 数量一致；固定随机种子下 image / boxes / mask 同步 |
-| 2-4 **mask dtype 与 mask AP**（修 D10 + D11） | `data/transforms/{image,labels}.py`、`training/evaluation.py`、tests | ① `ToTensor` 对 mask **无论 ndim** 都输出 long；② `MaskToTensor` 强制 long；③ mask 加载校验维度与类别值；④ `evaluate_mask_ap` 目标尺寸取真实图像尺寸 | mask dtype 恒为 long；首图空预测 / 部分图片空预测 / 全部空预测三场景均不把 target 缩到 1×1 |
-| 2-5 **合成数据泄漏**（修 D13） | `tools/train.py`、tests | train 与 val 使用不同文件名前缀或不同 `cache_dir` | 断言 train / val 样本路径无交集 |
+| 步骤 | 状态 | 实际实施与验收证据 |
+|---|---|---|
+| 2-1 **DDP 递归聚合**（重做 D5 + 修 D8） | ✅ | `_concat_objects` 改为递归：Tensor 沿 batch 拼接、list 逐元素、**tuple 按位置递归**（不再被 `extend` 拍平）、dict 按 key；结构不一致显式报错；新增 `_gather_preds_targets` 共享 helper 与 `_update_metrics_for_step` / `_accumulate_step_logs`，训练中验证与 `validate()` 共用同一实现。`validate()` 补上 DDP 分支。新增 `tests/test_training/test_ddp_cpu.py`（**CPU gloo 双进程**）：单进程 vs 双进程全局指标在 `1e-6` 内一致，且断言全局指标 ≠ rank0 分片指标。修复 CPU 分布式路径的 3 处阻塞（设备解析强制 `cuda:*`、`device_ids=[None]`、`strategy="auto"` 要求 CUDA） |
+| 2-2 **损失语义**（重做 D6 + 修 D7） | ✅ | ① 引入显式 `giou_weight` / `l1_weight`（与同文件 **`DETRLoss`** 的 `bbox_weight`/`giou_weight` 约定一致）；旧 `use_giou` 按**字面意图**迁移并告警，与显式权重同时给出则报错；② 各分量先乘回正样本数还原为「和」，循环末尾统一除以 `num_pos` / `num_cls_terms`，回归与 cls 均成为真实均值；③ 新增 14 条测试锁定三模式可区分、`combined == giou + l1`（证明各只算一次）、权重线性、batch size 不变性、空目标无 NaN |
+| 2-3 **几何变换契约**（修 D9） | ✅ | ① 检测训练管线改为先 resize 到 1.1× 再随机 crop（与分类预设一致），并注释原因；② `RandomCrop` / `CenterCrop` / `BoxSyncRandomCrop` 统一增加 `on_small=error\|pad\|resize`，**默认 `error`**，终止 v1.0.0 的静默错误尺寸行为；③ 三种几何变换入口校验 boxes 与 labels 数量一致。新增 15 条测试，含「裁剪偏移必须非零且随种子变化」与 image/boxes/mask 同步 |
+| 2-4 **mask dtype 与 mask AP**（修 D10 + D11） | ✅ | ① `ToTensor` 对 mask **与 ndim 无关**地短路为 long；② `MaskToTensor` 无论输入类型强制 long，并拦截非整值浮点、负值、非法形状；③ `evaluate_mask_ap` 空预测时退化为**输入图像尺寸**而非 `(1, 1)`，并清理函数内重复 import。新增 11 条 dtype 契约测试 + 1 条「首图空预测」回归测试（用 spy 指标断言 GT 尺寸） |
+| 2-5 **合成数据泄漏**（修 D13） | ✅ | `build_synthetic_dataset` 增加 `split` 参数，文件名加划分前缀（`train_img_0000.png` / `val_img_0000.png`），并改用按 `(split, i)` 派生的稳定随机种子使数据可复现；检测框生成补上小尺寸防护。新增 6 条测试：4 类任务的 train/val 路径无交集、可复现性、未知 task_type 报错 |
+
+**阶段 2 门禁达成情况**：全量测试 `403 passed, 2 skipped`（collected 405）✅、
+17 配置 E2E 全绿 ✅、`ruff`/`black` 全绿 ✅、CPU gloo 双进程一致性 ✅。
+
+**行为变更**：2-2（损失语义与归一化）、2-3（检测裁剪增强真实生效）、2-5（合成数据口径）
+均已登记入第八章「行为变更登记」。
 
 ### 7.5 阶段 3：训练 / 评估 / 导出闭环（3–4 天）
 
@@ -364,7 +386,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 任务只有同时满足以下全部条件才可标记为完成：
 
 1. 实现已提交，没有通过静默 fallback 掩盖错误。
-2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（344）**。
+2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（405）**。
 3. 相关单元与集成测试通过，**17 个可训练官方配置 E2E 全绿**。
 4. `ruff` 与 `black --check` 全绿。
 5. 文档、配置示例与 API 行为一致（含 README 的能力声明）。
@@ -381,7 +403,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 | 版本 | 里程碑 |
 |---|---|
-| v1.1（进行中） | 稳定性与工程优化：见第七章阶段 0-5；修复 3 个跑不通的官方配置 + 20 项已核实缺陷 |
+| v1.1（进行中） | 稳定性与工程优化：阶段 0-2 已完成（门禁 + 3 个官方配置 + 15 项缺陷），阶段 3-5 待办 |
 | v1.0.0 | 功能基线：全库审查/注释/文档规范化，API 冻结 |
 | v0.17.0 | 训练工程 P2+P3、DINO look-forward-twice |
 | v0.16.0 | DINO-lite、线性评估、训练工程 P1 |
@@ -406,7 +428,9 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 | 版本 | 变更 | 影响 |
 |---|---|---|
-| v1.1 | FCOS / YOLO 回归损失引入显式 `giou_weight` / `l1_weight`，并统一正样本归一化（对应 7.4 的 2-2） | **训练语义变更**：v1.0.0 中 `use_giou=True` 实际为 GIoU+L1、`False` 为 2×L1；修正后 loss 量级与最优学习率会变化，**v1.0.0 的历史 checkpoint 不可直接续训**，既有超参需重新标定 |
-| v1.1 | 检测回归损失按 `num_pos` 归一化（对应 7.4 的 2-2） | **指标口径变更**：`val_loss` 数值与 v1.0.0 不可直接比较，历史 `best` 判据失效 |
-| v1.1 | DINO 去噪目标改用真实 `image_hw`（对应 7.5 的 3-1） | **训练语义变更**：去噪分支坐标尺度修正，需重新训练评估效果 |
-| v1.1 | 合成数据 train / val 拆分（对应 7.4 的 2-5） | **指标口径变更**：demo 的 `val_loss` / `val_acc` 不再含泄漏，数值会明显变差，属预期修正 |
+| v1.1（已实施） | FCOS / YOLO 回归损失改为显式 `giou_weight` / `l1_weight`，默认 **GIoU only**（`giou_weight=1.0, l1_weight=0.0`）。旧 `use_giou` 按字面意图迁移（`True`→GIoU、`False`→L1）并发出 `DeprecationWarning`；与显式权重同时给出则报错（对应 7.4 的 2-2） | **训练语义变更**：v1.0.0 中 `use_giou=True` 实为 **GIoU+L1**、`False` 实为 **2×L1**。修正后回归项减少一个 L1 分量，loss 量级与最优学习率会变化，**v1.0.0 的历史 checkpoint 不可直接续训**，既有超参需重新标定 |
+| v1.1（已实施） | 检测损失各分量改为真实均值：`reg` / `center` 除以 `num_pos`，`cls` 除以 `(图, 层)` 项数（对应 7.4 的 2-2） | **指标口径变更**：loss 不再随 batch size 与特征层数漂移，但数值与 v1.0.0 不可直接比较，历史 `best` 判据失效。这使得不同 batch size 的 `val_loss` 首次可比 |
+| v1.1（已实施） | 检测训练管线改为先 resize 到 1.1× 再随机裁剪（对应 7.4 的 2-3） | **训练语义变更**：v1.0.0 的「resize 到目标尺寸 → 同尺寸裁剪」使随机裁剪退化为恒等操作，**增强完全未生效**；修正后训练数据分布改变，等价于引入了此前缺失的数据增强 |
+| v1.1（已实施） | `RandomCrop` / `CenterCrop` / `BoxSyncRandomCrop` 在输入小于目标尺寸时**默认直接报错**（`on_small="error"`）（对应 7.4 的 2-3） | **行为变更**：v1.0.0 是静默返回错误尺寸（`CenterCrop` 经负索引切片返回更小的图）。依赖旧行为的自定义管线需显式传 `on_small="pad"`。内置预设管线不受影响（resize 后尺寸恒满足） |
+| v1.1（已实施） | 合成数据 train / val 使用不同 split 前缀与独立随机种子（对应 7.4 的 2-5） | **指标口径变更**：v1.0.0 的 val 前 N 张就是 train 前 N 张，demo 指标含数据泄漏、偏乐观；修正后 `val_loss` / `val_acc` 会明显变差，属预期修正。同时合成数据变为可复现（原为每次运行随机） |
+| v1.1（待实施） | DINO 去噪目标改用真实 `image_hw`（对应 7.5 的 3-1） | **训练语义变更**：去噪分支坐标尺度修正（官方配置下原为 2 倍误差），需重新训练评估效果 |
