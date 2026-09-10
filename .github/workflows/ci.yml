@@ -1,28 +1,142 @@
 name: CI
 
+# 门禁顺序：静态检查（ruff/black/mypy）-> 快速测试 -> 全量测试 + 覆盖率
+#           -> wheel 构建与干净安装 -> 依赖安全审计。
+#
+# 阻断性（会让 PR 变红）：ruff、black、pytest（全量）、覆盖率下限、wheel 构建与安装烟雾测试。
+# 信息性（continue-on-error，需先建立基线才能升级为阻断）：
+#   - mypy：当前基线 121 errors / 39 files（见 CodePlan 7.6 的 4-2），
+#     逐文件收紧前保持非阻断，避免门禁沦为「永远红」。
+#   - pip-audit：上游 CVE 与本项目代码无关，需人工 triage 后才设为阻断。
+
 on:
   push:
     branches: [main]
   pull_request:
 
+# 最小权限：CI 只需要读仓库内容
+permissions:
+  contents: read
+
+# 同一分支的新推送取消上一次未完成的运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # 锁定静态检查工具版本：它们的次版本升级会改变判定结果，不锁定则门禁不可复现
+  RUFF_VERSION: "0.16.1"
+  BLACK_VERSION: "26.5.1"
+  MYPY_VERSION: "2.3.0"
+
 jobs:
-  test:
+  # ------------------------------------------------------------------
+  # 静态检查：不需要 torch，跑得快
+  # ------------------------------------------------------------------
+  quality:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11"]
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
+          python-version: "3.12"
+      - name: Install lint tools (pinned)
         run: |
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -e .[dev,full]
+          python -m pip install --upgrade pip
+          pip install "ruff==${RUFF_VERSION}" "black==${BLACK_VERSION}" "mypy==${MYPY_VERSION}"
       - name: Lint (ruff)
         run: ruff check dvisionix tools tests
       - name: Format (black)
         run: black --check dvisionix tools tests
-      - name: Test
-        run: pytest tests/ -q
+      - name: Types (mypy, informational)
+        continue-on-error: true
+        run: |
+          echo "基线：121 errors / 39 files —— 收紧到可阻断前先逐步修复。"
+          mypy
+
+  # ------------------------------------------------------------------
+  # 测试矩阵 + 覆盖率门禁
+  # ------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[full,dev]"
+      - name: Fast tests (快速反馈，跳过配置端到端门禁)
+        run: pytest tests -q -m "not slow"
+      - name: Full tests + coverage gate
+        # 含 17 个官方配置端到端门禁；实测覆盖率 91%，门禁取 90% 留余量
+        run: pytest tests -q --cov=dvisionix --cov-report=term --cov-fail-under=90
+      - name: Packaging tests
+        # 构建 wheel 并验证「装完能用」；由 tests/test_packaging.py 覆盖
+        run: pytest tests/test_packaging.py -q
+
+  # ------------------------------------------------------------------
+  # 干净虚拟环境安装（验证 Requires-Dist 能真正解析）
+  # ------------------------------------------------------------------
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+      - name: Install into a clean venv with real dependencies
+        # 关键回归：v1.0.0 在非 editable 安装下 Config.from_default() 必然失败
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/python -m pip install --upgrade pip
+          /tmp/clean/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/clean/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/clean/bin/python -c "
+          from dvisionix.config import Config
+          cfg = Config.from_default('classification')
+          assert cfg.task_type == 'classification', cfg.task_type
+          from dvisionix.registry import MODELS, BACKBONES, HEADS, LOSSES
+          print('installed wheel smoke test OK:', len(MODELS), 'models,', len(BACKBONES), 'backbones')
+          "
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-wheel
+          path: dist/*.whl
+          retention-days: 14
+
+  # ------------------------------------------------------------------
+  # 依赖安全审计（信息性，见文件头说明）
+  # ------------------------------------------------------------------
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Audit the project's declared dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[full]"
+          pip install pip-audit
+          pip-audit --desc --progress-spinner off

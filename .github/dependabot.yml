@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  # 运行依赖与开发工具（唯一来源是 pyproject.toml）
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      dev-tools:
+        patterns:
+          - "ruff"
+          - "black"
+          - "mypy"
+          - "pytest"
+          - "pytest-cov"
+          - "coverage"
+          - "pip-audit"
+
+  # GitHub Actions：Dependabot 会同时更新 SHA 与尾部的版本注释
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"

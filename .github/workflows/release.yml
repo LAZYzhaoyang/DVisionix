@@ -1,0 +1,111 @@
+name: Release
+
+# 只在打 tag 或手动触发时运行；日常 CI 见 ci.yml。
+#
+# 发布使用 PyPI Trusted Publishing（OIDC），因此不需要在仓库里存 API token，
+# 但需要在 PyPI / TestPyPI 的项目设置里预先登记本仓库与下面两个 environment
+# （`pypi` / `testpypi`）。未完成登记前本工作流不会成功，也不会被日常推送触发。
+#
+# 注意：默认只发布到 TestPyPI；发布到正式 PyPI 需要打 `v*` tag 或手动选择 target=pypi。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "发布目标"
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Verify wheel payload
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          wheel = sorted(glob.glob("dist/*.whl"))[-1]
+          names = zipfile.ZipFile(wheel).namelist()
+          for name in (
+              "dvisionix/config/defaults/base.yaml",
+              "dvisionix/config/defaults/classification.yaml",
+              "dvisionix/config/defaults/detection.yaml",
+              "dvisionix/config/defaults/segmentation.yaml",
+          ):
+              assert name in names, f"wheel 缺少 {name}"
+          assert not [n for n in names if n.startswith("tests/")], "wheel 不应包含 tests"
+          assert any("LICENSE" in n.upper() for n in names), "wheel 应包含 LICENSE"
+          print(f"payload OK: {wheel}")
+          PY
+      - name: Smoke test the built wheel in a clean venv
+        run: |
+          python -m venv /tmp/release
+          /tmp/release/bin/python -m pip install --upgrade pip
+          /tmp/release/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/release/bin/python -m pip install dist/*.whl
+          cd /tmp
+          /tmp/release/bin/python -c "
+          from dvisionix.config import Config
+          assert Config.from_default('classification').task_type == 'classification'
+          import dvisionix; print('release smoke OK', dvisionix.__version__)
+          "
+      - name: Record the artifacts checksums
+        run: |
+          cd dist && sha256sum * | tee SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dist
+          path: dist/
+          retention-days: 30
+
+  publish-testpypi:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: testpypi
+    permissions:
+      id-token: write # Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: pypi
+    permissions:
+      id-token: write # Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
