@@ -162,29 +162,35 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 > 于 `conda env dvisionix`（Python 3.14.6 / torch 2.12.0 / CPU-only）实测，
 > 作为全部改动的对照基准。**任何任务的完成判定都必须与这组数字对比。**
 
-| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-3 完成后） |
+| 指标 | v1.0.0 基线（HEAD `e20d5e9`） | 当前（阶段 0-4 完成后） |
 |---|---|---|
-| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `447 passed, 2 skipped`（188.7s），collected = 449 |
-| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 17 + 契约/回归/CPU-DDP/导出 共 144 |
-| 静态检查 | `ruff` / `black --check` 全绿 | `ruff` / `black --check` 全绿 |
+| 测试 | `286 passed, 2 skipped`（69.4s），collected = 288 | `455 passed, 2 skipped`（97.3s 空载），collected = 457 |
+| 测试构成 | 纯组件级 | 组件级 + 配置 E2E 门禁 24 + 契约/回归/CPU-DDP/导出/打包 共 169 |
+| 静态检查 | `ruff` / `black --check` 全绿 | `ruff` / `black --check` 全绿；`mypy` 可运行（基线 121 errors / 39 files，非阻断） |
+| 覆盖率 | 未统计 | **91%**（CI 门禁 ≥90%） |
 | 官方配置 E2E（19 个各跑 1 epoch） | **14 PASS / 3 FAIL / 2 模板不可跑** | **17 PASS / 0 FAIL / 2 模板不可跑** |
 | 跑不通的配置 | `classification/simclr_synthetic`、`detection/centernet_synthetic`、`detection/yolov10_synthetic` | 无 |
 | 不可跑的模板（非缺陷） | `classification/hparam_search`（用 `tools/hparam_search.py`）、`classification/linear_eval`（占位 checkpoint 路径） | 同左 |
 | CPU 双进程 DDP 一致性 | 无此测试（`test_ddp_smoke` 需 2+ GPU，恒跳过） | ✅ 单进程 vs 2 进程全局指标在 `1e-6` 内一致 |
 | 导出契约 | 嵌套输出崩溃、导出改动调用者模型 | ✅ 嵌套输出可导出并数值验证、导出不改变原模型状态 |
+| 发行物 | wheel 缺内置默认配置、混入 `tests/` | ✅ `config/defaults/*.yaml` 全部在包内、无 `tests/`；干净安装后 `Config.from_default()` 可用 |
 
-> 说明：测试数从 288 增至 449 全部是**新增门禁与回归测试**，不是实现膨胀；
-> 其中 17 条为配置端到端门禁（`-m "not slow"` 可跳过）、2 条为 CPU gloo 双进程、
+> 说明：测试数从 288 增至 457 全部是**新增门禁与回归测试**，不是实现膨胀；
+> 其中 24 条为配置端到端门禁、2 条为 CPU gloo 双进程、3 条为打包契约、
 > 其余为契约与回归测试。无既有测试被删除；仅 1 条既有断言随契约修正同步更新
 > （`test_task_config.py` 的 `accuracy` → `val_accuracy`，并补上「不得为 0」的断言）。
+>
+> 耗时说明：表中当前值 97.3s 是空载实测；此前几轮记录为 150–190s，
+> 差异来自当时并行执行的其他命令争用 CPU，并非测试本身变化。
 
 ### 🔄 当前状态：v1.1 稳定性与工程优化
 
 - **第七章是本项目唯一执行计划。**
-- **阶段 0（门禁）、阶段 1（配置修复）、阶段 2（P0 正确性）、阶段 3（训练/评估/导出闭环）已完成**，
-  见 7.2 / 7.3 / 7.4 / 7.5 的完成标记。官方配置由 14/17 可跑提升到 17/17 全绿；
-  CPU 双进程 DDP 一致性、统一 Evaluator、checkpoint 契约与 ONNX 契约均已落地。
-- **阶段 4（打包与 CI）与阶段 5（性能）未开始**。阶段 4 完成前仍暂停扩充模型家族。
+- **阶段 0-4 已全部完成**（门禁 → 配置修复 → P0 正确性 → 训练/评估/导出闭环 → 打包与 CI），
+  见 7.2 / 7.3 / 7.4 / 7.5 / 7.6 的完成标记。20 项已核实缺陷 D1-D20 全部修复并附回归测试；
+  官方配置由 14/17 可跑提升到 17/17 全绿。
+- **仅阶段 5（性能优化）未开始**，见 7.7；对照基线与门禁定义分别在第五章与 7.2/7.6。
+- 阶段 5 完成后即可进入第六章的 P1/P2/P3（模型库继续扩充等）。
 - **v1.1 早期一批未提交改动已整体回退**（回退原因与更正见 7.1.1，
   补丁留档于 `.dev_archive/wip-v1.1-partial.patch`，已在 `.gitignore` 中排除）。
 - 阶段 2 已重新实现该批次中**诊断正确且实现无误**的两项（DDP 递归聚合、FCOS/YOLO 重复累加 L1），
@@ -208,7 +214,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 ## 六、未来发展规划（按优先级）
 
-> 以下内容**默认推迟**，仅在第七章阶段 0-4 全部完成后按明确指示实施。
+> 以下内容**默认推迟**，仅在第七章阶段 0-4 全部完成（现已达成）后按明确指示实施。
 
 ### P1 — 指标 torchmetrics 迁移（low）
 - **背景**：内置指标（mAP / mIoU / PQ）正确性已由测试保障，torchmetrics 作为可选后端。
@@ -242,11 +248,13 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 2. **度量先于修复**：先建立能自动暴露缺陷的门禁，再改代码。
    v1 版是在「286 测试全绿 + 2 个官方配置崩溃」的情况下推进的，说明测试网没盖住装配层。
 3. **测试退化防护**：禁止用新测试替换既有 `def test_*` 的函数头、禁止用缩进把测试体变成局部代码；
-   CI 校验 collected 测试数不低于基线（当前基线 **449**，见第五章实测表）。
+   CI 校验 collected 测试数不低于基线（当前基线 **457**，见第五章实测表）。
    v1 版执行中已实际静默丢失 4 条回归测试。
 8. **测试必须自播种**：「loss 下降」这类断言要在**构建模型之前**播种
    （模型初始权重也是随机的），否则会依赖此前测试消耗掉的全局 RNG 状态，
    表现为顺序相关的偶发失败 —— 阶段 3 已实际遇到一次。
+9. **单一事实来源**：依赖、版本、任务类型常量、decode 契约等都只能有一处定义；
+   其余位置要么引用它，要么由测试守护一致性（阶段 1 与阶段 4 各消除了一处双源）。
 4. **行为变更登记**：任何改变训练语义或指标口径的改动，必须在第八章登记并说明影响（历史 checkpoint 可比性）。
 5. **提交粒度**：一项任务 = 实现 + 回归测试 + 文档 + lint，一次提交；禁止跨任务混合提交。
 6. **验收以官方配置为准**：每个阶段的门禁都包含「19 个官方配置 E2E」，不允许只做单点组件验收。
@@ -293,8 +301,9 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | D19 | docstring 机械损坏 3 处：`` `name` `` 被切成「反引号 + 换行 + ame」 | `registry.py:93`、`data/base.py:17`、`metrics/base.py:16` | 低 |
 | D20 | 测试只「构建模型」不「运行配置」，造成配置已覆盖的假象：`test_new_detection_configs_load` 点名了 yolov10 与 centernet，却只做 `build_model()`，从不构建 loss、从不跑 `validation_step`，因此 D1/D2 全部漏网 | `tests/test_models/test_v010_direction3.py:130-136`（另有 4 处同模式） | 中 |
 
-> **修复进度（截至阶段 3）**：**D1-D13、D17-D20 共 18 项已修复并附回归测试**；
-> 剩余 D14 / D15 / D16 三项（打包与 CI）归属**阶段 4**（7.6）。
+> **修复进度（截至阶段 4）**：**D1-D20 共 20 项全部已修复并附回归测试**。
+> 其中 mypy 与 pip-audit 两项 CI 门禁目前为**信息性**（原因见 7.6 的 4-2 说明），
+> 它们不属于 D 编号缺陷，而是门禁成熟度的后续工作。
 
 #### 7.1.3 诚实评价：v1.0.0 的真实成色
 
@@ -359,12 +368,27 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 ### 7.6 阶段 4：打包与 CI（2–3 天）
 
-| 步骤 | 涉及文件 | 实施 | 验收 |
+### 7.6 ✅ 阶段 4：打包与 CI（已完成）
+
+| 步骤 | 状态 | 实际实施与验收证据 |
+|---|---|---|
+| 4-1 **打包一致性**（修 D14 + D15） | ✅ | ① 元数据全部迁移到 `pyproject.toml [project]`，**`setup.py` 已删除**；② `[tool.setuptools.package-data]` 纳入 `dvisionix/config/defaults/*.yaml`；③ 包发现改为 `include = ["dvisionix*"]` 并排除 `tests*/tools*/configs*/docs*`；④ 新增 `LICENSE` 与 `CHANGELOG.md`；⑤ 版本号单源：`dynamic = ["version"]` 从 `dvisionix.__version__` 静态读取；⑥ 依赖拆为 `export` / `models` / `datasets` / `coco` / `metrics` / `dev` / `full` 七个 extras；⑦ `requirements.txt` 降级为**指向 pyproject 的指针**，不再声明任何版本（漂移根因消除） |
+| 4-1b **wheel 验证**（纳入 CI） | ✅ | 实测构建 `dvisionix-1.0.0-py3-none-any.whl`：**4 个 `config/defaults/*.yaml` 全部在包内**、`tests/` 条目为 0、`LICENSE` 位于 `dist-info/licenses/`。新增 `tests/test_packaging.py`（3 条）把「wheel 内容」与「装完能用」变成断言：构建 wheel → 校验载荷 → `pip install --no-deps --target` → 在仓库**之外**的子进程里调用 `Config.from_default()`（确保解析到安装副本而非源码树）。CI 的 `install` job 另做一次带真实依赖的干净 venv 安装 |
+| 4-2 **真实测试门禁**（修 D16 + D20） | ✅ | CI 重写为 4 个 job：`quality`（ruff / black / mypy）、`test`（矩阵 3.10/3.11/3.12：快速测试 → 全量测试 + **覆盖率下限 90%** → 打包测试）、`install`（构建 wheel → 干净 venv 真实安装 → 烟雾测试 → 上传产物）、`security`（pip-audit）。全部 action 固定到 commit SHA；workflow 级最小权限 `contents: read`、`timeout-minutes`、`concurrency` 取消旧运行。`--strict-markers` 已启用；marker 与 `tests/conftest.py` 在阶段 0 落地。静态检查工具（ruff/black/mypy）**锁定版本**以保证判定可复现 |
+| 4-3 **安全与发布** | ✅ | ① 新增 `.github/dependabot.yml`（pip + github-actions，按周，开发工具分组）；② 新增 `.github/workflows/release.yml`：tag → build sdist+wheel → 载荷校验 → 干净 venv 烟雾测试 → 校验和 → TestPyPI/PyPI（Trusted Publishing，`id-token: write`，两个 environment 需在 PyPI 端预先登记）；③ **checkpoint 反序列化策略**：`load_backbone` 默认 `weights_only=True`（第三方权重按不可信处理），需要 pickle 时必须显式 `trusted=True`；`Trainer.load_checkpoint` 因断点续训必须恢复优化器/回调/RNG 等非张量状态，默认 `trusted=True` 并在 docstring 写明风险，另提供 `trusted=False` 走安全模式；④ 加载前校验结构、schema 版本、任务/模型类型、配置哈希，并新增「`model_state_dict` 必须只含张量」的校验 |
+| 4-4 **文档与解释器对齐** | ✅ | README：安装段补 extras 说明与「依赖唯一来源是 pyproject」；明确 `requires-python>=3.10`、CI 覆盖 3.10/3.11/3.12、3.13/3.14 为**实验性**；测试段给出当前实测数字（447 passed / 覆盖率 91%）与全部门禁命令；补 Windows 运行提示与许可证/变更日志链接。classifier 已补 `3.14`（`pyproject.toml`） |
+
+#### 4-2 的两项「信息性门禁」说明
+
+计划要求 CI 展示类型与安全检查结果，但这两项当前**无法立即作为阻断门禁**，原因如下（已如实记录，未用配置掩盖）：
+
+| 项目 | 现状 | 为何暂不阻断 | 升级条件 |
 |---|---|---|---|
-| 4-1 **打包一致性**（修 D14 + D15） | `pyproject.toml`、`setup.py`、`requirements.txt`、`MANIFEST.in` | ① 迁移到 `pyproject.toml [project]` 单源，消除依赖/版本双源；② `[tool.setuptools.package-data]` 纳入 `dvisionix/config/defaults/*.yaml`；③ `find_packages(exclude=["tests*"])`；④ 补 `LICENSE` 与 `CHANGELOG`；⑤ 统一版本号来源；⑥ 依赖拆分 core / dev / export / datasets extras | 构建 wheel 后在新虚拟环境安装，`Config.from_default()` 与最小 import 均成功；**该测试纳入 CI** |
-| 4-2 **真实测试门禁**（修 D16 + D20） | `.github/workflows/ci.yml`、`pyproject.toml`、`tests/conftest.py` | CI 顺序：锁定依赖 → ruff → black → mypy（先修 `pyproject.toml:24` 的 `python_version="3.8"` 到 3.10）→ 单测 → **配置 E2E** → coverage（初始 60%，稳定后 75%）→ wheel 安装 → pip-audit；矩阵补 3.12；启用 strict markers | PR 可直接看到测试、覆盖率、类型、打包、安全结果；测试状态以 CI 为准 |
-| 4-3 **安全与发布** | CI、`dependabot.yml`、release workflow、checkpoint loader | pip-audit + Dependabot；actions 固定 SHA + `permissions: contents: read` + `timeout-minutes` + `concurrency`；建立 tag → build → smoke → TestPyPI/PyPI 流程；checkpoint 默认 `weights_only=True`，完整 pickle 需显式声明可信 | 发布 wheel 可在干净环境运行；不可信 checkpoint 风险与 API 策略有文档 |
-| 4-4 **文档与解释器对齐** | `README.md`、`setup.py` | README 的测试数字改为「以 CI 为准」并给当前实测值；`setup.py:57-60` classifier 补 3.14，或在 README 明确标注 3.14 为实验性 | 文档声明与 CI 矩阵、`python_requires` 三者一致 |
+| **mypy** | `mypy dvisionix` 报 **121 errors / 39 files**（`arg-type` 28、`override` 25、`union-attr` 17 为前三类） | 一次性修复 121 处（含 25 处 Liskov 违例，可能牵动签名）不属于本阶段范围；设为阻断会让 CI 从第一天起恒红，门禁失去意义 | 逐文件收紧并修复后改为阻断。**注意**：`[tool.mypy].python_version` 必须 ≥3.12 —— numpy≥2 的 stub 使用 PEP 695 `type` 语句，写成项目下限 3.10 会让 mypy 直接拒绝运行；项目自身下限仍由 `requires-python` 与 CI 矩阵保证 |
+| **pip-audit** | 已安装项目依赖后执行 | 上游（torch / tensorflow 等）CVE 与本项目代码无关，需人工 triage 并显式 `--ignore-vuln` 记录后才适合阻断 | 建立 triage 基线后转为阻断 |
+
+**阶段 4 门禁达成情况**：全量测试全绿 ✅、17 配置 E2E 全绿 ✅、`ruff`/`black` 全绿 ✅、
+wheel 载荷与干净安装验证通过 ✅、覆盖率 91% ≥ 90% ✅。
 
 ### 7.7 阶段 5：性能（P2，最后）
 
@@ -395,7 +419,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 任务只有同时满足以下全部条件才可标记为完成：
 
 1. 实现已提交，没有通过静默 fallback 掩盖错误。
-2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（449）**。
+2. 至少有一条针对原缺陷的回归测试，且 **collected 测试总数不低于当前基线（457）**。
 3. 相关单元与集成测试通过，**17 个可训练官方配置 E2E 全绿**。
 4. `ruff` 与 `black --check` 全绿。
 5. 文档、配置示例与 API 行为一致（含 README 的能力声明）。
@@ -412,7 +436,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 
 | 版本 | 里程碑 |
 |---|---|
-| v1.1（进行中） | 稳定性与工程优化：阶段 0-3 已完成（门禁 + 3 个官方配置 + 18 项缺陷），阶段 4-5 待办 |
+| v1.1（进行中） | 稳定性与工程优化：阶段 0-4 已完成（门禁 + 3 个官方配置 + 20 项缺陷 + 打包/CI），阶段 5 待办 |
 | v1.0.0 | 功能基线：全库审查/注释/文档规范化，API 冻结 |
 | v0.17.0 | 训练工程 P2+P3、DINO look-forward-twice |
 | v0.16.0 | DINO-lite、线性评估、训练工程 P1 |

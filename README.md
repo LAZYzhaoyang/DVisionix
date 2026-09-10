@@ -65,6 +65,23 @@ conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -y
 pip install -e .[dev,full]
 ```
 
+依赖与版本元数据的**唯一来源是 `pyproject.toml`**（`[project]` 与
+`[project.optional-dependencies]`）；`requirements.txt` 只是指向它的指针，不再单独声明版本。
+可选能力按需安装：
+
+```bash
+pip install -e .              # 仅核心依赖
+pip install -e .[export]      # ONNX 导出与验证
+pip install -e .[models]      # 第三方骨干（timm）
+pip install -e .[datasets]    # 数据增强（albumentations）
+pip install -e .[coco]        # COCO 评估（pycocotools）
+pip install -e .[metrics]     # 可选指标后端（torchmetrics）
+pip install -e .[full,dev]    # 全部能力 + 开发工具
+```
+
+**支持的解释器**：`requires-python = ">=3.10"`，CI 覆盖 3.10 / 3.11 / 3.12
+（classifier 已列到 3.14；3.13 / 3.14 尚未纳入 CI 矩阵，属实验性支持）。
+
 ### 30 秒上手：Config 驱动训练（合成数据）
 
 ```bash
@@ -164,11 +181,11 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-测试状态**以 CI 运行结果为准**。v1.0.0 基线实测为 **286 passed + 2 skipped**
-（多卡冒烟测试需 2+ GPU 时自动跳过），`ruff` / `black` 全绿；
-当前 v1.1 的对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 7.2 节。
+测试状态**以 CI 运行结果为准**。当前实测 **447 passed + 2 skipped**、覆盖率 **91%**，
+`ruff` / `black` 全绿；v1.0.0 基线为 286 passed + 2 skipped。
+完整对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 7.2 节。
 
-除常规测试外，另有两道装配层门禁（v1.1 阶段 0 新增）：
+除常规测试外，另有几道装配层门禁：
 
 ```bash
 # 官方配置端到端：configs/ 下每个可训练配置各跑 1 个 epoch
@@ -177,27 +194,42 @@ python -m pytest tests/test_e2e_configs.py -q
 # 模型契约：所有检测器的 decode() 必须满足统一关键字参数契约
 python -m pytest tests/test_model_contracts.py -q
 
+# CPU 双进程 DDP 一致性（无需 GPU）
+python -m pytest tests/test_training/test_ddp_cpu.py -q
+
+# wheel 内容与「装完能用」
+python -m pytest tests/test_packaging.py -q
+
 # 只要快速反馈时，跳过配置端到端门禁
 python -m pytest tests -q -m "not slow"
 ```
 
+> Windows 提示：请先 `conda activate dvisionix` 再运行测试。直接用解释器绝对路径时
+> `Library\bin` 不在 `PATH`，子进程 `import torch` 会报 `DLL load failed`。
+
 ```bash
 ruff check dvisionix tools tests
 black --check dvisionix tools tests
+mypy                                  # 当前基线 121 errors / 39 files，CI 中为非阻断
 ```
+
+CI 门禁顺序：`ruff` → `black` → `mypy`（信息性）→ 快速测试 → 全量测试 + 覆盖率（≥90%）
+→ wheel 构建与干净环境安装 → `pip-audit`（信息性）。
 
 ---
 
 ## 📝 版本说明
 
+- **v1.1（进行中）**：稳定性与工程优化。已完成门禁建设、官方配置修复、P0 正确性、
+  训练/评估/导出闭环与打包/CI 收口；性能优化待办。详见 [CHANGELOG](CHANGELOG.md) 与 [CodePlan](CodePlan.md)。
 - **v1.0.0**：功能基线（配置驱动 + 组件化模型库 + 训练工程 + 工具链）确定，API 冻结进入稳定期。
-- 历史变更记录已精简并入 [CodePlan](CodePlan.md)。
-
----
+- 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)；规划与开发约束（R1-R7）见 [CodePlan](CodePlan.md)。
 
 ## 📄 许可证
 
-MIT License
+本项目采用 [MIT License](LICENSE)。
+
+---
 
 ## 👤 作者
 
