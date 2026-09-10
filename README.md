@@ -41,7 +41,8 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 - 超参搜索 `tools/hparam_search.py`（参数网格/随机采样，逐 trial 独立进程）
 - ONNX 导出 `ONNXExporter`（trace/dynamo 后端、精度验证、dict 多输出）
 - 结构化日志（console + file + JSONL + TensorBoard）
-- 训练增强：warmup 调度器、梯度裁剪、EMA、知识蒸馏（logits + 特征）、torch.compile、channels_last
+- 训练增强：warmup 调度器、梯度裁剪、EMA（`training.ema` 配置开启）、
+  知识蒸馏（编程式 API：`DistillCallback`）、torch.compile、channels_last
 
 ---
 
@@ -163,7 +164,22 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-当前全量测试：**286 passed + 2 skipped**（多卡冒烟测试需 2+ GPU 时自动跳过），ruff / black 全绿。
+测试状态**以 CI 运行结果为准**。v1.0.0 基线实测为 **286 passed + 2 skipped**
+（多卡冒烟测试需 2+ GPU 时自动跳过），`ruff` / `black` 全绿；
+当前 v1.1 的对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 7.2 节。
+
+除常规测试外，另有两道装配层门禁（v1.1 阶段 0 新增）：
+
+```bash
+# 官方配置端到端：configs/ 下每个可训练配置各跑 1 个 epoch
+python -m pytest tests/test_e2e_configs.py -q
+
+# 模型契约：所有检测器的 decode() 必须满足统一关键字参数契约
+python -m pytest tests/test_model_contracts.py -q
+
+# 只要快速反馈时，跳过配置端到端门禁
+python -m pytest tests -q -m "not slow"
+```
 
 ```bash
 ruff check dvisionix tools tests
