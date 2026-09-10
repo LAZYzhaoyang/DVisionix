@@ -3,6 +3,8 @@
 # 用途: DINO 风格检测头（compact：hybrid query selection + query denoising ...
 """DINO 风格检测头（compact：hybrid query selection + query denoising + box refinement）。"""
 
+from typing import Optional
+
 import torch
 import torch.nn as nn
 
@@ -33,6 +35,7 @@ class DINODetrHead(BaseModel):
         self,
         in_channels_list,
         num_classes,
+        out_stride: Optional[int] = None,
         d_model: int = 256,
         num_queries: int = 300,
         num_encoder_layers: int = 2,
@@ -48,6 +51,7 @@ class DINODetrHead(BaseModel):
         super().__init__(task_type="detection")
         self.in_channels_list = list(in_channels_list)
         self.num_classes = num_classes
+        self.out_stride = int(out_stride) if out_stride is not None else None
         self.d_model = d_model
         self.num_queries = num_queries
         self.num_levels = len(in_channels_list)
@@ -89,6 +93,32 @@ class DINODetrHead(BaseModel):
             refs.append(grid)
         return torch.cat(refs, dim=0)
 
+    def _resolve_image_hw(self, batch, feat0):
+        """解析真实输入图像尺寸 ``(H, W)``，用于去噪目标的坐标归一化。
+
+        v1.0.0 硬编码 ``feats[0].shape[2] * 4`` 作为图像尺寸。骨干步长不是 4 时该代理
+        值就是错的：官方 ``configs/detection/dino_synthetic.yaml`` 用 3 个 stride=2 的
+        stage，``feats[0]`` 实为 stride 2，代理值成为真值的 **2 倍**；而 ``DINOLoss``
+        用的是真值，于是同一个 ``bbox_embed`` 在去噪分支与主分支被训练在**两个坐标系**
+        里（CodePlan 7.1.2 D4）。
+
+        优先级：
+        1. ``batch["image"]`` 的真实尺寸 —— ``DetectionTask`` 训练时会把含 image 的
+           batch 一并传入（``needs_batch = True``），这是正常路径；
+        2. 显式配置的 ``out_stride``（第一个特征图相对输入的步长）推断；
+        3. 都没有则**直接报错** —— 静默猜一个尺寸比报错危险得多。
+        """
+        image = batch.get("image") if isinstance(batch, dict) else None
+        if image is not None and hasattr(image, "shape") and image.dim() >= 4:
+            return (int(image.shape[-2]), int(image.shape[-1]))
+        if self.out_stride is not None:
+            return (int(feat0.shape[2]) * self.out_stride, int(feat0.shape[3]) * self.out_stride)
+        raise ValueError(
+            "DINODetrHead: 训练（含去噪）需要真实图像尺寸，但 batch 中缺少形如 (B, C, H, W) 的 "
+            "'image'，且 head 未配置 out_stride。请传入含 image 的 batch，"
+            "或在 head 配置里显式设置 out_stride（第一个特征图相对输入的步长）。"
+        )
+
     def forward(self, feats, batch=None):
         """DINODetrHead 前向：多尺度特征(+batch) -> {logits, boxes}，训练含中间框/去噪项。"""
         if not isinstance(feats, (list, tuple)):
@@ -118,8 +148,8 @@ class DINODetrHead(BaseModel):
 
         training = self.training and batch is not None and batch.get("boxes") is not None
         if training:
-            image_hw_proxy = (feats[0].shape[2] * 4, feats[0].shape[3] * 4)
-            dn = self.dn_generator(batch["boxes"], batch["labels"], image_hw_proxy, device)
+            image_hw = self._resolve_image_hw(batch, feats[0])
+            dn = self.dn_generator(batch["boxes"], batch["labels"], image_hw, device)
             dn_q, dn_cls_t, dn_box_t, dn_pos, dn_valid = dn
             dn_n = dn_q.shape[1]
             all_tgt = torch.cat([tgt, dn_q], dim=1)
