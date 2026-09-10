@@ -40,8 +40,8 @@ class MultiLabelTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步训练：多标签 BCE 损失。"""
-        images = batch["image"].to(device)
-        labels = batch["label"].to(device).float()
+        images = self.to_device(batch["image"], device)
+        labels = self.to_device(batch["label"], device).float()
         logits = model(images)
         loss, extras = compute_loss(self.loss, logits, labels)
         return {"loss": loss, **extras}
@@ -50,8 +50,8 @@ class MultiLabelTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步验证：多标签指标更新。"""
-        images = batch["image"].to(device)
-        labels = batch["label"].to(device).float()
+        images = self.to_device(batch["image"], device)
+        labels = self.to_device(batch["label"], device).float()
         with torch.no_grad():
             logits = model(images)
             loss, extras = compute_loss(self.loss, logits, labels)

@@ -63,7 +63,7 @@ class MaskFormerTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """MaskFormer 训练步：mask 监督损失。"""
-        images = batch["image"].to(device)
+        images = self.to_device(batch["image"], device)
         preds = model(images)
         if not isinstance(preds, dict):
             raise ValueError(
@@ -76,7 +76,7 @@ class MaskFormerTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """MaskFormer 验证步：mask/全景指标更新。"""
-        images = batch["image"].to(device)
+        images = self.to_device(batch["image"], device)
         with torch.no_grad():
             preds = model(images)
             image_hw = (images.shape[2], images.shape[3])
@@ -88,25 +88,29 @@ class MaskFormerTask(BaseTask):
                 mask_threshold=self.mask_threshold,
                 max_detections=self.max_detections,
             )
+            # 目标 mask 对齐到模型输出分辨率；**空预测时退化为输入图像尺寸**，
+            # 而不是 None —— 后者会让 GT 保持原分辨率、与预测分辨率不一致
+            # （与 evaluate_mask_ap 的 D11 修复同一问题）。
             pred_hw = (
-                tuple(masks_list[0].shape[-2:]) if masks_list and masks_list[0].numel() else None
+                tuple(masks_list[0].shape[-2:])
+                if masks_list and masks_list[0].numel()
+                else image_hw
             )
             if batch.get("instance_masks") is not None:
-                target_masks = [im.to(device) for im in batch["instance_masks"]]
-                target_labels = [lb.to(device) for lb in batch["instance_labels"]]
+                target_masks = [self.to_device(im, device) for im in batch["instance_masks"]]
+                target_labels = [self.to_device(lb, device) for lb in batch["instance_labels"]]
             else:
                 # 语义掩码退化：每图一个"实例"（整张掩码 + 默认类别 1）
-                target_masks = [m.to(device).unsqueeze(0) for m in batch["mask"]]
+                target_masks = [self.to_device(m, device).unsqueeze(0) for m in batch["mask"]]
                 target_labels = [torch.tensor([1], device=device) for _ in target_masks]
-            if pred_hw is not None:
-                target_masks = [
-                    (
-                        F.interpolate(m.float().unsqueeze(0), size=pred_hw, mode="nearest")
-                        .bool()
-                        .squeeze(0)
-                    )
-                    for m in target_masks
-                ]
+            target_masks = [
+                (
+                    F.interpolate(m.float().unsqueeze(0), size=pred_hw, mode="nearest")
+                    .bool()
+                    .squeeze(0)
+                )
+                for m in target_masks
+            ]
         out = {
             "loss": loss,
             **extras,

@@ -51,8 +51,8 @@ class SimCLRTask(BaseTask):
     ) -> Dict[str, Any]:
         """单步验证：返回投影向量（无监督无指标）。"""
         with torch.no_grad():
-            z1 = model(batch["image1"].to(device))
-            z2 = model(batch["image2"].to(device))
+            z1 = model(self.to_device(batch["image1"], device))
+            z2 = model(self.to_device(batch["image2"], device))
             loss, extras = compute_loss(self.loss, z1, z2)
         return {"loss": loss, **extras}
 

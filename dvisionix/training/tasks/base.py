@@ -17,6 +17,7 @@ import torch.nn as nn
 
 from ...metrics import MetricCollection
 from ...models.losses import build_losses
+from ...utils import move_to_device
 from ..optim import build_optimizer, build_scheduler
 
 
@@ -60,6 +61,15 @@ class BaseTask(ABC):
                     loss, extras = compute_loss(self.loss, logits, y)
                 return {"loss": loss, "preds": logits, "targets": y, **extras}
     """
+
+    #: 是否对 CPU→GPU 搬运使用 non_blocking。
+    #: 由 Trainer 在 fit() 里按配置写入；只有配合 ``DataLoader(pin_memory=True)``
+    #: 的锁页内存才能真正与计算重叠，CPU 上无收益也无副作用。
+    non_blocking: bool = False
+
+    def to_device(self, value: Any, device: torch.device) -> Any:
+        """把 batch（或其一部分）搬到设备上，遵循 ``self.non_blocking``。"""
+        return move_to_device(value, device, non_blocking=self.non_blocking)
 
     def __init__(
         self,

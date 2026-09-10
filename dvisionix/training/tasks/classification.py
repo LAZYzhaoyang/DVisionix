@@ -47,8 +47,8 @@ class ClassificationTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步训练：模型前向 + 分类损失，返回 {loss, ...}。"""
-        images = batch["image"].to(device)
-        labels = batch["label"].to(device)
+        images = self.to_device(batch["image"], device)
+        labels = self.to_device(batch["label"], device)
         logits = model(images)
         loss, extras = compute_loss(self.loss, logits, labels)
         with torch.no_grad():
@@ -60,8 +60,8 @@ class ClassificationTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步验证：模型前向 + 指标更新，返回 {preds, targets, loss, ...}。"""
-        images = batch["image"].to(device)
-        labels = batch["label"].to(device)
+        images = self.to_device(batch["image"], device)
+        labels = self.to_device(batch["label"], device)
         with torch.no_grad():
             logits = model(images)
             loss, extras = compute_loss(self.loss, logits, labels)

@@ -51,7 +51,7 @@ class DetectionTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步训练：模型前向（附 batch）+ 检测损失。"""
-        images = batch["image"].to(device)
+        images = self.to_device(batch["image"], device)
         if getattr(model, "needs_batch", False):
             preds = model(images, batch=batch)
         else:
@@ -64,7 +64,7 @@ class DetectionTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步验证：前向 + decode + 检测指标更新。"""
-        images = batch["image"].to(device)
+        images = self.to_device(batch["image"], device)
         with torch.no_grad():
             preds = model(images)
             image_hw = (images.shape[2], images.shape[3])
@@ -76,8 +76,8 @@ class DetectionTask(BaseTask):
                 iou_threshold=self.iou_threshold,
                 max_detections=self.max_detections,
             )
-            target_boxes = [b.to(device) for b in batch["boxes"]]
-            target_labels = [lb.to(device) for lb in batch["labels"]]
+            target_boxes = [self.to_device(b, device) for b in batch["boxes"]]
+            target_labels = [self.to_device(lb, device) for lb in batch["labels"]]
         return {
             "loss": loss,
             "preds": (boxes_list, scores_list, labels_list),

@@ -134,7 +134,14 @@ def _worker(rank: int, world_size: int, port: int, queue) -> None:
             metrics = trainer.validate(_ConstantModel())
 
         if rank == 0:
-            queue.put({"ok": True, "metrics": dict(metrics), "world_size": trainer.world_size})
+            queue.put(
+                {
+                    "ok": True,
+                    "metrics": dict(metrics),
+                    "world_size": trainer.world_size,
+                    "gather": trainer.gather_report(),
+                }
+            )
 
         dist.barrier()
     except Exception as exc:  # pragma: no cover - 仅在子进程失败时触发
@@ -194,6 +201,13 @@ def test_distributed_validate_matches_single_process(gloo_ready):
         single["accuracy"], abs=1e-6
     ), f"双进程全局指标 {metrics['accuracy']} 与单进程 {single['accuracy']} 不一致"
     assert metrics["accuracy"] == pytest.approx(expected, abs=1e-6)
+
+    # 评估通信必须可度量（CodePlan 7.7 步骤 5-2「记录通信耗时和样本数」）
+    gather = result["gather"]
+    assert gather["calls"] >= 1
+    assert gather["ms_total"] > 0.0
+    assert gather["local_samples"] > 0
+    assert gather["ms_per_sample"] is not None
 
 
 def test_distributed_metric_uses_all_ranks_not_rank0_only(gloo_ready):

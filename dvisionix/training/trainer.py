@@ -17,6 +17,7 @@
 
 import os
 import random
+import time
 import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -231,6 +232,7 @@ class Trainer:
         channels_last: bool = False,
         logger: Optional[TrainingLogger] = None,
         config_hash: Optional[str] = None,
+        non_blocking: bool = False,
     ):
         self.task = task
         self.train_loader = train_loader
@@ -249,6 +251,14 @@ class Trainer:
         self.channels_last = channels_last
         # 解析后配置的哈希：写入 checkpoint 并在 resume 时校验配置一致性
         self.config_hash = config_hash
+        # CPU→GPU 非阻塞搬运：需要配合 DataLoader(pin_memory=True) 才有收益
+        self.non_blocking = bool(non_blocking)
+        # 评估通信统计（分布式下由 _gather_and_update_metrics 累加）
+        self.gather_stats: Dict[str, float] = {
+            "calls": 0,
+            "ms_total": 0.0,
+            "local_samples": 0,
+        }
 
         # 分布式状态
         self.strategy = strategy
@@ -340,7 +350,13 @@ class Trainer:
             rank=self.rank,
             shuffle=shuffle,
         )
-        # DDP 下要求各 rank 批数一致，drop_last=True 避免 all_gather 死锁
+        # DDP 下要求各 rank 批数一致，drop_last=True 避免 all_gather 死锁。
+        # pin_memory / persistent_workers / prefetch_factor 一并继承原 loader 的设置。
+        extra: Dict[str, Any] = {}
+        if loader.num_workers > 0:
+            extra["persistent_workers"] = loader.persistent_workers
+            if loader.prefetch_factor is not None:
+                extra["prefetch_factor"] = loader.prefetch_factor
         return DataLoader(
             loader.dataset,
             batch_size=loader.batch_size,
@@ -349,6 +365,7 @@ class Trainer:
             collate_fn=loader.collate_fn,
             pin_memory=loader.pin_memory,
             drop_last=True,
+            **extra,
         )
 
     def _set_sampler_epoch(self, epoch: int) -> None:
@@ -390,6 +407,8 @@ class Trainer:
         """训练主循环：多 epoch 训练 + 验证 + 回调 + history 导出。"""
         if self.seed is not None:
             set_seed(self.seed + self.rank)
+        # 把搬运策略下发给 Task（Task 负责把 batch 搬到设备）
+        self.task.non_blocking = self.non_blocking
         self.model = self._wrap_model(model)
 
         # 配置优化器和学习率调度器
@@ -452,6 +471,10 @@ class Trainer:
                     self.scheduler.step()
 
             self.history.append(epoch_logs)
+            # TensorBoard / JSONL：v1.0.0 建了 tb 目录却从不写入标量，
+            # epoch 指标只落在 history.csv 里（CodePlan 7.7 步骤 5-4）。
+            # console 摘要已在 _run_epoch 里打印，这里不再重复。
+            self.logger.log_metrics(self.current_epoch, "epoch", epoch_logs, console=False)
             self.callbacks.on_epoch_end(self, epoch, epoch_logs)
 
         self.callbacks.on_train_end(self)
@@ -571,13 +594,53 @@ class Trainer:
         # on_validation_epoch_end 同时负责 compute 与 reset：
         # 必须**只调用一次**，否则第二次会在已重置的累加器上算出全 0
         avg.update(self.task.on_validation_epoch_end())
+        if self.is_distributed:
+            self.logger.info(f"分布式验证通信统计: {self.gather_report()}")
         return avg
 
     def _gather_and_update_metrics(self, step_result: Dict[str, Any]) -> None:
-        """分布式：all_gather 各 rank 结果，仅 rank0 用全局结果更新指标。"""
+        """分布式：all_gather 各 rank 结果，仅 rank0 用全局结果更新指标。
+
+        同时记录通信耗时与样本数（``self.gather_stats``）：评估通信是分布式训练里
+        最容易被忽视的开销，没有度量就无法判断是否需要优化（CodePlan 7.7 步骤 5-2）。
+        """
+        start = time.perf_counter()
         merged = _gather_preds_targets(step_result, self.world_size, self.rank)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+
+        preds = step_result.get("preds")
+        local_samples = self._count_samples(preds)
+        self.gather_stats["calls"] += 1
+        self.gather_stats["ms_total"] += elapsed_ms
+        self.gather_stats["local_samples"] += local_samples
         if merged is not None:
             self.task.update_metrics(*merged)
+
+    @staticmethod
+    def _count_samples(preds: Any) -> int:
+        """估计本次通信携带的样本数（用于统计通信吞吐）。"""
+        if isinstance(preds, torch.Tensor):
+            return int(preds.shape[0]) if preds.dim() > 0 else 1
+        if isinstance(preds, (list, tuple)):
+            first = preds[0] if len(preds) else None
+            if isinstance(first, (list, tuple)):
+                return len(first)
+            if isinstance(first, torch.Tensor) and first.dim() > 0:
+                return int(first.shape[0])
+        return 0
+
+    def gather_report(self) -> Dict[str, Any]:
+        """返回评估通信统计（耗时 / 次数 / 样本数 / 平均每样本耗时）。"""
+        calls = max(1, int(self.gather_stats["calls"]))
+        samples = int(self.gather_stats["local_samples"])
+        total = float(self.gather_stats["ms_total"])
+        return {
+            "calls": int(self.gather_stats["calls"]),
+            "ms_total": round(total, 3),
+            "ms_per_call": round(total / calls, 3),
+            "local_samples": samples,
+            "ms_per_sample": round(total / samples, 4) if samples else None,
+        }
 
     def _update_metrics_for_step(self, step_result: Dict[str, Any]) -> None:
         """验证步的指标更新入口 —— 训练中验证与 ``validate()`` 共用同一实现。

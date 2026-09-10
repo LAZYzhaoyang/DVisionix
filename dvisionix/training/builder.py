@@ -95,6 +95,7 @@ def build_trainer(
         channels_last=training.get("channels_last", False),
         logger=logger,
         config_hash=hash_config(cfg),
+        non_blocking=training.get("non_blocking", False),
     )
 
 

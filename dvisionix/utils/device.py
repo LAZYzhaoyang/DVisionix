@@ -111,7 +111,7 @@ def set_seed(seed: int = 42) -> None:
         torch.backends.cudnn.benchmark = False
 
 
-def move_to_device(data: Any, device: torch.device) -> Any:
+def move_to_device(data: Any, device: torch.device, non_blocking: bool = False) -> Any:
     """
     递归地将数据移动到指定设备
 
@@ -120,15 +120,17 @@ def move_to_device(data: Any, device: torch.device) -> Any:
     Args:
         data: 要移动的数据
         device: 目标设备
+        non_blocking: 是否非阻塞搬运。**只有配合 ``DataLoader(pin_memory=True)``
+            的锁页内存才能真正与计算重叠**；在 CPU 上该参数既无收益也无副作用。
 
     Returns:
         移动到目标设备后的数据
     """
     if isinstance(data, torch.Tensor):
-        return data.to(device)
+        return data.to(device, non_blocking=non_blocking)
     elif isinstance(data, dict):
-        return {k: move_to_device(v, device) for k, v in data.items()}
+        return {k: move_to_device(v, device, non_blocking) for k, v in data.items()}
     elif isinstance(data, (list, tuple)):
-        return type(data)(move_to_device(x, device) for x in data)
+        return type(data)(move_to_device(x, device, non_blocking) for x in data)
     else:
         return data

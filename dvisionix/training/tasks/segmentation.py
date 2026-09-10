@@ -48,8 +48,8 @@ class SegmentationTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步训练：分割损失。"""
-        images = batch["image"].to(device)
-        masks = batch["mask"].to(device)
+        images = self.to_device(batch["image"], device)
+        masks = self.to_device(batch["mask"], device)
         logits = model(images)
         loss, extras = compute_loss(self.loss, logits, masks)
         with torch.no_grad():
@@ -66,8 +66,8 @@ class SegmentationTask(BaseTask):
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
         """单步验证：分割指标更新。"""
-        images = batch["image"].to(device)
-        masks = batch["mask"].to(device)
+        images = self.to_device(batch["image"], device)
+        masks = self.to_device(batch["mask"], device)
         with torch.no_grad():
             logits = model(images)
             loss, extras = compute_loss(self.loss, logits, masks)

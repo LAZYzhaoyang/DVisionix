@@ -71,9 +71,9 @@ class LinearEvalTask(BaseTask):
     ) -> Dict[str, Any]:
         """单步训练：冻结 backbone，仅训练线性头。"""
         self._freeze_backbone(model)
-        feats = self._features(model, batch["image"].to(device))
+        feats = self._features(model, self.to_device(batch["image"], device))
         logits = self.linear(feats)
-        labels = batch["label"].to(device)
+        labels = self.to_device(batch["label"], device)
         loss, extras = compute_loss(self.loss, logits, labels)
         acc = (logits.argmax(dim=1) == labels).float().mean()
         return {"loss": loss, "acc": acc, **extras}
@@ -83,9 +83,9 @@ class LinearEvalTask(BaseTask):
     ) -> Dict[str, Any]:
         """单步验证：线性头评估。"""
         self._freeze_backbone(model)
-        feats = self._features(model, batch["image"].to(device))
+        feats = self._features(model, self.to_device(batch["image"], device))
         logits = self.linear(feats)
-        labels = batch["label"].to(device)
+        labels = self.to_device(batch["label"], device)
         loss, extras = compute_loss(self.loss, logits, labels)
         return {"loss": loss, "preds": logits, "targets": labels, **extras}
 

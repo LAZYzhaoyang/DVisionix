@@ -167,19 +167,30 @@ def build_data(cfg, work_dir=None):
 
     batch_size = cfg.training.batch_size
     num_workers = cfg.training.get("num_workers", 0)
+    training_cfg = cfg.training
+    # 数据加载性能开关（配置驱动，默认值与 torch 保持一致）
+    loader_kwargs = {
+        "num_workers": num_workers,
+        "pin_memory": bool(training_cfg.get("pin_memory", False)),
+    }
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = bool(training_cfg.get("persistent_workers", False))
+        if training_cfg.get("prefetch_factor") is not None:
+            loader_kwargs["prefetch_factor"] = int(training_cfg.get("prefetch_factor"))
+
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=num_workers,
         collate_fn=getattr(train_ds, "collate_fn", None),
+        **loader_kwargs,
     )
     val_loader = DataLoader(
         val_ds,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
         collate_fn=getattr(val_ds, "collate_fn", None),
+        **loader_kwargs,
     )
     return train_loader, val_loader
 
