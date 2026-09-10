@@ -182,5 +182,94 @@ class TestTrainer:
         assert trainer.current_epoch == 0  # 0-based
 
 
+class TestDDPAggregation:
+    """DDP 结果聚合的递归语义（CodePlan 7.4 步骤 2-1 / 7.1.2 D5）。
+
+    v1.0.0 的 `_concat_objects` 对 list 与 tuple 一律 `extend`，于是检测任务的
+    `preds = (boxes_list, scores_list, labels_list)` 会被拍平成 6 元组，
+    `task.update_metrics` 的三元解包随即可错 —— 而 286 条测试全绿也没发现。
+    """
+
+    def test_concat_tensors_along_batch_dim(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        merged = _concat_objects([torch.zeros(2, 3), torch.ones(1, 3)])
+        assert merged.shape == (3, 3)
+
+    def test_concat_tuple_recurses_by_position(self):
+        """检测任务的核心回归：3-tuple 必须仍是 3-tuple，而不是被拍平。"""
+        from dvisionix.training.trainer import _concat_objects
+
+        rank0 = ([torch.tensor([[1.0, 2.0, 3.0, 4.0]])], [torch.tensor([0])], [torch.tensor([0.9])])
+        rank1 = ([torch.tensor([[5.0, 6.0, 7.0, 8.0]])], [torch.tensor([1])], [torch.tensor([0.8])])
+
+        merged = _concat_objects([rank0, rank1])
+
+        assert isinstance(merged, tuple) and len(merged) == 3
+        boxes, labels, scores = merged
+        assert len(boxes) == 2 and len(labels) == 2 and len(scores) == 2
+        assert torch.equal(labels[1], torch.tensor([1]))
+        assert torch.equal(scores[0], torch.tensor([0.9]))
+
+    def test_concat_nested_dict_recurses_by_key(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        merged = _concat_objects(
+            [
+                {"cls": torch.zeros(2, 3), "box": (torch.zeros(2, 4),)},
+                {"cls": torch.ones(1, 3), "box": (torch.ones(1, 4),)},
+            ]
+        )
+        assert merged["cls"].shape == (3, 3)
+        assert isinstance(merged["box"], tuple)
+        assert merged["box"][0].shape == (3, 4)
+
+    def test_concat_namedtuple_preserves_type(self):
+        import collections
+
+        from dvisionix.training.trainer import _concat_objects
+
+        Pair = collections.namedtuple("Pair", ["a", "b"])
+        merged = _concat_objects([Pair(torch.zeros(1, 2), 1), Pair(torch.ones(1, 2), 1)])
+        assert isinstance(merged, Pair)
+        assert merged.a.shape == (2, 2) and merged.b == 1
+
+    def test_concat_list_of_scalars_extends(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        assert _concat_objects([[1, 2], [3]]) == [1, 2, 3]
+
+    def test_concat_inconsistent_tuple_length_raises(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        with pytest.raises(ValueError, match="tuples have inconsistent structure"):
+            _concat_objects([(torch.zeros(1), torch.zeros(1)), (torch.zeros(1),)])
+
+    def test_concat_inconsistent_dict_keys_raises(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        with pytest.raises(ValueError, match="dictionaries have inconsistent keys"):
+            _concat_objects([{"a": torch.zeros(1)}, {"b": torch.zeros(1)}])
+
+    def test_concat_inconsistent_scalars_raises(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        with pytest.raises(ValueError, match="scalar objects have inconsistent values"):
+            _concat_objects([1, 2])
+        assert _concat_objects([1, 1]) == 1
+
+    def test_concat_empty_returns_empty(self):
+        from dvisionix.training.trainer import _concat_objects
+
+        assert _concat_objects([]) == []
+
+    def test_gather_returns_none_without_preds_or_targets(self):
+        """没有 preds/targets 的任务（如 SimCLR）不应触发集合通信。"""
+        from dvisionix.training.trainer import _gather_preds_targets
+
+        assert _gather_preds_targets({"loss": 1.0}, world_size=2, rank=0) is None
+        assert _gather_preds_targets({"preds": 1}, world_size=2, rank=0) is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

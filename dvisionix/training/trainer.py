@@ -18,7 +18,7 @@
 import os
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -51,16 +51,69 @@ def _infer_batch_size(step_result, batch) -> int:
         return 1
 
 
+def _values_equal(a: Any, b: Any) -> bool:
+    """安全比较两个标量/数组是否相等（避免 numpy 数组触发二义性真值错误）。"""
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        try:
+            return bool(np.array_equal(np.asarray(a), np.asarray(b)))
+        except Exception:
+            return False
+    try:
+        return bool(a == b)
+    except Exception:
+        return a is b
+
+
 def _concat_objects(objs: List[Any]) -> Any:
-    """把 DDP all_gather 得到的多个对象拼接成一份（built-in 任务格式）。"""
-    if isinstance(objs[0], torch.Tensor):
+    """递归合并 DDP ``all_gather`` 得到的各 rank 对象。
+
+    容器类型决定合并语义（与内置任务的返回约定一一对应）：
+
+    - ``Tensor``：沿 dim=0 拼接（batch 维）；
+    - ``list``：**按样本排列的变长结果**，逐元素 extend；
+    - ``tuple``：**固定字段结构**，按位置递归合并；
+    - ``dict``：按 key 递归合并；
+    - 其它：要求各 rank 完全一致。
+
+    注意 tuple 不能像 list 那样 extend：检测任务的
+    ``preds = (boxes_list, scores_list, labels_list)`` 一旦被拍平成 6 元组，
+    ``task.update_metrics`` 的三元解包就会出错（CodePlan 7.1.2 D5）。
+    """
+    if not objs:
+        return objs
+    first = objs[0]
+
+    if isinstance(first, torch.Tensor):
+        if not all(isinstance(o, torch.Tensor) for o in objs):
+            raise TypeError("DDP gathered objects have inconsistent tensor structure")
         return torch.cat(objs, dim=0)
-    if isinstance(objs[0], (list, tuple)):
-        merged = []
-        for o in objs:
-            merged.extend(o)
-        return type(objs[0])(merged)
-    return objs[0]
+
+    if isinstance(first, list):
+        if not all(isinstance(o, list) for o in objs):
+            raise TypeError("DDP gathered objects have inconsistent list structure")
+        merged: List[Any] = []
+        for obj in objs:
+            merged.extend(obj)
+        return merged
+
+    if isinstance(first, tuple):
+        if not all(isinstance(o, tuple) and len(o) == len(first) for o in objs):
+            raise ValueError("DDP gathered tuples have inconsistent structure")
+        parts = [_concat_objects([obj[i] for obj in objs]) for i in range(len(first))]
+        # 保留 namedtuple 的类型语义
+        if hasattr(first, "_fields"):
+            return type(first)(*parts)
+        return tuple(parts)
+
+    if isinstance(first, dict):
+        keys = set(first)
+        if not all(isinstance(o, dict) and set(o) == keys for o in objs):
+            raise ValueError("DDP gathered dictionaries have inconsistent keys")
+        return {key: _concat_objects([obj[key] for obj in objs]) for key in first}
+
+    if any(not _values_equal(o, first) for o in objs[1:]):
+        raise ValueError("DDP gathered scalar objects have inconsistent values")
+    return first
 
 
 def _gather_tuple(seq: List[Any]) -> Any:
@@ -68,6 +121,31 @@ def _gather_tuple(seq: List[Any]) -> Any:
     preds = [item[0] for item in seq]
     targets = [item[1] for item in seq]
     return _concat_objects(preds), _concat_objects(targets)
+
+
+def _gather_preds_targets(
+    step_result: Dict[str, Any], world_size: int, rank: int
+) -> Optional[Tuple[Any, Any]]:
+    """``all_gather`` 各 rank 的 (preds, targets) 并递归合并。
+
+    训练中验证与独立 ``Trainer.validate()`` **共用本函数**，以保证两条路径的全局
+    指标口径一致（CodePlan 7.4 步骤 2-1 / D8）。
+
+    Returns:
+        rank0 上返回合并后的 ``(preds, targets)``；非 rank0 或 step_result 不含
+        preds/targets 时返回 ``None``。
+    """
+    import torch.distributed as dist
+
+    preds = step_result.get("preds")
+    targets = step_result.get("targets")
+    if preds is None or targets is None:
+        return None
+    gathered: List[Any] = [None] * world_size
+    dist.all_gather_object(gathered, (preds, targets))
+    if rank != 0:
+        return None
+    return _gather_tuple(gathered)
 
 
 class Trainer:
@@ -143,10 +221,12 @@ class Trainer:
         self._init_distributed()
 
         # 设备设置
-        if self.is_distributed:
+        if self.is_distributed and torch.cuda.is_available():
+            # CUDA DDP：每个进程绑定自己的 LOCAL_RANK 卡
             local_rank = int(os.environ.get("LOCAL_RANK", self.rank))
             self.device = torch.device(f"cuda:{local_rank}")
         else:
+            # 单卡、或 CPU gloo 分布式：走通用设备解析（不能强制 cuda:*）
             self.device = get_device(device)
         self.scaler = _make_scaler(self.amp, self.device)
 
@@ -183,22 +263,23 @@ class Trainer:
         import torch.distributed as dist
 
         if self.strategy == "auto":
+            # 进程组已初始化即意味着处于分布式启动中（torchrun / mp.spawn），
+            # 与是否 CUDA 无关 —— CPU gloo 是官方的回归路径（CodePlan 7.4 步骤 2-1）。
             self.strategy = (
                 "ddp"
-                if dist.is_available()
-                and dist.is_initialized()
-                and dist.get_world_size() > 1
-                and torch.cuda.is_available()
+                if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
                 else "none"
             )
         if self.strategy == "ddp":
             if not dist.is_initialized():
-                if not torch.cuda.is_available():
+                if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
                     raise RuntimeError(
-                        "strategy='ddp' requires CUDA. Use 'none' or 'auto' on CPU, "
-                        "or launch with torchrun on a multi-GPU machine."
+                        "strategy='ddp' 要求进程组已初始化。请用 torchrun 启动"
+                        "（会注入 RANK/WORLD_SIZE/MASTER_ADDR/MASTER_PORT），"
+                        "或先自行调用 dist.init_process_group(backend='gloo')"
+                        "（CPU 双进程一致性测试见 tests/test_training/test_ddp_cpu.py）。"
                     )
-                dist.init_process_group(backend="nccl")
+                dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo")
             self.rank = dist.get_rank()
             self.world_size = dist.get_world_size()
             self.is_distributed = True
@@ -253,12 +334,15 @@ class Trainer:
             except Exception as exc:
                 self.logger.warning(f"torch.compile 不可用，已降级为普通模型：{exc}")
         if self.is_distributed:
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.device.index],
-                output_device=self.device.index,
-                find_unused_parameters=self.find_unused_parameters,
-            )
+            ddp_kwargs: Dict[str, Any] = {
+                "find_unused_parameters": self.find_unused_parameters,
+            }
+            # device_ids/output_device 只对 CUDA 有意义；CPU gloo 下传 None
+            # （传 [self.device.index] 会变成 [None] 并直接报错）。
+            if self.device.type == "cuda":
+                ddp_kwargs["device_ids"] = [self.device.index]
+                ddp_kwargs["output_device"] = self.device.index
+            model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
         return model
 
     # ------------------------------------------------------------------
@@ -400,29 +484,12 @@ class Trainer:
             else:
                 with torch.no_grad():
                     step_result = self.task.validation_step(self.model, batch, self.device)
-                if not self.is_distributed:
-                    preds = step_result.get("preds")
-                    targets = step_result.get("targets")
-                    if preds is not None and targets is not None:
-                        self.task.update_metrics(preds, targets)
-                else:
-                    self._gather_and_update_metrics(step_result)
+                self._update_metrics_for_step(step_result)
 
-            # 分离张量，转换为 Python float（跳过 preds/targets）
-            step_logs: Dict[str, float] = {}
-            for k, v in step_result.items():
-                if k in ("preds", "targets"):
-                    continue
-                if isinstance(v, torch.Tensor):
-                    step_logs[k] = v.detach().cpu().item()
-                else:
-                    step_logs[k] = float(v)
-
-            # 按批次大小加权累积
-            batch_size = _infer_batch_size(step_result, batch)
-            for k, v in step_logs.items():
-                metric_sums[k] = metric_sums.get(k, 0.0) + v * batch_size
-                metric_counts[k] = metric_counts.get(k, 0) + batch_size
+            # 标量日志按 batch size 加权累积（与 validate() 共用同一实现）
+            step_logs = self._accumulate_step_logs(
+                step_result, _infer_batch_size(step_result, batch), metric_sums, metric_counts
+            )
 
             self.callbacks.on_batch_end(self, batch_idx, step_logs, mode, batch)
 
@@ -432,17 +499,49 @@ class Trainer:
         return avg_metrics
 
     def _gather_and_update_metrics(self, step_result: Dict[str, Any]) -> None:
-        import torch.distributed as dist
+        """分布式：all_gather 各 rank 结果，仅 rank0 用全局结果更新指标。"""
+        merged = _gather_preds_targets(step_result, self.world_size, self.rank)
+        if merged is not None:
+            self.task.update_metrics(*merged)
 
+    def _update_metrics_for_step(self, step_result: Dict[str, Any]) -> None:
+        """验证步的指标更新入口 —— 训练中验证与 ``validate()`` 共用同一实现。
+
+        单进程直接更新；分布式下走 ``_gather_and_update_metrics``（全局指标，
+        而非只统计 rank0 分片）。
+        """
+        if self.is_distributed:
+            self._gather_and_update_metrics(step_result)
+            return
         preds = step_result.get("preds")
         targets = step_result.get("targets")
-        if preds is None or targets is None:
-            return
-        gathered = [None] * self.world_size
-        dist.all_gather_object(gathered, (preds, targets))
-        if self.rank == 0:
-            all_preds, all_targets = _gather_tuple(gathered)
-            self.task.update_metrics(all_preds, all_targets)
+        if preds is not None and targets is not None:
+            self.task.update_metrics(preds, targets)
+
+    @staticmethod
+    def _accumulate_step_logs(
+        step_result: Dict[str, Any],
+        batch_size: int,
+        metric_sums: Dict[str, float],
+        metric_counts: Dict[str, int],
+    ) -> Dict[str, float]:
+        """把 step_result 的标量日志按 batch size 加权累加，返回本步日志。
+
+        加权是必要的：最后一个 batch 常常更小，等权平均会让它被过度放大。
+        训练中验证与 ``validate()`` 共用本函数，避免两条路径给出不同的 val_loss
+        （CodePlan 7.1.2 D8）。
+        """
+        step_logs: Dict[str, float] = {}
+        for key, value in step_result.items():
+            if key in ("preds", "targets"):
+                continue
+            step_logs[key] = (
+                value.detach().cpu().item() if isinstance(value, torch.Tensor) else float(value)
+            )
+        for key, value in step_logs.items():
+            metric_sums[key] = metric_sums.get(key, 0.0) + value * batch_size
+            metric_counts[key] = metric_counts.get(key, 0) + batch_size
+        return step_logs
 
     # ------------------------------------------------------------------
     # 独立验证
@@ -464,16 +563,11 @@ class Trainer:
         with torch.no_grad():
             for batch in loader:
                 step_result = self.task.validation_step(self.model, batch, self.device)
-                preds = step_result.get("preds")
-                targets = step_result.get("targets")
-                if preds is not None and targets is not None:
-                    self.task.update_metrics(preds, targets)
-                for k, v in step_result.items():
-                    if k in ("preds", "targets"):
-                        continue
-                    value = v.detach().cpu().item() if isinstance(v, torch.Tensor) else float(v)
-                    metric_sums[k] = metric_sums.get(k, 0.0) + value
-                    metric_counts[k] = metric_counts.get(k, 0) + 1
+                # 与训练中验证共用同一指标更新与日志累积实现，保证两条路径口径一致
+                self._update_metrics_for_step(step_result)
+                self._accumulate_step_logs(
+                    step_result, _infer_batch_size(step_result, batch), metric_sums, metric_counts
+                )
 
         avg = {k: metric_sums[k] / metric_counts[k] for k in metric_sums}
         avg.update(self.task.on_validation_epoch_end())
