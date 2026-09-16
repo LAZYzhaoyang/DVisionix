@@ -11,6 +11,8 @@ from typing import Any, Dict, Union
 
 import torch.nn as nn
 
+from .norm import LayerNorm2d
+
 _NORM_LAYERS = {
     "bn": nn.BatchNorm2d,
     "bn1d": nn.BatchNorm1d,
@@ -84,7 +86,10 @@ def build_norm_layer(
             num_groups -= 1
         return layer_cls(num_groups, num_features, **extra)
     if layer_cls is nn.LayerNorm:
-        return layer_cls(num_features, **extra)
+        # ConvNormAct 是 channels-first 的 (B, C, H, W)。原生 nn.LayerNorm(C) 归一化的
+        # 是**最后一维 W**：W != C 时直接报 shape 错，W == C 时"通过"但归一化的是错误的
+        # 轴（静默算错）。这里是 channels-first 场景，必须用逐通道的 LayerNorm2d。
+        return LayerNorm2d(num_features, **extra)
     return layer_cls(num_features, **extra)
 
 

@@ -36,7 +36,7 @@ class PartialFCHead(BaseModel):
         self.num_classes = num_classes
         self.s = float(s)
         self.num_sample_classes = num_sample_classes
-        self.weight = nn.Parameter(torch.FloatTensor(num_classes, in_channels))
+        self.weight = nn.Parameter(torch.empty(num_classes, in_channels))
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels: Optional[torch.Tensor] = None):

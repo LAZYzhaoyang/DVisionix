@@ -26,16 +26,19 @@ class DiceLoss(BaseLoss):
     def forward(self, logits: torch.Tensor, targets: torch.Tensor, **kwargs) -> torch.Tensor:
         """Dice 损失：类别不平衡不敏感。"""
         num_classes = logits.shape[1]
-        valid = targets != self.ignore_index
+        # ignore_index（如 Cityscapes/ADE20K 的 void=255）以及任何越界标签都必须先排除。
+        # 旧实现只做 targets.clamp(min=0)，255 会原样进 F.one_hot →
+        # "Class values must be smaller than num_classes"（掩膜含 void 就必然崩）。
+        valid = (targets >= 0) & (targets < num_classes)
+        if self.ignore_index is not None:
+            valid = valid & (targets != self.ignore_index)
 
-        safe_targets = targets.clamp(min=0)
+        safe_targets = torch.where(valid, targets, torch.zeros_like(targets))
         targets_onehot = F.one_hot(safe_targets, num_classes).permute(0, 3, 1, 2).float()
         targets_onehot = targets_onehot * valid.unsqueeze(1).float()
 
         probs = F.softmax(logits, dim=1)
-        if self.ignore_index is not None:
-            ignore_mask = (targets == self.ignore_index).unsqueeze(1)
-            probs = probs.masked_fill(ignore_mask, 0.0)
+        probs = probs.masked_fill((~valid).unsqueeze(1), 0.0)
 
         batch_size, channels = logits.shape[:2]
         probs_flat = probs.view(batch_size, channels, -1)
@@ -158,7 +161,11 @@ class MaskFormerLoss(BaseLoss):
                     .squeeze(0)
                 )
             logits = logits_all[b]  # (Q, C+1)
-            masks = masks_all[b].flatten(1).sigmoid()  # (Q, HW)
+            # 保留未过 sigmoid 的 logits 供 BCE 使用：F.binary_cross_entropy 对
+            # autocast 不安全（会直接抛 RuntimeError），必须改用
+            # binary_cross_entropy_with_logits。masks（概率）仍供匹配/Dice 使用。
+            mask_logits = masks_all[b].flatten(1)  # (Q, HW)
+            masks = mask_logits.sigmoid()  # (Q, HW)
 
             if batch.get("instance_masks") is not None:
                 # 真实实例 GT：每图 (N, H, W) 二值掩码 + (N,) 类别
@@ -202,7 +209,9 @@ class MaskFormerLoss(BaseLoss):
                 pm = masks[pred_idx]
                 gm = torch.stack([gt_objects[i][1] for i in gt_idx.tolist()], dim=0)
                 total_dice = total_dice + _dice_loss(pm, gm)
-                total_bce = total_bce + F.binary_cross_entropy(pm, gm)
+                total_bce = total_bce + F.binary_cross_entropy_with_logits(
+                    mask_logits[pred_idx], gm
+                )
 
         total = (
             self.cls_weight * total_cls

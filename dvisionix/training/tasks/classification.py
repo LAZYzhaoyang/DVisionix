@@ -46,10 +46,16 @@ class ClassificationTask(BaseTask):
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
     ) -> Dict[str, Any]:
-        """单步训练：模型前向 + 分类损失，返回 {loss, ...}。"""
+        """单步训练：模型前向 + 分类损失，返回 {loss, ...}。
+
+        **必须把 labels 一并传给模型**：ArcFace / CosFace / SphereFace / AdaFace /
+        CurricularFace 等 margin 头只有在拿到 labels 时才施加角度间隔（它们内部还会
+        再用 ``self.training`` 做二次判断，所以推理/验证路径不受影响）。此前只传
+        images，这些头静默退化成 NormFace。
+        """
         images = self.to_device(batch["image"], device)
         labels = self.to_device(batch["label"], device)
-        logits = model(images)
+        logits = model(images, labels=labels)
         loss, extras = compute_loss(self.loss, logits, labels)
         with torch.no_grad():
             preds = logits.argmax(dim=1)

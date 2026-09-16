@@ -63,6 +63,10 @@ class UPerNetHead(BaseModel):
             laterals[i] = laterals[i] + F.interpolate(
                 laterals[i + 1], size=laterals[i].shape[-2:], mode="bilinear", align_corners=False
             )
+            # 融合后再做一次 3×3 平滑（UPerNet 原设计）。fpn_convs 此前定义后从未使用，
+            # 是"死参数"：永远拿不到梯度，DDP 下 find_unused_parameters=False 时
+            # 第二轮迭代会直接报 "Expected to have finished reduction" 而中断训练。
+            laterals[i] = self.fpn_convs[i](laterals[i])
         top = laterals[0]
         target = top.shape[-2:]
         # 顶层金字塔池化

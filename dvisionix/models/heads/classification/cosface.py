@@ -22,7 +22,7 @@ class CosFaceHead(BaseModel):
         self.num_classes = num_classes
         self.s = float(s)
         self.m = float(m)
-        self.weight = nn.Parameter(torch.FloatTensor(num_classes, in_channels))
+        self.weight = nn.Parameter(torch.empty(num_classes, in_channels))
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):

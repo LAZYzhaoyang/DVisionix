@@ -3,6 +3,73 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 完整的规划与缺陷清单见 [CodePlan.md](CodePlan.md)。
 
+## [未发布] — 模型层正确性与数值稳定性
+
+> ⚠️ **本批修复会改变检测指标与部分训练结果的口径**，历史实验的 `val_mAP` /
+> `val_mAP_50` / `val_mAP_75` 与修复后**不可直接比较**，详见下方「会改变结果的变更」。
+
+### 修复：检测解码的索引错位（严重）
+
+`yolo_decode` / `fcos_decode` / `retinanet_decode` 把分数展平后的索引含义搞反了：
+`scores` 由 `(N, C)` 行主序展平，索引是 `idx = loc * C + cls`，因此**类别应取模、
+位置应整除**；三处却都拿"位置数"当除数。
+
+后果是**标签与框同时错位**，例如受控输入下应得 `label=1、中心 (3,3)`，
+实际得到 `label=2、中心 (1,3)`。训练 loss 完全正常（损失端语义正确），
+因此从单元测试到端到端门禁都没有任何信号——原有断言只检查
+`boxes.shape[1] == 4` 与三个列表长度相等。
+
+影响范围：所有检测器的**验证指标、推理输出与 ONNX 导出结果**。
+新增 `tests/test_models/test_decode_correctness.py` 用「已知类别 + 已知位置」的
+受控输入把 `(label, box)` 对应关系钉死。
+
+### 修复：AMP(fp16) 下的数值失稳
+
+| 位置 | 问题 |
+|---|---|
+| `losses/detection/box_loss.py` | fp16 下面积和溢出 65504 → `union=inf` → **GIoU loss = -inf**（边长 ≈181px 即触发）；闭合框面积 `cw*ch` 同样溢出 → `giou=nan` |
+| `losses/detection/losses.py`（CenterNet 热图 focal） | fp16 下 `1-1e-4` 舍入成 `1.0`，clamp 上界失效 → `log(0)` → **loss = nan** |
+| `losses/segmentation.py`（MaskFormer/Mask2Former） | `F.binary_cross_entropy` 对 autocast 不安全 → **直接抛 RuntimeError**；改用 `binary_cross_entropy_with_logits` |
+| `heads/classification/{arcface,sphereface,adaface,curricularface}.py` | fp16 下 `1.0-1e-7` 舍入成 `1.0` → `acos` 反传 -inf → **梯度全 NaN** |
+
+此前的 CI 只装 CPU-only torch，`torch.autocast` 恒为关闭，这些路径从未被执行。
+
+### 修复：其他静默错算
+
+- **`DiceLoss` / `CombinedSegmentationLoss` 遇 `ignore_index=255` 直接崩溃**：
+  255 被原样送进 `F.one_hot` → `Class values must be smaller than num_classes`。
+  掩膜含 void（Cityscapes / ADE20K）即不可用。
+- **`LinearClassifier` 丢弃 `**kwargs`**，且 `ClassificationTask` 只传 `images`，
+  导致 ArcFace / CosFace / SphereFace / AdaFace / CurricularFace 五个 margin 头
+  **从未施加过 margin**（静默退化成 NormFace）。
+- **`RetinaNetLoss` 缺 batch 归一化**：loss 与 batch size 严格成正比
+  （实测 bs=1/2/4 → 0.971 / 1.942 / 3.884），等效学习率随 batch 漂移。
+- **`SegFormerV3Head` 的通道注意力被平方**：`fused * self.se(fused)` 实为
+  `fused²·scale`（`SEBlock.forward` 已返回 `x*scale`），符号信息被抹掉。
+- **`UPerNetHead.fpn_convs` 是死参数**（定义后从未使用）：永远拿不到梯度，
+  DDP 下 `find_unused_parameters=False` 时第二轮就会中断训练。
+- **`ConvNormAct(norm="ln")` 归一化错误的轴**：在 `(B,C,H,W)` 上建 `nn.LayerNorm(C)`
+  归一化的是最后一维 `W`；`W != C` 直接报错，`W == C` 静默算错。改用 `LayerNorm2d`。
+- **8 个度量头用 legacy `torch.FloatTensor`** 建权重，无视 `torch.set_default_dtype`
+  与 `set_default_device`；`float64` 下直接 matmul dtype 冲突。改用 `torch.empty`。
+- **`DINOLoss` 去噪分支把归一化 `cxcywh` 当 `(x1,y1,w,h)`** 转像素，框位置随自身
+  尺寸偏移、GIoU 失去平移不变性；同时 `dn_loss` 的 GIoU 项漏乘 `giou_weight`。
+
+### 新增
+
+- `tests/test_models/test_decode_correctness.py`：解码的 (label, box) 对应关系契约。
+- `tests/test_models/test_amp_numerics.py`：fp16 / autocast 数值稳定性、
+  margin 透传、batch 归一化、通道注意力次数、LayerNorm 轴、死参数等回归。
+
+### 会改变结果的变更
+
+- **检测指标口径**：解码索引修正后 `val_mAP` / `val_mAP_50` / `val_mAP_75`
+  以及所有推理/导出结果都会变化。**修复前的检测指标不可信**，历史实验请勿直接对比。
+- **度量学习头**：margin 现在真正生效，使用这些头的训练结果会明显不同。
+- **RetinaNet 训练**：loss 量级下降为原来的 1/batch_size 量级，等效学习率提高，
+  既有超参（尤其是 lr）需要重新标定。
+- **SegFormerV3 / UPerNet / DINO**：对应分支的数值与参数参与情况发生变化。
+
 ## [1.1.0] — 稳定性与工程优化
 
 阶段 0-5 全部完成：装配层门禁 → 修复跑不通的官方配置 → P0 正确性 →

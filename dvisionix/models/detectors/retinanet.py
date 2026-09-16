@@ -98,8 +98,7 @@ def retinanet_decode(
             A = anchor_gen.num_anchors
             num_classes = cls.shape[0] // A
             _, h, w = cls.shape
-            n_loc = h * w
-            anchors = anchors_per_level[lvl]  # (n_loc*A, 4)
+            anchors = anchors_per_level[lvl]  # (n_loc*A, 4)，n_loc = h*w
 
             cls_flat = (
                 cls.reshape(A, num_classes, h, w).permute(2, 3, 0, 1).reshape(-1, num_classes)
@@ -114,9 +113,10 @@ def retinanet_decode(
             top_scores, top_idx = top_scores[keep], top_idx[keep]
             if top_idx.numel() == 0:
                 continue
-            n_anchor = n_loc * A
-            labels = top_idx // n_anchor
-            anchor_idx = top_idx % n_anchor
+            # scores 由 (n_loc*A, C) 行主序展平，故 idx = anchor_loc * C + cls：
+            # 类别取模、anchor-位置取整（用 n_loc*A 当除数会把两者互换）。
+            labels = top_idx % num_classes
+            anchor_idx = top_idx // num_classes
             per_image_boxes.append(boxes[anchor_idx])
             per_image_scores.append(top_scores)
             per_image_labels.append(labels)

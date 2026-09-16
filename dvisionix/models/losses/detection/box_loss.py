@@ -17,7 +17,15 @@ from ..base import BaseLoss
 
 
 def _compute_iou_union(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """计算逐对 IoU 与并集面积。"""
+    """计算逐对 IoU 与并集面积。
+
+    面积与并集**一律提升到 fp32** 再算：fp16 下 ``area_p + area_t`` 只要超过
+    65504 就溢出为 inf（边长约 ≥181px 即触发，因为先相加再减 inter，两框几乎
+    重合也抵不掉），接着 ``iou = inter/inf = 0``、``giou = +inf``、
+    ``loss = 1 - giou = -inf``，整个 AMP 训练被污染。见 CodePlan 的 AMP 数值条目。
+    """
+    pred = pred.float()
+    target = target.float()
     x1 = torch.max(pred[:, 0], target[:, 0])
     y1 = torch.max(pred[:, 1], target[:, 1])
     x2 = torch.min(pred[:, 2], target[:, 2])
@@ -45,6 +53,10 @@ class GIoULoss(BaseLoss):
         self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
     ) -> torch.Tensor:
         """GIoU 损失：预测框 vs 目标框（像素 xyxy）。"""
+        # 闭合框面积 cw*ch 在 fp16 下同样会溢出 65504（300×300 即触发），
+        # 使 c_area=inf、giou=nan。整条链路统一在 fp32 下算。
+        pred_boxes = pred_boxes.float()
+        target_boxes = target_boxes.float()
         iou, union = _compute_iou_union(pred_boxes, target_boxes)
         cw = torch.max(pred_boxes[:, 2], target_boxes[:, 2]) - torch.min(
             pred_boxes[:, 0], target_boxes[:, 0]
@@ -72,6 +84,9 @@ class CIoULoss(BaseLoss):
         self, pred_boxes: torch.Tensor, target_boxes: torch.Tensor, **kwargs
     ) -> torch.Tensor:
         """CIoU 损失：GIoU + 宽高比惩罚项。"""
+        # 同 GIoULoss：fp16 下闭合框面积会溢出，统一提升到 fp32。
+        pred_boxes = pred_boxes.float()
+        target_boxes = target_boxes.float()
         iou, union = _compute_iou_union(pred_boxes, target_boxes)
 
         pcx = (pred_boxes[:, 0] + pred_boxes[:, 2]) / 2

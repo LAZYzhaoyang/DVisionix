@@ -23,14 +23,18 @@ class AdaFaceHead(BaseModel):
         self.s = float(s)
         self.m = float(m)
         self.t = float(t)
-        self.weight = nn.Parameter(torch.FloatTensor(num_classes, in_channels))
+        self.weight = nn.Parameter(torch.empty(num_classes, in_channels))
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels=None):
         """AdaFace 前向：特征 -> 加自适应间隔的余弦 logits (B, num_classes)。"""
         w_norm = F.normalize(self.weight, dim=1)
         x_norm = F.normalize(x, dim=1)
-        cos = torch.mm(x_norm, w_norm.t()).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+        # fp16 下 1.0-1e-7 舍入成 1.0，clamp 保护失效 → acos 反传 -inf → 梯度 NaN。
+        cos = torch.mm(x_norm, w_norm.t())
+        if cos.dtype in (torch.float16, torch.bfloat16):
+            cos = cos.float()  # 半精度下 1e-4 级余量才可表示
+        cos = cos.clamp(-1.0 + 1e-4, 1.0 - 1e-4)
         if labels is not None and self.training:
             # 特征范数 -> 自适应 margin 系数（相对 batch 均值）
             norms = torch.norm(x, dim=1).clamp(min=1e-6)

@@ -75,7 +75,9 @@ class SegFormerV3Head(BaseModel):
             [F.interpolate(o, size=target, mode="bilinear", align_corners=False) for o in outs],
             dim=1,
         )
-        fused = fused * self.se(fused)
+        # SEBlock.forward 自身已返回 x * scale；旧写法 `fused * self.se(fused)` 实际是
+        # fused² * scale（符号信息被抹掉，且 |fused| > 256 时 fp16 下会溢出）。
+        fused = self.se(fused)
         return self.decode(fused)
 
 

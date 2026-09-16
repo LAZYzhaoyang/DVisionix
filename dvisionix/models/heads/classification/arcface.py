@@ -28,7 +28,7 @@ class ArcFaceHead(BaseModel):
         self.num_classes = num_classes
         self.s = float(s)
         self.m = float(m)
-        self.weight = nn.Parameter(torch.FloatTensor(num_classes, in_channels))
+        self.weight = nn.Parameter(torch.empty(num_classes, in_channels))
         nn.init.xavier_normal_(self.weight)
 
     def forward(self, x, labels: Optional[torch.Tensor] = None):
@@ -38,7 +38,11 @@ class ArcFaceHead(BaseModel):
         cos_theta = torch.mm(x_norm, w_norm.t())
 
         if labels is not None and self.training:
-            cos_theta = cos_theta.clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+            # fp16 下 1.0-1e-7 舍入成 1.0，clamp 保护失效 → acos 反传 -inf → 梯度 NaN。
+            # 1e-4 才是 fp16 可表示的余量；同时在 fp32 下求角度。
+            if cos_theta.dtype in (torch.float16, torch.bfloat16):
+                cos_theta = cos_theta.float()  # 半精度下 1e-4 级余量才可表示
+            cos_theta = cos_theta.clamp(-1.0 + 1e-4, 1.0 - 1e-4)
             theta = torch.acos(cos_theta)
             one_hot = F.one_hot(labels, num_classes=self.num_classes).float()
             target_cos = torch.cos(theta + self.m)

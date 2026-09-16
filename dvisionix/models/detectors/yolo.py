@@ -94,15 +94,16 @@ def yolo_decode(
 
             cls_prob = torch.sigmoid(cls).reshape(num_classes, -1).t()  # (N, C)
             scores = cls_prob.reshape(-1)
-            n_loc = boxes.shape[0]
+            # scores 由 (N, C) 行主序展平，故 idx = loc * C + cls：
+            # 类别取模、位置取整。用位置数当除数会把两者互换（历史缺陷）。
             topk = min(topk_per_level, scores.numel())
             top_scores, top_idx = scores.topk(topk)
             keep = top_scores >= score_threshold
             top_scores, top_idx = top_scores[keep], top_idx[keep]
             if top_idx.numel() == 0:
                 continue
-            labels = top_idx // n_loc
-            loc_idx = top_idx % n_loc
+            labels = top_idx % num_classes
+            loc_idx = top_idx // num_classes
             per_image_boxes.append(boxes[loc_idx])
             per_image_scores.append(top_scores)
             per_image_labels.append(labels)

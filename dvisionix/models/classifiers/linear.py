@@ -45,8 +45,13 @@ class LinearClassifier(BaseModel):
         self.num_classes = getattr(self.head, "num_classes", num_classes)
 
     def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        """LinearClassifier 前向：x -> logits (B, num_classes)。"""
-        return self.head(self.backbone(x))
+        """LinearClassifier 前向：x -> logits (B, num_classes)。
+
+        额外关键字参数（如 ``labels``）**必须透传给 head**：ArcFace / CosFace /
+        SphereFace / AdaFace / CurricularFace 等 margin 头只有在拿到 labels 时
+        才施加角度间隔。旧实现丢弃 kwargs，使这些头静默退化成 NormFace。
+        """
+        return self.head(self.backbone(x), **kwargs)
 
 
 __all__ = ["LinearClassifier"]

@@ -375,6 +375,7 @@ class RetinaNetLoss(BaseLoss):
         total_cls = torch.tensor(0.0, device=device)
         total_reg = torch.tensor(0.0, device=device)
         num_pos = 0
+        num_cls_terms = 0
 
         for b in range(len(batch["boxes"])):
             boxes = batch["boxes"][b].to(device).float()
@@ -410,10 +411,19 @@ class RetinaNetLoss(BaseLoss):
                 if pos.any():
                     cls_target[pos, lbl[pos] - 1] = 1.0
                     delta_t = bbox2delta(anchors_l[pos], bbox_t[start:end][pos])
-                    total_reg = total_reg + F.smooth_l1_loss(reg_flat[pos], delta_t)
-                    num_pos += int(pos.sum())
+                    n_pos = int(pos.sum())
+                    total_reg = total_reg + F.smooth_l1_loss(reg_flat[pos], delta_t) * n_pos
+                    num_pos += n_pos
 
                 total_cls = total_cls + self.focal(cls_flat, cls_target)
+                num_cls_terms += 1
+
+        # 归一化：cls 取所有 (图, 层) 项的均值；reg 取所有正样本的均值。
+        # 此前二者都是"逐项均值的累加"，使 loss 与 batch_size × 层数成正比 ——
+        # 等效学习率随 batch size 漂移，val_loss 在 batch 之间也不可比
+        # （FCOS / YOLO 在 D7 已按同一口径修正）。
+        total_cls = total_cls / max(num_cls_terms, 1)
+        total_reg = total_reg / max(num_pos, 1)
 
         total = self.cls_weight * total_cls + self.reg_weight * total_reg
         return {
@@ -823,7 +833,9 @@ class CenterNetLoss(BaseLoss):
             labels = batch["labels"][b].to(device).long()
             hm_t, wh_t, off_t, reg_mask = self._build_targets(boxes, labels, H, W, device)
 
-            pred = hm_pred[b].sigmoid().clamp(1e-4, 1 - 1e-4)
+            # 先升到 fp32 再 sigmoid/clamp：fp16 的 sigmoid 在 logit ≥ 8.32 时饱和到
+            # 恰好 1.0，而 fp16 里 1-1e-4 也舍入为 1.0，clamp 上界失效 → (1-pred).log() = -inf。
+            pred = hm_pred[b].float().sigmoid().clamp(1e-4, 1 - 1e-4)
             pos = hm_t.eq(1).float()
             neg = 1.0 - hm_t
             loss_hm = -(
@@ -952,28 +964,22 @@ class DINOLoss(BaseLoss):
             if p_mask.any():
                 pb = dn_boxes[b][keep][p_mask]
                 gb = box_t[b][keep][p_mask]
-                # 归一化框 -> 像素
-                pb_px = torch.stack(
-                    [
-                        pb[:, 0] * img_w,
-                        pb[:, 1] * img_h,
-                        (pb[:, 0] + pb[:, 2]) * img_w,
-                        (pb[:, 1] + pb[:, 3]) * img_h,
-                    ],
-                    dim=1,
-                )
-                gb_px = torch.stack(
-                    [
-                        gb[:, 0] * img_w,
-                        gb[:, 1] * img_h,
-                        (gb[:, 0] + gb[:, 2]) * img_w,
-                        (gb[:, 1] + gb[:, 3]) * img_h,
-                    ],
-                    dim=1,
-                )
+                # 归一化框 -> 像素。去噪分支的框与主分支同为 **cxcywh**（见
+                # layers/detr_denoising.py 的 "归一化框 cxcywh" 与 dino.py 的
+                # (dn_box_t + dn_delta).sigmoid()），必须复用主分支的 _xywh_norm_to_px。
+                # 旧写法 x1 = x*W、x2 = (x+w)*W 把中心当左上角，框位置随自身尺寸偏移，
+                # 使 DN 分支的 GIoU 不再平移不变。
+                pb_px = self.main._xywh_norm_to_px(pb, img_w, img_h)
+                gb_px = self.main._xywh_norm_to_px(gb, img_w, img_h)
                 total_l1 = total_l1 + F.l1_loss(pb, gb)
                 total_giou = total_giou + GIoULoss()(pb_px, gb_px)
-        dn_loss = total_cls + self.main.bbox_weight * total_l1 + total_giou
+        # 三个分量都用主分支的权重：旧写法 giou 项漏乘 giou_weight（主分支默认 2.0），
+        # 使去噪分支的 GIoU 与主分支不同权，dn_weight 的实际含义被扭曲。
+        dn_loss = (
+            self.main.cls_weight * total_cls
+            + self.main.bbox_weight * total_l1
+            + self.main.giou_weight * total_giou
+        )
         main_out["loss"] = main_out["loss"] + self.dn_weight * dn_loss
         main_out["dn_cls_loss"] = total_cls
         main_out["dn_l1_loss"] = total_l1
