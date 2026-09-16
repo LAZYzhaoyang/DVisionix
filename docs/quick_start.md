@@ -9,8 +9,8 @@ conda create -n dvisionix python=3.10 -y
 conda activate dvisionix
 # 按你的 CUDA 版本安装 PyTorch，例如：
 conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -y
-# 其余依赖
-pip install opencv-python numpy pyyaml tensorboard matplotlib timm onnx onnxruntime pytest
+# 其余依赖（唯一来源是 pyproject.toml：[project] 核心 + 可选 extras）
+pip install -e ".[full,dev]"
 ```
 
 ## 30 秒上手：Config 驱动训练（合成数据）

@@ -154,8 +154,8 @@ class ONNXExporter:
     def export(
         self,
         output_path: str,
-        dynamic_batch: bool = True,
-        dynamic_size: bool = False,
+        dynamic_batch: Optional[bool] = None,
+        dynamic_size: Optional[bool] = None,
         opset_version: int = 17,
         input_names: Optional[List[str]] = None,
         output_names: Optional[List[str]] = None,
@@ -166,11 +166,23 @@ class ONNXExporter:
         """导出模型为 ONNX 格式，返回导出文件路径。
 
         Args:
+            dynamic_batch: 导出动态 batch。``None``（默认）时按后端取默认值：
+                trace → ``True``（历史行为），dynamo → ``False``。
+            dynamic_size: 导出动态高宽，默认 ``False``。
             backend: 'trace'（默认）或 'dynamo'（需安装 onnxscript）。
             metadata: 附加元数据，与 normalize 合并写入 ONNX metadata_props。
         """
         if backend not in ("trace", "dynamo"):
             raise ValueError(f"backend 必须是 'trace' 或 'dynamo'，当前: {backend!r}")
+
+        # dynamo 用 dynamic_shapes 而非 dynamic_axes，因此 `export(path, backend="dynamo")`
+        # 这个最自然的默认调用此前必然抛 ValueError（dynamic_batch 默认 True）。
+        # 这里用 None 哨兵区分"用户没写"与"用户显式要求"：默认按后端取合理值，
+        # 只有显式要求动态维度时才报错，避免静默丢掉动态 batch 的承诺。
+        if dynamic_batch is None:
+            dynamic_batch = backend != "dynamo"
+        if dynamic_size is None:
+            dynamic_size = False
 
         parent = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(parent, exist_ok=True)

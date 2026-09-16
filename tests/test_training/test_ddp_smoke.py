@@ -46,5 +46,8 @@ def test_ddp_smoke_train_and_metrics():
     result = trainer.fit(model)
     if rank == 0:
         last = result["history"][-1]
-        assert "train_loss" in last and "accuracy" in last
+        # v1.1 起 epoch 级指标统一带 val_ 前缀（`accuracy` → `val_accuracy`），
+        # 见 docs/v1.1_changes.md 1.2；此处断言必须同步，否则该 GPU-only 用例
+        # 一旦真的跑起来就会失败（它在 CI 中因无 2 张卡而永远跳过）。
+        assert "train_loss" in last and "val_accuracy" in last
     dist.barrier()

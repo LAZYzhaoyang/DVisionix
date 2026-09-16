@@ -60,6 +60,78 @@
 - `tests/test_models/test_decode_correctness.py`：解码的 (label, box) 对应关系契约。
 - `tests/test_models/test_amp_numerics.py`：fp16 / autocast 数值稳定性、
   margin 透传、batch 归一化、通道注意力次数、LayerNorm 轴、死参数等回归。
+- `tests/test_training/test_gpu_availability.py`：CUDA 上的断点续训与线性评估。
+- `tests/test_training/test_reliability_fixes.py`：非标量指标、resume 语义、
+  早停恢复、checkpoint 前缀、超参搜索指标读取。
+- `tests/test_training/test_ddp_correctness.py`：设备绑定、rank0 落盘、
+  早停同步、工作目录确定性、空验证集检出。
+
+### 修复：GPU 可用性
+
+- **GPU 上断点续训必然崩溃**：`Trainer.load_checkpoint` 用
+  `map_location=self.device`，device 为 cuda 时整份 checkpoint（含
+  `rng_state["torch"]` 这个 **CPU** ByteTensor）被搬到 GPU，随后
+  `torch.set_rng_state()` 抛 `TypeError: RNG state must be a torch.ByteTensor`。
+  改为一律先加载到 CPU。CI 装的是 CPU-only torch，`map_location="cpu"` 是空操作，
+  因此该缺陷在 CI 中永远不会暴露。
+- **`LinearEvalTask` 在 GPU 上必然崩溃**：线性头以默认设备（CPU）创建且从未搬移，
+  而特征来自已搬到 CUDA 的 backbone → `Expected all tensors to be on the same
+  device`。官方 `configs/classification/linear_eval.yaml` 的 `device: auto` 在
+  有 GPU 的机器上就是 cuda，即该配置在 GPU 上从来跑不起来。改为按模型参数的
+  device/dtype 建头。
+- **线性头不进 checkpoint**：线性头是 Task 持有的参数，不在 `model.state_dict()` 内，
+  而此前没有任何 Task 实现 `state_dict()`（`Trainer` 早已支持该契约）。
+  续训会重新随机初始化线性头却仍加载旧头的 Adam 动量。已为 `LinearEvalTask` 实现
+  `state_dict()/load_state_dict()`。
+
+### 修复：训练可靠性与工具链
+
+- **非标量指标直接崩训练**：`per_class=True` / `average="none"` 返回 `list`，
+  epoch 汇总处 `float(list)` 抛 `TypeError`，训练在第一个 epoch 末尾崩溃。
+  现展开为 `key_0/key_1/...`（保留逐类信息）。
+- **`resume: true` 被当成 checkpoint 路径**：`torch.load(True)` 抛
+  `AttributeError: 'bool' object has no attribute 'seek'`，且会另起一个带新时间戳的
+  目录。现 `true` 等价于 `"auto"`。
+- **续训后 `restore_best_weights` 静默失效**：`EarlyStopping.best_weights` 是内存副本、
+  不进 checkpoint，续训后恒为 `None`，触发早停时既不恢复也不提示。现改为从
+  `checkpoints/best.pt` 兜底恢复，无法恢复时明确告警。
+- **checkpoint 存的是 DDP / torch.compile 包装后的键**（`module.` / `_orig_mod.`）：
+  跨模式续训在 `strict=True` 下抛 "Missing/Unexpected keys"（元信息校验因 unwrap 过
+  反而通过，误导性极强）；`load_backbone` 的前缀匹配全部落空并回退成整份 state_dict，
+  结果是**一个权重都没加载**却只留一条 warning。现保存统一存未包装的键，
+  加载时按目标模型自动剥离/补回前缀。
+- **超参搜索的监控指标列恒为空**：`--work-dir` 是工作根，`resolve_work_dir` 会在其下
+  再拼 `<experiment>/<时间戳>-<哈希>`，而汇总读的是 `work/history.csv` → 永远读不到；
+  `subprocess.run(check=False)` 还会吞掉 trial 失败。现按有限深度定位 `history.csv`
+  并记录非零退出码。
+
+### 修复：DDP 正确性（CI 无多卡，这些分支从未被执行）
+
+- **`--devices` 是死参数**：`self.devices` 只被赋值、全包再无读取，DDP 设备完全由
+  `LOCAL_RANK` 决定 —— 用户以为用了 1、3 号卡，实际仍用 0、1 号卡且无提示。
+- **显式 `device: cpu` 被静默改成 cuda**，且 NCCL/Gloo 后端按 `cuda.is_available()`
+  而非实际设备选择（会拿 NCCL 去 all-reduce CPU 张量）。
+- **`history.csv` / `best_metrics.csv` / JSONL / TensorBoard 被所有 rank 并发写**，
+  而 rank≠0 的 `val_*` 恒为 0，可能写出整列 0 的历史。现仅 rank0 落盘。
+- **DDP + 早停会死锁**：各 rank 用各自指标决策（rank≠0 看到 0），rank0 退出 epoch
+  循环后其余 rank 继续进入下一轮集合通信 → 永久 hang；而早停默认开启。
+  现早停只在 rank0 决策，epoch 末尾广播给所有 rank。
+- **torchrun 下各 rank 的工作目录不同**：目录名带 `datetime.now()` 时间戳，跨秒启动
+  就会分家。现分布式下用确定性目录名（配置哈希，无时间戳），无需通信。
+- **验证集被强制 `drop_last=True` 可能被清空**：此时验证循环一次都不执行、
+  `val_loss` 不存在、best.pt 永不产出、指标恒为 0，却完全不报错。现显式报错。
+
+### 修复：测试与文档
+
+- `tests/test_training/test_ddp_smoke.py` 断言的 `"accuracy"` 键自 v1.1 起已改名
+  `val_accuracy`（见 1.2 节），该 GPU-only 用例一旦真的运行就会失败，现已同步。
+- `ONNXExporter.export(backend="dynamo")` 与默认 `dynamic_batch=True` 自相矛盾：
+  最自然的默认调用必然抛 `ValueError`。现用 `None` 哨兵区分"未指定"与"显式要求"，
+  默认调用可用，显式要求动态维度时仍明确报错（原有契约测试继续通过）。
+- 移除从未被代码引用的核心依赖 `matplotlib`（全仓库仅出现在 pyproject / 文档里）。
+- 修复 `dvisionix/models/layers/timm_layers.py` 中机械损坏的 docstring。
+- `configs/classification/linear_eval.yaml` 此前被端到端门禁当作"模板配置"排除，
+  现补上一条真正训练它的用例（`device=auto`，CI 上走 CPU 也会执行）。
 
 ### 会改变结果的变更
 

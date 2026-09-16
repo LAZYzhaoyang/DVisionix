@@ -173,11 +173,16 @@ def test_linear_eval_trains_on_cuda():
     assert task.linear.weight.device.type == "cuda"
 
 
-@needs_cuda
-@pytest.mark.cuda
 @pytest.mark.integration
-def test_official_linear_eval_config_runs_on_cuda():
-    """用仓库自带配置构建，确认 device=auto 在 GPU 机器上不会崩。"""
+def test_official_linear_eval_config_runs():
+    """用仓库自带配置构建，确认它真的能跑（在 CI 的 CPU 上也会执行）。
+
+    ``configs/classification/linear_eval.yaml`` 被 ``test_e2e_configs.py`` 当作
+    "模板配置"排除在端到端门禁之外（因为它带一个占位的 ``pretrained_backbone``），
+    于是这个配置在 CPU 上从未被真正训练过、在 GPU 上则直接崩（见文件头说明）。
+    这里补上它：去掉占位路径后完整跑一个 epoch，device 用 ``auto``，
+    因此在 CI 上走 cpu、在有卡的机器上走 cuda。
+    """
     from dvisionix.config import Config
     from dvisionix.models import build_model
     from dvisionix.training import build_task
@@ -190,8 +195,8 @@ def test_official_linear_eval_config_runs_on_cuda():
     task = build_task({"type": "LinearEvalTask", "num_classes": num_classes})
     loader = DataLoader(_DS(8), batch_size=8)
     trainer = Trainer(task, loader, loader, max_epochs=1, device="auto", log_interval=999)
-    assert trainer.device.type == "cuda"
     trainer.fit(model)
+    assert task.linear is not None
 
 
 # ---------------------------------------------------------------------------

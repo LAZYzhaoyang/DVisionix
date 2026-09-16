@@ -4,7 +4,7 @@
 # v1.0.0 曾出现本文件与 setup.py 双源漂移（timm>=0.9.0 vs >=0.16.0；pillow 只在单侧声明）。
 #
 # 需要哪些可选能力就选对应 extras：
-#   -e .              仅核心依赖（torch / torchvision / numpy / pillow / opencv / pyyaml / tensorboard / matplotlib）
+#   -e .              仅核心依赖（torch / torchvision / numpy / pillow / opencv / pyyaml / tensorboard）
 #   -e .[dev]         开发与 CI（pytest / coverage / black / ruff / mypy / pip-audit）
 #   -e .[export]      ONNX 导出与验证
 #   -e .[models]      第三方骨干（timm）
