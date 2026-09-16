@@ -149,9 +149,9 @@ def test_linear_eval_head_follows_model_device():
     )
     trainer.fit(_linear_backbone_model())
     assert task.linear is not None
-    assert task.linear.weight.device.type == device.type, (
-        f"线性头在 {task.linear.weight.device}，模型在 {device}"
-    )
+    assert (
+        task.linear.weight.device.type == device.type
+    ), f"线性头在 {task.linear.weight.device}，模型在 {device}"
 
 
 @needs_cuda
@@ -242,6 +242,6 @@ def test_linear_eval_resume_keeps_head_weights(tmp_path):
 
     assert resumed_task.linear is not None
     for key, value in expected.items():
-        assert torch.equal(resumed_task.linear.state_dict()[key], value), (
-            f"续训后线性头权重 {key} 与 checkpoint 不一致"
-        )
+        assert torch.equal(
+            resumed_task.linear.state_dict()[key], value
+        ), f"续训后线性头权重 {key} 与 checkpoint 不一致"

@@ -12,6 +12,25 @@ from ..utils import get_logger
 
 _logger = get_logger("dvisionix.checkpoint")
 
+#: DDP / torch.compile 在 state_dict 键上加的包装前缀
+WRAPPER_PREFIXES = ("module.", "_orig_mod.")
+
+
+def strip_wrapper_prefixes(state: Dict[str, Any]) -> Dict[str, Any]:
+    """去掉键上的 ``module.``（DDP）与 ``_orig_mod.``（torch.compile）前缀。"""
+    stripped: Dict[str, Any] = {}
+    for key, value in state.items():
+        new_key = key
+        changed = True
+        while changed:
+            changed = False
+            for prefix in WRAPPER_PREFIXES:
+                if new_key.startswith(prefix):
+                    new_key = new_key[len(prefix) :]
+                    changed = True
+        stripped[new_key] = value
+    return stripped
+
 
 def load_backbone(
     model: nn.Module,
@@ -47,6 +66,10 @@ def load_backbone(
             f"若只需要骨干权重，建议先用本项目的 Trainer 重新导出纯 state_dict。"
         ) from exc
     state = ckpt.get("model_state_dict", ckpt) if isinstance(ckpt, dict) else ckpt
+    # 先剥掉 DDP("module.") / torch.compile("_orig_mod.") 的包装前缀：
+    # 否则下面的 ``backbone.`` 前缀匹配会全部落空，回退成"整份 state_dict"，
+    # 结果是**一个权重都没加载**却只留下一条 warning。
+    state = strip_wrapper_prefixes(state)
     mapped: Dict[str, torch.Tensor] = {}
     for k, v in state.items():
         if k.startswith(prefix):

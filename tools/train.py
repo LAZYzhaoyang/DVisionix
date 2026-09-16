@@ -299,6 +299,9 @@ def main():
     schema_warnings = cfg.validate_schema(cfg.task_type)
 
     resume = None if args.force else (args.resume or cfg.get("resume", False))
+    if resume is True:
+        # `resume: true` 是常见写法，统一归一为 "auto"（否则会被当成路径传给 torch.load）
+        resume = "auto"
     work_dir = resolve_work_dir(cfg, cli_work_dir=args.work_dir, resume=resume)
     resume_path = find_checkpoint(work_dir, resume)
     os.makedirs(work_dir, exist_ok=True)

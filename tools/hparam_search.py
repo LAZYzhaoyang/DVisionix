@@ -60,10 +60,31 @@ def to_cfg_options(keys, combo):
     return [f"{k}={format_value(v)}" for k, v in zip(keys, combo)]
 
 
+def _find_history_csv(root: str, max_depth: int = 3):
+    """在 ``root`` 下定位 history.csv（先看 root 本身，再向下搜有限层数）。
+
+    ``--work-dir`` 传的是工作**根**：``resolve_work_dir`` 会在其下再拼一层
+    ``<experiment>/<时间戳>-<配置哈希>``，所以 history.csv 并不在 work_dir 本身。
+    """
+    direct = os.path.join(root, "history.csv")
+    if os.path.exists(direct):
+        return direct
+    base_depth = os.path.abspath(root).count(os.sep)
+    found = []
+    for dirpath, _dirnames, filenames in os.walk(root):
+        if "history.csv" in filenames:
+            found.append(os.path.join(dirpath, "history.csv"))
+        if dirpath.count(os.sep) - base_depth >= max_depth:
+            _dirnames[:] = []
+    if not found:
+        return None
+    return max(found, key=os.path.getmtime)
+
+
 def best_from_history(work_dir, monitor, mode):
-    """从 work_dir/history.csv 读取监控指标的最优值。"""
-    path = os.path.join(work_dir, "history.csv")
-    if not os.path.exists(path):
+    """从 work_dir 下的 history.csv 读取监控指标的最优值。"""
+    path = _find_history_csv(work_dir)
+    if path is None:
         return None
     with open(path, "r", encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
@@ -156,7 +177,12 @@ def _run(job, logger):
     if "--work-dir" in shown:
         shown = shown[: shown.index("--work-dir")]
     logger.info("run %s: %s", work, " ".join(shown))
-    subprocess.run(cmd, check=False)
+    proc = subprocess.run(cmd, check=False)
+    if proc.returncode != 0:
+        # 旧实现 check=False 且不检查返回码，trial 失败会被完全吞掉，
+        # 汇总表里只留下一个空指标列，无从判断是"没读到"还是"跑挂了"。
+        logger.warning("run %s 失败（exit %s），该 trial 的指标列为空", work, proc.returncode)
+    return proc.returncode
 
 
 if __name__ == "__main__":

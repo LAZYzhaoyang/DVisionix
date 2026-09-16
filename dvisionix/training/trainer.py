@@ -30,6 +30,7 @@ from torch.utils.data import DataLoader
 from ..utils import get_device, set_seed
 from ..utils.logging import TrainingLogger
 from .callbacks import Callback, CallbackList, ModelCheckpoint, ProgressBar
+from .checkpoint import strip_wrapper_prefixes
 from .tasks import BaseTask
 
 #: 完整 checkpoint 的结构版本。
@@ -53,6 +54,59 @@ def _unwrap_module(model: Any) -> Any:
             break
         model = inner
     return model
+
+
+def _flatten_metric_values(logs: Dict[str, Any]) -> Dict[str, Any]:
+    """把非标量指标展开成标量子键，避免 ``float(list)`` 直接崩掉训练。
+
+    ``MeanIoU/DiceScore(per_class=True)``、``average="none"`` 等配置会返回 ``list``，
+    经 ``_evaluate`` 进入 epoch 汇总后，``TrainingLogger.log_metrics`` 与
+    ``ProgressBar`` 都会做 ``float(v)`` → ``TypeError: float() argument must be a
+    string or a real number, not 'list'``，训练在**第一个 epoch 末尾**崩溃。
+
+    这里展开为 ``key_0 / key_1 / ...``：既不再崩，又保留了逐类信息
+    （取均值会丢掉"哪一类差"这个关键信息）。其余值原样透传。
+    """
+    flat: Dict[str, Any] = {}
+    for key, value in logs.items():
+        if isinstance(value, (list, tuple)):
+            for idx, item in enumerate(value):
+                try:
+                    flat[f"{key}_{idx}"] = float(item)
+                except (TypeError, ValueError):
+                    continue
+        else:
+            flat[key] = value
+    return flat
+
+
+def _normalise_state_dict(state: Dict[str, Any], model: nn.Module) -> Dict[str, Any]:
+    """让 checkpoint 里 ``model_state_dict`` 的键与 ``model`` 匹配。
+
+    历史 checkpoint 存的是 ``self.model.state_dict()``，而 ``self.model`` 可能已被
+    DDP（``module.``）或 ``torch.compile``（``_orig_mod.``）包装。跨模式续训
+    （多卡产物→单卡、compile 产物→普通模型）时键对不上，``strict=True`` 会抛
+    "Missing/Unexpected keys"，而元信息校验因为特意 unwrap 过反而是通过的，
+    报错极具误导性。
+
+    ``save_checkpoint`` 现在统一存**未包装**的键；这里兼容三种情况：
+    键已匹配、需要剥前缀、需要补前缀。都不匹配时原样返回，交给
+    ``load_state_dict`` 报出真实的缺失/多余键。
+    """
+    target_keys = set(model.state_dict().keys())
+    if set(state.keys()) == target_keys:
+        return state
+
+    stripped = strip_wrapper_prefixes(state)
+    if set(stripped.keys()) == target_keys:
+        return stripped
+
+    for prefix in ("module.", "_orig_mod.", "module._orig_mod."):
+        if target_keys and all(k.startswith(prefix) for k in target_keys):
+            candidate = {prefix + k: v for k, v in stripped.items()}
+            if set(candidate.keys()) == target_keys:
+                return candidate
+    return state
 
 
 def _make_scaler(amp: bool, device: torch.device):
@@ -451,10 +505,12 @@ class Trainer:
             if self.val_loader is not None:
                 val_logs = self._run_epoch("val")
 
-            epoch_logs = {
-                **{f"train_{k}": v for k, v in train_logs.items()},
-                **{f"val_{k}": v for k, v in val_logs.items()},
-            }
+            epoch_logs = _flatten_metric_values(
+                {
+                    **{f"train_{k}": v for k, v in train_logs.items()},
+                    **{f"val_{k}": v for k, v in val_logs.items()},
+                }
+            )
 
             # 任务级 epoch 指标（accuracy / f1 / mAP ...）已在 _evaluate 内由
             # `on_validation_epoch_end()` 计算并 reset，并以 val_ 前缀并入 val_logs。
@@ -748,7 +804,10 @@ class Trainer:
         checkpoint = {
             "epoch": self.current_epoch,
             "global_step": self.global_step,
-            "model_state_dict": self.model.state_dict() if self.model else None,
+            # 存**未包装**的键：DDP 的 "module." / torch.compile 的 "_orig_mod."
+            # 会让跨模式续训、load_backbone 的前缀匹配与 EMA 的 key 过滤全部失配
+            # （load_backbone 失配时还会静默一个权重都不加载）。
+            "model_state_dict": (_unwrap_module(self.model).state_dict() if self.model else None),
             "optimizer_state_dict": self.optimizer.state_dict() if self.optimizer else None,
             "rng_state": self._collect_rng_state(),
             **self._checkpoint_meta(),
@@ -895,6 +954,11 @@ class Trainer:
                 )
 
         if checkpoint.get("model_state_dict"):
+            # 兼容历史 checkpoint 里的 DDP / torch.compile 包装前缀
+            aligned = _normalise_state_dict(checkpoint["model_state_dict"], self.model)
+            if aligned is not checkpoint["model_state_dict"]:
+                self.logger.info("checkpoint 的 model_state_dict 带包装前缀，已剥离后加载")
+            checkpoint["model_state_dict"] = aligned
             self.model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
         if checkpoint.get("optimizer_state_dict") and self.optimizer:
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

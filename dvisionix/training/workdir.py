@@ -41,6 +41,8 @@ def resolve_work_dir(
     base = cli_work_dir or cfg.get("work_dir") or default_work_root()
     experiment = cfg.get("experiment_name", "exp")
 
+    if resume is True:
+        resume = "auto"  # `resume: true` 等同于 auto，见 find_checkpoint
     if resume in ("auto", "latest"):
         run_dir = find_latest_run(os.path.join(base, experiment))
         if run_dir is None:
@@ -94,11 +96,23 @@ def find_checkpoint(work_dir: str, resume: Optional[str]) -> Optional[str]:
     """根据 resume 配置定位检查点路径。
 
     - None / False -> None
+    - True -> 等价于 'auto'（``resume: true`` 是极自然的写法，见下）
     - 'auto' / 'latest' -> work_dir/checkpoints/last.pt（不存在则 None）
     - 其它字符串 -> 视为显式路径
     """
     if not resume:
         return None
+    if resume is True:
+        # `resume: true` 会被原样当成路径返回，最终 torch.load(True) 抛
+        # "AttributeError: 'bool' object has no attribute 'seek'"，
+        # 而且 resolve_work_dir 还会另起一个带新时间戳的目录（既没续训又污染实验目录）。
+        # 按最自然的意图当成 "auto"。
+        resume = "auto"
+    if not isinstance(resume, str):
+        raise ValueError(
+            f"resume 必须是 false / true / 'auto' / 'latest' 或 checkpoint 路径，"
+            f"当前为 {type(resume).__name__}: {resume!r}"
+        )
     if resume in ("auto", "latest"):
         direct = os.path.join(work_dir, "checkpoints", "last.pt")
         if os.path.exists(direct):
