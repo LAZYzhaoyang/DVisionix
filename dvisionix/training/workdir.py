@@ -23,6 +23,24 @@ def default_work_root() -> str:
     )
 
 
+def distributed_rank_from_env() -> Optional[int]:
+    """从环境变量读取 torchrun 注入的 rank；非分布式启动时返回 None。
+
+    torchrun 在 **任何** ``dist.init_process_group`` 之前就会注入
+    ``RANK`` / ``WORLD_SIZE``，因此工作目录解析阶段就能拿到。
+    """
+    rank = os.environ.get("RANK")
+    world = os.environ.get("WORLD_SIZE")
+    if rank is None or world is None:
+        return None
+    try:
+        if int(world) <= 1:
+            return None
+        return int(rank)
+    except (TypeError, ValueError):
+        return None
+
+
 def resolve_work_dir(
     cfg,
     cli_work_dir: Optional[str] = None,
@@ -53,7 +71,14 @@ def resolve_work_dir(
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     # 配置哈希后缀：同配置可复现定位，异配置避免目录冲突（实验管理）
-    return os.path.join(base, experiment, f"{timestamp}-{hash_config(cfg)}")
+    run_id = f"{timestamp}-{hash_config(cfg)}"
+    if distributed_rank_from_env() is not None:
+        # torchrun 下各进程独立执行本函数，datetime.now() 跨秒就会得到**不同**目录：
+        # rank0 的 checkpoint / 日志与其它 rank 的 history.csv 分家，`resume auto`
+        # 也会选到错误（或不存在）的目录。配置哈希在所有 rank 上完全一致，
+        # 因此分布式下改用确定性目录名（不带时间戳），无需任何通信。
+        run_id = hash_config(cfg)
+    return os.path.join(base, experiment, run_id)
 
 
 def hash_config(cfg) -> str:
@@ -134,6 +159,7 @@ def dump_config(cfg, path: str) -> None:
 
 __all__ = [
     "default_work_root",
+    "distributed_rank_from_env",
     "resolve_work_dir",
     "hash_config",
     "find_latest_run",

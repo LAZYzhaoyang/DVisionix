@@ -320,15 +320,22 @@ class Trainer:
         self.is_distributed = False
         self.rank = 0
         self.world_size = 1
+        # 用户显式请求的设备（"auto" / "cpu" / "cuda" / "cuda:1"）。
+        # NCCL/Gloo 后端选择与"是否自动绑卡"都依赖它，而这两件事发生在
+        # self.device 确定之前，所以先留一份原始值。
+        self._requested_device = str(device)
         self._init_distributed()
 
         # 设备设置
-        if self.is_distributed and torch.cuda.is_available():
-            # CUDA DDP：每个进程绑定自己的 LOCAL_RANK 卡
+        if self.is_distributed and torch.cuda.is_available() and self._requested_device != "cpu":
+            # CUDA DDP：每个进程绑定自己的卡。显式给出 devices 时按 LOCAL_RANK 取对应卡，
+            # 否则 --devices 是个只被赋值、从不读取的死参数（用户以为用了 1、3 号卡，
+            # 实际仍按 LOCAL_RANK 用 0、1 号卡，且不会有任何提示）。
             local_rank = int(os.environ.get("LOCAL_RANK", self.rank))
-            self.device = torch.device(f"cuda:{local_rank}")
+            self.device = self._resolve_ddp_device(local_rank)
+            torch.cuda.set_device(self.device)
         else:
-            # 单卡、或 CPU gloo 分布式：走通用设备解析（不能强制 cuda:*）
+            # 单卡、CPU gloo 分布式、或用户显式指定 cpu：走通用设备解析
             self.device = get_device(device)
         self.scaler = _make_scaler(self.amp, self.device)
 
@@ -381,7 +388,11 @@ class Trainer:
                         "或先自行调用 dist.init_process_group(backend='gloo')"
                         "（CPU 双进程一致性测试见 tests/test_training/test_ddp_cpu.py）。"
                     )
-                dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo")
+                # 后端按**实际使用的设备**选择，而不是 torch.cuda.is_available()：
+                # 后者会在"有 GPU 但用户显式按 cpu 跑"时选 NCCL 去 all-reduce CPU 张量，
+                # 报出的错误与真实原因完全无关。
+                use_cuda = torch.cuda.is_available() and self._requested_device != "cpu"
+                dist.init_process_group(backend="nccl" if use_cuda else "gloo")
             self.rank = dist.get_rank()
             self.world_size = dist.get_world_size()
             self.is_distributed = True
@@ -392,6 +403,35 @@ class Trainer:
 
     def _is_rank0(self) -> bool:
         return not self.is_distributed or self.rank == 0
+
+    def _resolve_ddp_device(self, local_rank: int) -> torch.device:
+        """决定本进程在 CUDA DDP 下绑定的卡。
+
+        ``--devices 1,3`` 应当依次映射到 local_rank 0、1；此前 ``self.devices``
+        只被赋值、从不读取，是个**死参数**：用户以为用了 1、3 号卡，实际仍按
+        LOCAL_RANK 用 0、1 号卡，且不会有任何提示。
+        """
+        index = local_rank
+        if self.devices and local_rank < len(self.devices):
+            index = int(self.devices[local_rank])
+        return torch.device(f"cuda:{index}")
+
+    def _broadcast_stop_training(self) -> None:
+        """把 rank0 的 ``stop_training`` 广播给所有 rank，保证同时退出 epoch 循环。
+
+        早停等回调只在 rank0 依据全局指标决策（rank≠0 的 ``val_*`` 恒为 0，
+        会得出完全不同的结论）。若各 rank 各自决定，rank0 退出循环后其余 rank 仍会
+        进入下一轮 DDP 集合通信，**永久 hang** —— 而 ``base.yaml`` 里早停是默认开启的。
+        """
+        if not self.is_distributed:
+            return
+        import torch.distributed as dist
+
+        if not (dist.is_available() and dist.is_initialized()):
+            return
+        flag = [bool(self.stop_training) if self._is_rank0() else False]
+        dist.broadcast_object_list(flag, src=0)
+        self.stop_training = bool(flag[0])
 
     def _make_distributed_loader(self, loader: DataLoader, shuffle: bool) -> DataLoader:
         if not self.is_distributed:
@@ -485,6 +525,14 @@ class Trainer:
         self.train_loader = self._make_distributed_loader(self.train_loader, shuffle=True)
         if self.val_loader is not None:
             self.val_loader = self._make_distributed_loader(self.val_loader, shuffle=False)
+            if self.is_distributed and len(self.val_loader) == 0:
+                raise RuntimeError(
+                    "DDP 下验证集在每个 rank 上的批数为 0：DistributedSampler + drop_last=True "
+                    "要求 len(val_dataset) >= world_size * batch_size。"
+                    "此时验证循环一次都不会执行，val_loss 不存在、best.pt 永不产出、"
+                    "所有指标恒为 0（且不会报错）。请增大验证集、减小 batch_size，"
+                    "或降低 world_size。"
+                )
 
         self.callbacks.on_train_begin(self)
         self.logger.info(f"Start training for {self.max_epochs} epochs")
@@ -530,8 +578,15 @@ class Trainer:
             # TensorBoard / JSONL：v1.0.0 建了 tb 目录却从不写入标量，
             # epoch 指标只落在 history.csv 里（CodePlan 7.7 步骤 5-4）。
             # console 摘要已在 _run_epoch 里打印，这里不再重复。
-            self.logger.log_metrics(self.current_epoch, "epoch", epoch_logs, console=False)
+            # 仅 rank0 落盘：其它 rank 的 val_* 恒为 0（只有 rank0 更新任务指标），
+            # 多进程同时写同一份 JSONL/TensorBoard 既会交错也会写出全 0 的假指标。
+            if self._is_rank0():
+                self.logger.log_metrics(self.current_epoch, "epoch", epoch_logs, console=False)
             self.callbacks.on_epoch_end(self, epoch, epoch_logs)
+            # 早停等回调只在 rank0 决策（rank≠0 的指标是 0，会得出不同结论），
+            # 这里把结论同步给所有 rank，避免先停的 rank 退出循环、其余 rank
+            # 继续进入下一轮 DDP 集合通信而**永久 hang**。
+            self._broadcast_stop_training()
 
         self.callbacks.on_train_end(self)
         self._write_history_csv()
@@ -1007,6 +1062,10 @@ class Trainer:
 
     def _write_best_metrics_csv(self) -> None:
         """导出最优 epoch 指标到 work_dir/best_metrics.csv（配合 ModelCheckpoint 的监控指标）。"""
+        if not self._is_rank0():
+            # DDP 下所有 rank 都会走到这里，但 rank≠0 的 val_* 恒为 0
+            # （只有 rank0 更新任务指标），并发写还会交错截断。
+            return
         if not self.work_dir or not self.history:
             return
         best = self._best_metrics()
@@ -1030,6 +1089,9 @@ class Trainer:
 
     def _write_history_csv(self) -> None:
         """将训练 history 导出到 work_dir/history.csv（可选，无 work_dir 时跳过）。"""
+        if not self._is_rank0():
+            # 同 _write_best_metrics_csv：仅 rank0 落盘，避免并发写与全 0 指标
+            return
         if not self.work_dir or not self.history:
             return
         try:

@@ -38,6 +38,14 @@ class EarlyStopping(Callback):
 
     def on_epoch_end(self, trainer: Any, epoch: int, logs: Dict[str, float]) -> None:
         """epoch 结束：监控指标连续未改善则触发早停。"""
+        # DDP 下只有 rank0 持有全局指标（rank≠0 的 val_* 恒为 0），必须由 rank0
+        # 单方面决策；训练循环会在 epoch 末尾用 _broadcast_stop_training 同步结论。
+        # 否则各 rank 会在不同 epoch 停止，先停的 rank 退出循环而其它 rank 继续
+        # 进入下一轮集合通信 → 永久 hang。
+        is_rank0 = getattr(trainer, "_is_rank0", None)
+        if callable(is_rank0) and not is_rank0():
+            return
+
         current = logs.get(self.monitor)
         if current is None:
             return
