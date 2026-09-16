@@ -729,10 +729,17 @@ class Trainer:
             return
         random.setstate(state.get("random", random.getstate()))
         np.random.set_state(state.get("numpy", np.random.get_state()))
-        torch.set_rng_state(state.get("torch", torch.get_rng_state()))
+        # torch.set_rng_state 只接受 **CPU** 的 ByteTensor；这里再兜一次底，
+        # 以免任何来源的 RNG 张量被搬到 GPU 后直接抛错。
+        torch_state = state.get("torch", torch.get_rng_state())
+        if torch_state.device.type != "cpu":
+            torch_state = torch_state.cpu()
+        torch.set_rng_state(torch_state)
         cuda_state = state.get("cuda")
         if cuda_state is not None and torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(cuda_state)
+            torch.cuda.set_rng_state_all(
+                [s.cpu() if s.device.type != "cpu" else s for s in cuda_state]
+            )
 
     def save_checkpoint(self, path: str) -> None:
         """保存完整检查点（model/optimizer/scheduler/scaler/rng/callbacks/task + 元信息）。"""
@@ -844,7 +851,12 @@ class Trainer:
             ``model_state_dict`` 的值必须全部是张量。
         """
         try:
-            checkpoint = torch.load(path, map_location=self.device, weights_only=not trusted)
+            # 一律先加载到 CPU：checkpoint 里除了模型权重还有 RNG 状态等**必须留在 CPU**
+            # 的张量。若用 map_location=self.device，CUDA 训练下整份 checkpoint 会被搬到
+            # GPU，随后 torch.set_rng_state(CPU ByteTensor) 抛
+            # "RNG state must be a torch.ByteTensor"，即 GPU 上断点续训必然失败。
+            # 模型/优化器状态由 load_state_dict 自行落到各自设备，不受影响。
+            checkpoint = torch.load(path, map_location="cpu", weights_only=not trusted)
         except Exception as exc:
             if trusted:
                 raise

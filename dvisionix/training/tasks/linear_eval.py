@@ -42,6 +42,8 @@ class LinearEvalTask(BaseTask):
         if self.loss is None:
             self.loss = CrossEntropy()
         self.linear: Optional[nn.Linear] = None
+        #: 头尚未构建时先缓存 checkpoint 里的权重，构建后立刻套用
+        self._pending_linear_state: Optional[Dict[str, torch.Tensor]] = None
 
     def _freeze_backbone(self, model: nn.Module) -> None:
         for p in model.backbone.parameters():
@@ -54,7 +56,21 @@ class LinearEvalTask(BaseTask):
         in_features = getattr(model.backbone, "num_features", None)
         if in_features is None:
             raise ValueError("LinearEvalTask 需要 backbone 暴露 num_features")
-        self.linear = nn.Linear(in_features, self.num_classes)
+        # 线性头必须与 backbone **同设备同 dtype**：模型已被 Trainer 搬到 self.device，
+        # 若这里仍按默认 CPU/fp32 建头，CUDA 上会直接抛
+        # "Expected all tensors to be on the same device, but found cpu and cuda:0"。
+        reference = next(model.parameters(), None)
+        if reference is None:
+            raise ValueError("LinearEvalTask 需要模型至少有一个参数")
+        self.linear = nn.Linear(
+            in_features,
+            self.num_classes,
+            device=reference.device,
+            dtype=reference.dtype if reference.dtype.is_floating_point else None,
+        )
+        if self._pending_linear_state is not None:
+            self.linear.load_state_dict(self._pending_linear_state)
+            self._pending_linear_state = None
         optimizer = build_optimizer(self.optimizer_cfg, self.linear.parameters())
         scheduler, monitor = build_scheduler(self.scheduler_cfg, optimizer)
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": monitor}
@@ -62,9 +78,33 @@ class LinearEvalTask(BaseTask):
     def _features(self, model: nn.Module, image: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             feats = model.backbone(image)
+        if self.linear is not None and self.linear.weight.device != feats.device:
+            # 兜底：模型被手动搬设备、或 checkpoint 恢复导致不一致时同步一次
+            self.linear.to(feats.device)
         if self.feature_norm:
             feats = F.normalize(feats, dim=1)
         return feats
+
+    def state_dict(self) -> Dict[str, Any]:
+        """把线性头纳入 checkpoint（由 Trainer 的 ``task_state_dict`` 存取）。
+
+        线性头是 Task 持有的参数，不在 ``model.state_dict()`` 内。不实现本方法时
+        断点续训会**重新随机初始化**线性头，却仍然加载旧头的 Adam 动量，
+        训练结果静默错误且无从察觉。
+        """
+        if self.linear is None:
+            return {}
+        return {"linear": self.linear.state_dict()}
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """恢复线性头权重；头尚未构建时先缓存，等 ``configure_optimizers`` 套用。"""
+        weights = (state or {}).get("linear")
+        if weights is None:
+            return
+        if self.linear is None:
+            self._pending_linear_state = weights
+            return
+        self.linear.load_state_dict(weights)
 
     def training_step(
         self, model: nn.Module, batch: Dict[str, Any], device: torch.device
