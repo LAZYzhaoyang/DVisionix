@@ -203,7 +203,7 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
   20 项已核实缺陷 D1-D20 全部修复并附回归测试；官方配置由 14/17 可跑提升到 **17/17 全绿**。
 - **v1.1 的开发工作到此结束**，可以进入第六章的 P1/P2/P3（模型库继续扩充等），
   或按需把 mypy / pip-audit 从信息性门禁升级为阻断（见 7.6 的升级条件）。
-- **v1.1 之后另有一批未发布修复**（正确性与稳定性，含会改变检测指标口径的解码修复），
+- **v1.1 之后另有一批 v1.1.1 修复**（正确性与稳定性，含会改变检测指标口径的解码修复），
   记录见 **7.10**，行为变更登记见第八章。该批次完成后 collected 测试总数由 483 增至 **531**。
 - **v1.1 早期一批未提交改动已整体回退**（回退原因与更正见 7.1.1，
   补丁留档于 `.dev_archive/wip-v1.1-partial.patch`，已在 `.gitignore` 中排除）。
@@ -506,7 +506,7 @@ EMA 开销 1.44% < 3% ✅、所有优化均有前后基准与数值对拍 ✅、
 
 ---
 
-### 7.10 未发布批次：正确性与稳定性修复（已完成）
+### 7.10 v1.1.1 批次：正确性与稳定性修复（已完成）
 
 > 触发：在 Windows + CUDA 11.8 + torch 2.7.1 + numpy 2.2.6 的真实环境下，
 > 完整跑通官方测试套件与 17 个官方配置，发现一批**只在 GPU / 多卡 / 非默认配置下
@@ -565,6 +565,7 @@ EMA 开销 1.44% < 3% ✅、所有优化均有前后基准与数值对拍 ✅、
 
 | 版本 | 里程碑 |
 |---|---|
+| v1.1.1（当前） | 正确性与稳定性修复：模型层（解码索引、AMP 数值、损失语义）、GPU 可用性、训练可靠性、DDP 正确性、工具链与文档收口。**无新增功能**，故按补丁号发布；含会改变检测指标口径的修复（见 7.10 与第八章行为变更登记） |
 | v1.1（已完成） | 稳定性与工程优化：阶段 0-5 全部完成（门禁 + 3 个官方配置 + 20 项缺陷 + 打包/CI + 性能） |
 | v1.0.0 | 功能基线：全库审查/注释/文档规范化，API 冻结 |
 | v0.17.0 | 训练工程 P2+P3、DINO look-forward-twice |
@@ -606,16 +607,16 @@ EMA 开销 1.44% < 3% ✅、所有优化均有前后基准与数值对拍 ✅、
 | v1.1（已实施） | 顶层 import 改为惰性（对应 7.7 的 5-4） | **API 语义变更**：`from dvisionix.config import Config` 不再加载 torch（3~4 s → 0.10 s）；组件注册发生在子模块被导入时，使用注册表前需显式 `import dvisionix.models`（或 training / metrics）。顶层便捷导出仍可用 |
 | v1.1（已实施） | 合成数据改为可复现（对应 7.7 的 5-1/5-4） | **行为变更**：`tools/train.py` 的合成数据由「每次运行随机」改为按 `(split, i)` 派生固定种子，同一划分多次运行结果一致 |
 | v1.1（已实施） | EMA 续训不再重置影子权重（对应 7.7 的 5-1） | **行为变更**：v1.0.0 的 `on_train_begin` 无条件用当前模型权重重建设 shadow，续训等于把 EMA 状态清零；现在会保留恢复出的影子。另外整型 buffer 不再参与滑动平均 |
-| 未发布 | **检测解码的「类别 / 位置」索引修正**：`yolo_decode` / `fcos_decode` / `retinanet_decode` 由 `//n_loc`、`%n_loc` 改为 `%num_classes`、`//num_classes`（详见 7.10 的 N-1） | **指标口径变更（严重）**：展平索引是 `idx = 位置 * 类别数 + 类别`，旧实现把两者互换，导致**标签与框同时错位**（受控输入应得 `label=1、中心(3,3)`，实得 `label=2、中心(1,3)`）。修复前所有检测器的 `val_mAP` / `val_mAP_50` / `val_mAP_75`、推理输出与 ONNX 导出结果**均不可信**；训练 loss 因损失端语义正确而始终正常，故此前无任何信号。**历史检测指标不可与修复后比较** |
-| 未发布 | `RetinaNetLoss` 补上 batch / 层数归一化，与 FCOS / YOLO 口径一致（7.10 的 N-2） | **训练语义变更**：旧实现是逐项均值的累加，loss 与 `batch_size × 层数` 成正比（实测 bs=1/2/4 → 0.971 / 1.942 / 3.884），等效学习率随 batch 漂移。修正后 loss 量级显著下降，**RetinaNet 的既有学习率需重新标定**，且修复前后的 `val_loss` 不可比 |
-| 未发布 | ArcFace / CosFace / SphereFace / AdaFace / CurricularFace 的 margin **开始真正生效**：`LinearClassifier` 透传 `**kwargs`，`ClassificationTask.training_step` 传入 `labels`（7.10 的 N-3） | **训练语义变更**：此前 kwargs 被丢弃且任务只传 `images`，5 个 margin 头**从未施加过 margin**，等价于 NormFace。修正后这些头的 logits 分布与最优超参都会变化，需重新训练与标定 |
-| 未发布 | `SegFormerV3Head` 的通道注意力由 `fused * se(fused)` 改为 `se(fused)`（7.10 的 N-4） | **训练语义变更**：`SEBlock.forward` 已返回 `x * scale`，旧写法实为 `fused² · scale`（符号信息被抹掉，`|fused|>256` 时 fp16 溢出）。输出分布改变，需重新训练 |
-| 未发布 | `UPerNetHead.fpn_convs` 真正参与前向（7.10 的 N-4） | **训练语义变更**：该模块此前是**死参数**（定义后从未使用），既永远拿不到梯度，也会在 DDP 下因 `find_unused_parameters=False` 于第二轮中断训练。现在融合后增加一次 3×3 平滑（UPerNet 原设计），输出与参数量均有变化 |
-| 未发布 | `DiceLoss` / `CombinedSegmentationLoss` 正确排除 `ignore_index` 与越界标签（7.10 的 N-5）；`MaskFormerLoss` 的 mask BCE 改 `binary_cross_entropy_with_logits` | **行为变更**：v1.1 下 `255` 会原样进入 `F.one_hot` 并抛 `RuntimeError`，即**含 void 标签的真实数据集（Cityscapes / ADE20K）完全不可用**；现在可正常计算（被忽略像素的 one-hot 与概率均清零）。BCE 改动使其可在 `autocast(fp16)` 下运行，数值上与 `sigmoid`+BCE 等价 |
-| 未发布 | 非标量指标（`per_class=True` / `average="none"`）在 epoch 汇总前展开为 `key_0 / key_1 / ...`（7.10 的 N-6） | **输出格式变更**：旧行为是 `float(list)` 抛 `TypeError`，训练在**第一个 epoch 末尾**崩溃。现在 `history.csv` / TensorBoard 中出现 `val_dice_0` 一类子键；标量与张量原样透传，不受影响 |
-| 未发布 | checkpoint 的 `model_state_dict` 统一保存**未包装**的键，加载时按目标模型自动剥离/补回 `module.` 与 `_orig_mod.` 前缀（7.10 的 N-7） | **兼容性变更**：旧 checkpoint（含包装前缀）仍可加载（自动剥离），但旧版本代码读新 checkpoint 时若模型被包装会需要前缀匹配。修复前 `load_backbone` 遇包装前缀会**静默一个权重都不加载**，EMA 的 key 过滤同样静默失效 |
-| 未发布 | DDP 下 `history.csv` / `best_metrics.csv` / JSONL / TensorBoard 仅由 rank0 写出；早停只在 rank0 决策并在 epoch 末广播（7.10 的 N-8） | **行为变更**：此前所有 rank 并发写同一路径，且 rank≠0 的 `val_*` 恒为 0，CSV 中可能出现**整列 0 的假指标**；早停各 rank 独立决策会导致 rank0 先退出后其余 rank 永久 hang |
-| 未发布 | `torchrun` 下工作目录改用确定性的 `<配置哈希>` 命名（不带时间戳）（7.10 的 N-8） | **输出路径变更**：此前目录名含各进程独立取的 `datetime.now()`，跨秒启动就会让 rank0 的 checkpoint/日志与其它 rank 的 CSV **分家**，`resume auto` 也会选错。单进程行为不变（仍带时间戳） |
-| 未发布 | `--devices` / `training.devices` 真正生效；显式 `device: "cpu"` 不再被 DDP 覆盖；NCCL/Gloo 按实际设备选择（7.10 的 N-9） | **行为变更**：`devices` 此前是死参数，`--devices 1,3` 会被静默忽略并改用 0、1 号卡。现在按 `devices[local_rank]` 绑定并显式 `set_device`；在 GPU 机器上做 CPU 回归时不会再被强制绑卡 |
-| 未发布 | `resume: true` 归一为 `"auto"`（7.10 的 N-10） | **行为变更**：此前 `true` 被原样当作路径传给 `torch.load`（抛 `AttributeError: 'bool' object has no attribute 'seek'`），且会另起一个带新时间戳的目录。注意 `resume` 参与配置哈希，**在配置里新增**该键会被续训一致性校验拒绝；推荐用命令行 `--resume auto` |
-| 未发布 | `ONNXExporter.export(backend="dynamo")` 默认参数即可用；`dynamic_batch` / `dynamic_size` 默认改为 `None` 哨兵（7.10 的 N-11） | **API 行为变更**：`dynamic_batch` 原默认 `True`，与"dynamo 不支持 `dynamic_axes`"的硬校验冲突，使最自然的默认调用**必然抛 ValueError**。现在 `trace` 仍默认 `True`（历史行为不变），`dynamo` 默认 `False`；显式传 `dynamic_batch=True` 时仍报错 |
+| v1.1.1 | **检测解码的「类别 / 位置」索引修正**：`yolo_decode` / `fcos_decode` / `retinanet_decode` 由 `//n_loc`、`%n_loc` 改为 `%num_classes`、`//num_classes`（详见 7.10 的 N-1） | **指标口径变更（严重）**：展平索引是 `idx = 位置 * 类别数 + 类别`，旧实现把两者互换，导致**标签与框同时错位**（受控输入应得 `label=1、中心(3,3)`，实得 `label=2、中心(1,3)`）。修复前所有检测器的 `val_mAP` / `val_mAP_50` / `val_mAP_75`、推理输出与 ONNX 导出结果**均不可信**；训练 loss 因损失端语义正确而始终正常，故此前无任何信号。**历史检测指标不可与修复后比较** |
+| v1.1.1 | `RetinaNetLoss` 补上 batch / 层数归一化，与 FCOS / YOLO 口径一致（7.10 的 N-2） | **训练语义变更**：旧实现是逐项均值的累加，loss 与 `batch_size × 层数` 成正比（实测 bs=1/2/4 → 0.971 / 1.942 / 3.884），等效学习率随 batch 漂移。修正后 loss 量级显著下降，**RetinaNet 的既有学习率需重新标定**，且修复前后的 `val_loss` 不可比 |
+| v1.1.1 | ArcFace / CosFace / SphereFace / AdaFace / CurricularFace 的 margin **开始真正生效**：`LinearClassifier` 透传 `**kwargs`，`ClassificationTask.training_step` 传入 `labels`（7.10 的 N-3） | **训练语义变更**：此前 kwargs 被丢弃且任务只传 `images`，5 个 margin 头**从未施加过 margin**，等价于 NormFace。修正后这些头的 logits 分布与最优超参都会变化，需重新训练与标定 |
+| v1.1.1 | `SegFormerV3Head` 的通道注意力由 `fused * se(fused)` 改为 `se(fused)`（7.10 的 N-4） | **训练语义变更**：`SEBlock.forward` 已返回 `x * scale`，旧写法实为 `fused² · scale`（符号信息被抹掉，`|fused|>256` 时 fp16 溢出）。输出分布改变，需重新训练 |
+| v1.1.1 | `UPerNetHead.fpn_convs` 真正参与前向（7.10 的 N-4） | **训练语义变更**：该模块此前是**死参数**（定义后从未使用），既永远拿不到梯度，也会在 DDP 下因 `find_unused_parameters=False` 于第二轮中断训练。现在融合后增加一次 3×3 平滑（UPerNet 原设计），输出与参数量均有变化 |
+| v1.1.1 | `DiceLoss` / `CombinedSegmentationLoss` 正确排除 `ignore_index` 与越界标签（7.10 的 N-5）；`MaskFormerLoss` 的 mask BCE 改 `binary_cross_entropy_with_logits` | **行为变更**：v1.1 下 `255` 会原样进入 `F.one_hot` 并抛 `RuntimeError`，即**含 void 标签的真实数据集（Cityscapes / ADE20K）完全不可用**；现在可正常计算（被忽略像素的 one-hot 与概率均清零）。BCE 改动使其可在 `autocast(fp16)` 下运行，数值上与 `sigmoid`+BCE 等价 |
+| v1.1.1 | 非标量指标（`per_class=True` / `average="none"`）在 epoch 汇总前展开为 `key_0 / key_1 / ...`（7.10 的 N-6） | **输出格式变更**：旧行为是 `float(list)` 抛 `TypeError`，训练在**第一个 epoch 末尾**崩溃。现在 `history.csv` / TensorBoard 中出现 `val_dice_0` 一类子键；标量与张量原样透传，不受影响 |
+| v1.1.1 | checkpoint 的 `model_state_dict` 统一保存**未包装**的键，加载时按目标模型自动剥离/补回 `module.` 与 `_orig_mod.` 前缀（7.10 的 N-7） | **兼容性变更**：旧 checkpoint（含包装前缀）仍可加载（自动剥离），但旧版本代码读新 checkpoint 时若模型被包装会需要前缀匹配。修复前 `load_backbone` 遇包装前缀会**静默一个权重都不加载**，EMA 的 key 过滤同样静默失效 |
+| v1.1.1 | DDP 下 `history.csv` / `best_metrics.csv` / JSONL / TensorBoard 仅由 rank0 写出；早停只在 rank0 决策并在 epoch 末广播（7.10 的 N-8） | **行为变更**：此前所有 rank 并发写同一路径，且 rank≠0 的 `val_*` 恒为 0，CSV 中可能出现**整列 0 的假指标**；早停各 rank 独立决策会导致 rank0 先退出后其余 rank 永久 hang |
+| v1.1.1 | `torchrun` 下工作目录改用确定性的 `<配置哈希>` 命名（不带时间戳）（7.10 的 N-8） | **输出路径变更**：此前目录名含各进程独立取的 `datetime.now()`，跨秒启动就会让 rank0 的 checkpoint/日志与其它 rank 的 CSV **分家**，`resume auto` 也会选错。单进程行为不变（仍带时间戳） |
+| v1.1.1 | `--devices` / `training.devices` 真正生效；显式 `device: "cpu"` 不再被 DDP 覆盖；NCCL/Gloo 按实际设备选择（7.10 的 N-9） | **行为变更**：`devices` 此前是死参数，`--devices 1,3` 会被静默忽略并改用 0、1 号卡。现在按 `devices[local_rank]` 绑定并显式 `set_device`；在 GPU 机器上做 CPU 回归时不会再被强制绑卡 |
+| v1.1.1 | `resume: true` 归一为 `"auto"`（7.10 的 N-10） | **行为变更**：此前 `true` 被原样当作路径传给 `torch.load`（抛 `AttributeError: 'bool' object has no attribute 'seek'`），且会另起一个带新时间戳的目录。注意 `resume` 参与配置哈希，**在配置里新增**该键会被续训一致性校验拒绝；推荐用命令行 `--resume auto` |
+| v1.1.1 | `ONNXExporter.export(backend="dynamo")` 默认参数即可用；`dynamic_batch` / `dynamic_size` 默认改为 `None` 哨兵（7.10 的 N-11） | **API 行为变更**：`dynamic_batch` 原默认 `True`，与"dynamo 不支持 `dynamic_axes`"的硬校验冲突，使最自然的默认调用**必然抛 ValueError**。现在 `trace` 仍默认 `True`（历史行为不变），`dynamo` 默认 `False`；显式传 `dynamic_batch=True` 时仍报错 |

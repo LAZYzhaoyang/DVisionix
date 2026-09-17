@@ -282,7 +282,7 @@ logits = model(images)                   # 推理/验证路径：等价于纯余
 `ClassificationTask.training_step` 已自动传入 `labels`，配置驱动训练无需额外处理；
 自定义 Task 若直接调用模型，请同样把标签传进去。
 
-> 未发布变更：`LinearClassifier` 此前**丢弃 `**kwargs`**，且 `ClassificationTask`
+> v1.1.1 变更：`LinearClassifier` 此前**丢弃 `**kwargs`**，且 `ClassificationTask`
 > 只传 `images`，导致上述 5 个 margin 头的 margin **从未生效过**（静默等价于 NormFace）。
 
 ---

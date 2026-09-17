@@ -54,7 +54,7 @@ conda run -n dvisionix python tools/train.py --config configs/segmentation/demo_
 
 ---
 
-## 未发布变更要点
+## v1.1.1 变更要点
 
 **`dice` / `combined_segmentation` 现在真正支持 `ignore_index`。**
 两者默认 `ignore_index=255`，但 v1.1 的实现只做了 `targets.clamp(min=0)`，

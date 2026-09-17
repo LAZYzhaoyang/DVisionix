@@ -155,14 +155,14 @@ python tools/benchmark.py --scenario all --json bench.json
 
 ---
 
-## 未发布变更要点
+## v1.1.1 变更要点
 
-> 完整清单见 [CHANGELOG](../CHANGELOG.md) 的「未发布」章节。
+> 完整清单见 [CHANGELOG](../CHANGELOG.md) 的 1.1.1 章节。
 
 **`resume: true` 现在可用**（等价于 `auto`）。此前它会被当成 checkpoint 路径，
 `torch.load(True)` 抛 `AttributeError: 'bool' object has no attribute 'seek'`，
 而且工作目录解析还会另起一个带新时间戳的目录。详见
-[配置系统](config_system.md) 的「未发布变更要点」。
+[配置系统](config_system.md) 的「v1.1.1 变更要点」。
 
 **`--devices` 现在真正生效**：
 

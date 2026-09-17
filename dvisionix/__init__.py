@@ -23,7 +23,7 @@ DVisionix: 深度学习算法库
     from dvisionix.training import build_task, Trainer
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 # 子模块改为**按需导入**（PEP 562）。
 #

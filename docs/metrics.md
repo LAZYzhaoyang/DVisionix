@@ -14,7 +14,7 @@ DVisionix 的指标模块采用「原子指标 + 组合容器 + 预设」的设�
 - 原子指标 `compute()` 返回标量 `float`（per-class 模式返回 `list`）。
 - `MetricCollection.compute()` 返回 `dict`：成员返回 dict 则合并其键，返回标量则以成员 `name` 为键。
 - 训练循环里 `list` 会被**展开成标量子键** `key_0 / key_1 / ...` 再写入 `history.csv`
-  与 TensorBoard（见文末「未发布变更要点」）。
+  与 TensorBoard（见文末「v1.1.1 变更要点」）。
 
 > 为什么用累积式而非"逐 batch 求平均"：mIoU / mAP / macro-F1 等指标 `mean(每个 batch 的值) != 全局值`，必须先累积混淆矩阵 / TP-FP 再计算。
 
@@ -178,7 +178,7 @@ v1.1:    val_accuracy, val_f1, val_precision, val_recall, train_acc, train_loss,
 
 ---
 
-## 未发布变更要点
+## v1.1.1 变更要点
 
 **非标量指标不再让训练崩溃。** `MeanIoU/DiceScore(per_class=True)`、
 `Precision/Recall/F1Score(average="none")` 的 `compute()` 返回 `list`。

@@ -123,7 +123,7 @@ exporter.export("m.onnx", backend="dynamo", dynamic_batch=False, dynamic_size=Fa
 
 ---
 
-## 未发布变更要点
+## v1.1.1 变更要点
 
 **`backend="dynamo"` 的默认调用现在可用。** v1.1 的实现要求 `dynamic_batch=True` 时
 dynamo 必须显式报错，而 `dynamic_batch` 的默认值就是 `True` —— 于是最自然的
