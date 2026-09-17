@@ -100,9 +100,14 @@ python tools/train.py --config configs/classification/demo_synthetic.yaml --resu
 torchrun --nproc_per_node=2 tools/train.py --config configs/classification/demo_synthetic.yaml --devices 0,1
 ```
 
-训练产物（日志 / TensorBoard / 检查点 / 最终配置 / history.csv / best_metrics.csv）全部落在
+训练产物（日志 / TensorBoard / 检查点 / 最终配置 / `history.csv` / `best_metrics.csv`）全部落在
 工作目录 `~/dvisionix_runs/<experiment>/<时间戳>-<配置哈希>/`（代码库外，可通过 `--work-dir` 或
 环境变量 `DVISIONIX_WORK_DIR` 覆盖）。
+
+> `--work-dir` 指定的是**工作根**：实际目录是在其下再拼 `<experiment>/<时间戳>-<配置哈希>`。
+> 通过 `torchrun` 启动时，目录名改为确定性的 `<配置哈希>`（不带时间戳），
+> 以保证所有 rank 落在同一目录；DDP 下 `history.csv` / `best_metrics.csv` / TensorBoard
+> 仅由 rank0 写出（rank≠0 的 `val_*` 恒为 0，写出来是假指标）。
 
 ### 编程式使用
 
@@ -182,8 +187,10 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-测试状态**以 CI 运行结果为准**。当前实测 **447 passed + 2 skipped**、覆盖率 **91%**，
-`ruff` / `black` 全绿；v1.0.0 基线为 286 passed + 2 skipped。
+测试状态**以 CI 运行结果为准**。当前实测 **528 passed / 1 skipped**
+（v1.1.0 基线为 447 passed + 2 skipped），`ruff` / `black` 全绿。
+另有 2 条 `test_ddp_cpu.py` 的多进程用例需要创建命名管道，
+在禁止命名管道的受限环境（部分沙箱/CI 容器）中无法运行。
 完整对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 7.2 节。
 
 除常规测试外，另有几道装配层门禁：
@@ -221,7 +228,11 @@ CI 门禁顺序：`ruff` → `black` → `mypy`（信息性）→ 快速测试 �
 
 ## 📝 版本说明
 
-- **v1.1.0（当前）**：稳定性与工程优化。修复 20 项已核实缺陷，官方配置由 14/17 可跑
+- **未发布**：正确性与稳定性修复（模型层 / GPU 可用性 / 训练可靠性 / DDP / 工具链）。
+  ⚠️ **其中包含会改变检测指标口径的修复**（解码索引错位、RetinaNet 损失归一化、
+  margin 头开始真正生效等），历史实验指标不可直接比较。
+  完整清单见 [CHANGELOG.md](CHANGELOG.md) 的「未发布」章节。
+- **v1.1.0**：稳定性与工程优化。修复 20 项已核实缺陷，官方配置由 14/17 可跑
   提升到 17/17；新增装配层门禁与性能基准；打包与 CI 收口。
   **升级前请先读 [v1.1 变更与迁移指南](docs/v1.1_changes.md)** ——
   其中有会改变训练结果与输出格式的变更。

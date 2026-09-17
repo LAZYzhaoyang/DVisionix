@@ -36,8 +36,14 @@ Config 驱动训练（`tools/train.py`）会自动在 work_dir 下产出：
 work_dir/
 ├── logs/dvisionix.trainer_*.log     # 结构化日志
 ├── logs/events.jsonl                # 机器可读事件流
-└── tb/                              # TensorBoard（tensorboard --logdir <work_dir>/tb）
+├── tb/                              # TensorBoard（tensorboard --logdir <work_dir>/tb）
+├── history.csv                      # 每 epoch 指标（含 val_ 前缀）
+└── best_metrics.csv                 # 按 checkpoint 监控指标选出的最优 epoch
 ```
+
+> 分布式下 `events.jsonl` / `tb/` / `history.csv` / `best_metrics.csv`
+> **只由 rank0 写出**：rank≠0 的 `val_*` 恒为 0（只有 rank0 更新任务指标），
+> 多进程并发写还会交错截断，写出来的是全 0 的假指标。
 
 ## 参数说明（get_logger）
 - `name`: 日志器名称。

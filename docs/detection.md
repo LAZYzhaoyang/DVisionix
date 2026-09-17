@@ -196,3 +196,61 @@ v1.0.0 用 `feats[0].shape * 4` 推断图像尺寸。官方配置的骨干是 3 
 匈牙利匹配（300 查询 × 30 GT）从 **13.6 秒**降到 **18.6 毫秒**：
 旧实现把代价矩阵补齐成方阵后跑纯 Python O(n²m) 算法，规模被放大两个数量级。
 `tools/benchmark.py --scenario matcher` 可复现。
+
+---
+
+## 未发布变更要点
+
+> ⚠️ 本节中的修复**会改变检测指标数值**。修复前的 `val_mAP` / `val_mAP_50` /
+> `val_mAP_75` 与推理、导出结果都不可信，历史实验指标**不可直接比较**。
+
+### 解码的「类别 / 位置」索引错位（严重）
+
+`yolo_decode` / `fcos_decode` / `retinanet_decode` 把展平后的索引含义搞反了。
+`scores` 由 `(N, C)` 行主序展平而来，索引是 `idx = 位置 * 类别数 + 类别`，
+因此**类别应取模、位置应整除**；三处却都拿"位置数"当除数：
+
+```python
+labels  = top_idx // n_loc     # ← 应为 % num_classes
+loc_idx = top_idx %  n_loc     # ← 应为 // num_classes
+```
+
+后果是**标签与框同时错位**：受控输入下应得 `label=1、中心 (3,3)`，
+实际得到 `label=2、中心 (1,3)`。而**训练 loss 完全正常**（损失端语义正确），
+所以从单元测试到端到端门禁都没有任何信号 —— 原有断言只检查
+`boxes.shape[1] == 4` 与三个列表长度相等。
+
+现在新增 `tests/test_models/test_decode_correctness.py`，用「已知类别 + 已知位置」的
+受控输入把 `(label, box)` 对应关系钉死。
+
+### 检测损失的 fp16 数值失稳
+
+- **GIoU / CIoU**：fp16 下框面积与闭合框面积会溢出 65504（边长约 ≥181px 即触发），
+  使 `union = inf` → **损失变成 `-inf`**，或 `c_area = inf` → `giou = nan`。
+  现在整条 IoU 链路统一在 fp32 下计算。
+- **CenterNet 热图 focal**：fp16 下 `1 - 1e-4` 会舍入成 `1.0`，clamp 上界失效 →
+  `log(0)` → **损失变成 `nan`**。现在先升到 fp32 再做 sigmoid/clamp。
+- **MaskFormer / Mask2Former**：`F.binary_cross_entropy` 对 `autocast` 不安全，
+  会直接抛 `RuntimeError`。已改用 `binary_cross_entropy_with_logits`。
+
+这三条只在 `training.amp: true` + CUDA 下触发（CI 装的是 CPU-only torch，
+`autocast` 恒为关闭）。
+
+### RetinaNet 损失缺少 batch 归一化
+
+FCOS / YOLO 在 v1.1 已按"所有 (图, 层) 项的均值 / 所有正样本的均值"归一化，
+RetinaNet 却仍是逐项均值的**累加**，导致 loss 与 `batch_size × 层数` 成正比：
+
+```text
+修复前：bs=1/2/4 → 0.971 / 1.942 / 3.884（严格成比例）
+```
+
+这等效于学习率随 batch size 漂移，`val_loss` 在不同 batch 之间也不可比。
+现已按同一口径归一化。
+
+### DINO 去噪分支的框坐标约定
+
+去噪分支把**归一化 cxcywh**（见 `dvisionix/models/layers/detr_denoising.py` 的
+`# 归一化框 cxcywh`）当成了 `(x1, y1, w, h)` 转像素，框位置随自身尺寸偏移、
+GIoU 失去平移不变性；同文件主分支有正确的 `_xywh_norm_to_px`。
+现已复用主分支的转换，并补上漏乘的 `giou_weight`。

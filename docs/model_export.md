@@ -17,10 +17,10 @@ exporter.export("./exports/simple_cnn.onnx", dynamic_batch=True, opset_version=1
 exporter.verify("./exports/simple_cnn.onnx", num_samples=3)
 ```
 
-一键运行示例：
+一键运行示例（完整覆盖 trace / dynamo / simplify / 嵌套输出 / 精度校验）：
 
 ```bash
-conda run -n dvisionix python demos/export_onnx_demo.py
+conda run -n dvisionix python -m pytest tests/test_export -q
 ```
 
 ## 支持不同模型的导出
@@ -63,8 +63,9 @@ exporter.export("custom.onnx", dynamic_batch=False)
 ```
 
 ## 参数说明
-- `dynamic_batch`: 支持动态 batch 维度（推理时可变 batch）。
-- `dynamic_size`: 支持动态 H/W（分割等任务常用）。
+- `dynamic_batch`: 支持动态 batch 维度（推理时可变 batch）。默认 `None`，按后端取默认值：
+  `trace` → `True`，`dynamo` → `False`（dynamo 用 `dynamic_shapes`，不支持 `dynamic_axes`）。
+- `dynamic_size`: 支持动态 H/W（分割等任务常用）。默认 `None`（等价 `False`）。
 - `opset_version`: ONNX opset，默认 17。
 - `simplify`: 是否用 onnxsim 简化计算图（需 `pip install onnxsim`）。
 - `backend`: 导出后端，`'trace'`（默认，TorchScript 路径，零额外依赖）或 `'dynamo'`
@@ -119,3 +120,29 @@ exporter.export("m.onnx", backend="dynamo", dynamic_batch=False, dynamic_size=Fa
 
 **性能**：匈牙利匹配从 13.6 秒降到 18.6 毫秒（300 查询 × 30 GT），
 详见 [v1.1 变更与迁移指南](v1.1_changes.md) 第 4 节。
+
+---
+
+## 未发布变更要点
+
+**`backend="dynamo"` 的默认调用现在可用。** v1.1 的实现要求 `dynamic_batch=True` 时
+dynamo 必须显式报错，而 `dynamic_batch` 的默认值就是 `True` —— 于是最自然的
+`exporter.export("m.onnx", backend="dynamo")` **必然抛 ValueError**：
+
+```python
+# v1.1：直接报错
+exporter.export("m.onnx", backend="dynamo")
+
+# 现在：默认参数即可导出（dynamo 下 dynamic_batch 默认 False）
+exporter.export("m.onnx", backend="dynamo")
+
+# 仍然会在"显式要求动态维度"时报错，避免静默丢掉动态 batch 的承诺
+exporter.export("m.onnx", backend="dynamo", dynamic_batch=True)   # ValueError
+```
+
+实现方式是用 `None` 哨兵区分"用户没写"与"用户显式要求"：
+`dynamic_batch` / `dynamic_size` 默认 `None`，`trace` 下取历史默认（`True` / `False`），
+`dynamo` 下取 `False` / `False`。
+
+> 该冲突此前未被发现，是因为 CI 不含 `onnxscript`，对应测试走
+> `pytest.importorskip` 直接跳过。

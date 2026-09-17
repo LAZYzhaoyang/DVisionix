@@ -91,3 +91,30 @@ model:
 **顶层导入改为惰性**：`from dvisionix.config import Config` 不再加载 torch
 （约 3–4 s → 0.1 s）。代价是组件注册发生在子模块被导入时 ——
 使用注册表前请显式 `import dvisionix.models`（或 `training` / `metrics`）。
+
+---
+
+## 未发布变更要点
+
+**`resume` 的三种写法**（`false` / `true` / `"auto"` / `"latest"` / 显式路径）：
+
+```yaml
+resume: false          # 全新训练（默认）
+resume: true           # 等价于 "auto"：续最近一次任务
+resume: "auto"         # 同上
+resume: "latest"       # 同上
+resume: "/path/to/last.pt"   # 显式 checkpoint 路径
+```
+
+`true` 此前会被**原样当成路径**返回，最终 `torch.load(True)` 抛
+`AttributeError: 'bool' object has no attribute 'seek'`；而且工作目录解析也会把它当作
+"非 auto"，于是**既没续训、又另起了一个带新时间戳的目录**。现在 `true` 等价于 `"auto"`，
+其它非字符串值会直接抛带提示的 `ValueError`。
+
+> ⚠️ `resume` 参与配置哈希计算。**在配置里新增** `resume: true/auto` 会改变哈希，
+> 从而被续训一致性校验拒绝（提示 `配置哈希不一致`）。用命令行
+> `--resume auto` 则不影响哈希，推荐这种用法。
+
+**`training.devices` 现在真正生效**：`--devices 1,3` / `devices: [1,3]` 会依次映射到
+local_rank 0、1 绑定 GPU 1 与 GPU 3；此前该键只被赋值、从未被读取。
+另外显式 `device: "cpu"` 不再被 DDP 自动绑卡覆盖（用于在 GPU 机器上跑 CPU 回归）。

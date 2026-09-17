@@ -51,3 +51,23 @@ conda run -n dvisionix python tools/train.py --config configs/segmentation/demo_
 ## 真实数据
 把配置里的 `data.dataset` 换成 `cityscapes` / `ade20k` 并提供真实 mask 路径即可；
 注意训练时同一 batch 内图像/掩码尺寸需一致（用分割变换统一 resize）。
+
+---
+
+## 未发布变更要点
+
+**`dice` / `combined_segmentation` 现在真正支持 `ignore_index`。**
+两者默认 `ignore_index=255`，但 v1.1 的实现只做了 `targets.clamp(min=0)`，
+255 会原样进入 `F.one_hot`：
+
+```text
+RuntimeError: Class values must be smaller than num_classes
+```
+
+也就是说，用 Cityscapes / ADE20K 这类**含 void(255) 标签**的真实数据集时，
+这两个损失**完全不可用**（`cross_entropy` 不受影响）。CI 没发现是因为
+测试用的 target 一直是 `torch.randint(0, num_classes)`，从不含 255。
+
+现在会先把 `ignore_index` 与任何越界值一并排除（对应的 one-hot 与概率都被清零），
+越界标签也不再导致崩溃。`MaskFormerLoss` 的 mask BCE 同时改为
+`binary_cross_entropy_with_logits`，使其可在 `autocast(fp16)` 下计算。

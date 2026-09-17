@@ -13,6 +13,8 @@ DVisionix 的指标模块采用「原子指标 + 组合容器 + 预设」的设�
 返回值约定：
 - 原子指标 `compute()` 返回标量 `float`（per-class 模式返回 `list`）。
 - `MetricCollection.compute()` 返回 `dict`：成员返回 dict 则合并其键，返回标量则以成员 `name` 为键。
+- 训练循环里 `list` 会被**展开成标量子键** `key_0 / key_1 / ...` 再写入 `history.csv`
+  与 TensorBoard（见文末「未发布变更要点」）。
 
 > 为什么用累积式而非"逐 batch 求平均"：mIoU / mAP / macro-F1 等指标 `mean(每个 batch 的值) != 全局值`，必须先累积混淆矩阵 / TP-FP 再计算。
 
@@ -135,7 +137,12 @@ metrics = MetricCollection(["accuracy", {"type": "error_rate"}])
 
 ## 七、说明
 
-- **训练循环接入**：当前 `Trainer`/`Task` 仍在 step 内内联计算简单指标（如分类 acc），本模块作为独立可组合工具提供；把可组合 metrics 正式接入验证循环将在后续 Trainer 改造中进行。
+- **训练循环接入**：`Trainer` 已把本模块接入验证循环 —— 每个 epoch 开始调
+  `task.reset_metrics()`，每个 batch 调 `task.update_metrics(...)`
+  （分布式下先 all-gather 再更新，保证是全局指标），epoch 末调
+  `task.on_validation_epoch_end()` 得到该轮指标并以 `val_` 前缀并入 `history.csv`。
+  各内置 Task 的默认指标由 `get_preset_metrics(...)` 给出，也可在配置里用
+  `metrics:` 列表覆盖。
 - **检测后端**：`MeanAveragePrecision(use_torchmetrics=True)` 可切换到 `torchmetrics` 后端（需 `pip install torchmetrics[detection]`），内置实现仅用于快速验证。
 ---
 
@@ -168,3 +175,32 @@ MetricCollection([Accuracy(name="acc@1"), Accuracy(name="acc@2")])  # OK
 v1.0.0:  accuracy, f1, precision, recall, train_acc, train_loss, val_loss
 v1.1:    val_accuracy, val_f1, val_precision, val_recall, train_acc, train_loss, val_loss
 ```
+
+---
+
+## 未发布变更要点
+
+**非标量指标不再让训练崩溃。** `MeanIoU/DiceScore(per_class=True)`、
+`Precision/Recall/F1Score(average="none")` 的 `compute()` 返回 `list`。
+v1.1 里这个 `list` 会一路进入 epoch 汇总，而写盘/进度条都要做 `float(v)`：
+
+```text
+TypeError: float() argument must be a string or a real number, not 'list'
+```
+
+训练会在**第一个 epoch 末尾**崩溃（有 `work_dir` 时崩在 `log_metrics`，
+无 `work_dir` 时崩在进度条）。
+
+现在汇总前会先把 `list` 展开为标量子键，**保留逐类信息**
+（取均值会丢掉"哪一类差"这个关键信息）：
+
+```yaml
+metrics:
+  - {type: dice_score, num_classes: 4, per_class: true}
+```
+
+```text
+history.csv: ..., val_dice_0, val_dice_1, val_dice_2, val_dice_3
+```
+
+非 `list` 的值（标量、张量）原样透传，行为不变。

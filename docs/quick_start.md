@@ -87,7 +87,9 @@ python tools/hparam_search.py --config configs/classification/demo_synthetic.yam
   --param-spec configs/classification/hparam_search.yaml --num-trials 8 --seed 0
 ```
 
-每个 trial 落在 `runs/search/trial_NNN/`，汇总结果写入 `runs/search/search_results.csv`（含监控指标与 work_dir）。
+每个 trial 落在 `runs/search/trial_NNN/`（其下再按 `<experiment>/<时间戳>-<配置哈希>` 分层，
+`history.csv` 在最内层），汇总结果写入 `runs/search/search_results.csv`
+（含监控指标与 work_dir）。
 
 ### 特征蒸馏（FeatureDistillLoss）
 ```python
@@ -150,3 +152,34 @@ python tools/benchmark.py --scenario all --json bench.json
 
 **Windows 提示**：请先 `conda activate dvisionix`。直接用解释器绝对路径时
 `Library\bin` 不在 `PATH`，子进程 `import torch` 会报 `DLL load failed`。
+
+---
+
+## 未发布变更要点
+
+> 完整清单见 [CHANGELOG](../CHANGELOG.md) 的「未发布」章节。
+
+**`resume: true` 现在可用**（等价于 `auto`）。此前它会被当成 checkpoint 路径，
+`torch.load(True)` 抛 `AttributeError: 'bool' object has no attribute 'seek'`，
+而且工作目录解析还会另起一个带新时间戳的目录。详见
+[配置系统](config_system.md) 的「未发布变更要点」。
+
+**`--devices` 现在真正生效**：
+
+```bash
+# 2 卡：GPU0 与 GPU1
+torchrun --nproc_per_node=2 tools/train.py --config configs/classification/demo_synthetic.yaml
+
+# 指定用 1 号与 3 号卡（此前会被静默忽略，实际仍用 0、1 号卡）
+torchrun --nproc_per_node=2 tools/train.py --config configs/classification/demo_synthetic.yaml \
+  --devices 1,3
+```
+
+`torchrun` 下工作目录改用确定性的 `<配置哈希>` 命名（不带时间戳），保证所有 rank
+落在同一目录；`history.csv` / `best_metrics.csv` / TensorBoard 只由 rank0 写出。
+
+**超参搜索的汇总表现在有指标了**：此前 `search_results.csv` 的监控指标列**恒为空**
+（`--work-dir` 是工作根，而汇总读的是 `work_dir/history.csv`，永远读不到）。
+
+**断点续训在 GPU 上原本必然崩溃**（`map_location` 把 CPU 的 RNG 状态搬到了 GPU），
+现已修复；`configs/classification/linear_eval.yaml` 在 GPU 上同理。

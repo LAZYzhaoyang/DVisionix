@@ -266,6 +266,25 @@ model:
 
 自定义的 layer / model 只要在训练脚本导入前完成注册（例如放在被 import 的模块里），即可在配置中按 `type` 名引用。
 
+### 2.5 分类头的额外关键字参数（margin 头）
+
+`LinearClassifier.forward(x, **kwargs)` 会把额外关键字参数**透传给 head**。
+这一点对 ArcFace / CosFace / SphereFace / AdaFace / CurricularFace 等 margin 头是必需的：
+它们只有在拿到 `labels` 时才会施加角度间隔，否则静默退化成 NormFace。
+
+```python
+model = build_model({"type": "linear_classifier", "num_classes": 10,
+                     "head": {"type": "arcface_head", "num_classes": 10}})
+logits = model(images, labels=targets)   # 训练路径：margin 生效
+logits = model(images)                   # 推理/验证路径：等价于纯余弦（head 内部还会再判 self.training）
+```
+
+`ClassificationTask.training_step` 已自动传入 `labels`，配置驱动训练无需额外处理；
+自定义 Task 若直接调用模型，请同样把标签传进去。
+
+> 未发布变更：`LinearClassifier` 此前**丢弃 `**kwargs`**，且 `ClassificationTask`
+> 只传 `images`，导致上述 5 个 margin 头的 margin **从未生效过**（静默等价于 NormFace）。
+
 ---
 
 ## 三、注册表一览
