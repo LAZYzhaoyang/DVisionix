@@ -6,6 +6,7 @@
 ## 快速开始
 - [快速开始](quick_start.md) - 安装、Config 驱动训练、编程式训练、训练工程增强
 - [配置系统](config_system.md) - Config 加载、继承、CLI 覆盖、schema 校验
+- [DVX 标准数据集](dataset_spec.md) - 一个根目录 + 一份 dvx_dataset.yaml；字段、三种切分、DVXDataset 与四套真实数据
 - [v1.1 变更与迁移指南](v1.1_changes.md) - 20 项缺陷修复、行为变更、新配置项、API 变化
 
 ## 核心模块
@@ -17,6 +18,9 @@
 - [模型导出 (ONNX)](model_export.md) - ONNXExporter 导出与精度验证
 - [语义分割任务](segmentation.md) - 分割数据格式与端到端训练
 - [目标检测任务](detection.md) - 组件化检测器、decode 契约、损失权重与 mAP 评估
+
+## 架构与约束
+- [架构与分层规则](architecture.md) - R1-R3、layers.yaml、check_layering 用法与例外登记流程
 
 ## 工具与入口
 - `tools/train.py` - 配置驱动统一训练入口（分类/检测/分割/自监督，支持 resume / DDP / work_dir / ONNX 导出）

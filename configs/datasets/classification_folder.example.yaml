@@ -1,0 +1,32 @@
+# DVX 数据集规格示例：folder_per_class 单标签分类
+#
+# 用法：复制到数据根目录并改名为 dvx_dataset.yaml，按 TODO 修改后执行：
+#   python tools/check_dataset.py --spec <数据根目录>/dvx_dataset.yaml --split-preview
+#
+# 目录要求：<root>/<class>/...（类别目录名必须与 classes 完全一致）
+# 本文件是 DVX 数据集规格（dvx_dataset.yaml），不是训练配置。
+# 注意：classes 的顺序就是 label id（0、1、2……），一旦用于训练不要随意调整。
+version: 1
+
+data_type: classification
+
+layout: folder_per_class
+
+# TODO 必须改：数据集根目录，相对“本 yaml 所在目录”解析；也支持绝对路径。
+# 若本文件就放在数据根目录下，写 root: . 即可。
+root: ./data/my_cls
+
+# TODO 必须改：类别名 = 类别目录名，顺序即 label id。
+classes:
+  - cat
+  - dog
+
+splits:
+  mode: ratio                 # ratio | list | dir
+  ratio: {train: 0.8, val: 0.2}   # 必须含 train，且总和为 1
+  seed: 42                    # 同数据 + 同 seed = 同一份切分
+  stratify: class             # 分类默认按类别分层；不分层写 none
+
+parse:
+  recursive: true             # false 时只看 <root>/<class>/* 一层
+  image_ext: [.jpg, .jpeg, .png, .bmp]   # 小写比较；缺前导点会自动补全并告警

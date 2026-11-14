@@ -3,6 +3,74 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 完整的规划与缺陷清单见 [CodePlan.md](CodePlan.md)。
 
+## [Unreleased] — v2 开发中
+
+> 本小节记录 v2 重构 P0 / P1 阶段的变更；版本号尚未变更（仍为 1.1.1），
+> 训练侧的 DVX 接线在 P2。接口契约见
+> [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)。
+
+### 新增：P0 架构基线
+
+- **统一异常族** `dvisionix/errors.py`：`DVisionixError` 及其子类
+  （`ConfigError` / `RegistryError` / `DatasetError` / `DatasetSpecError` /
+  `AnnotationError` / `SplitError` / `TaskModelMismatchError` / `TaskDataMismatchError` /
+  `ModelOutputMismatchError` / `CheckpointError` / `ExportError`），
+  `__str__` 自动拼接 `提示：`（hint），且不依赖 torch。
+- **分层清单** `docs/architecture/layers.yaml`：R1-R3 的机器可读版本，
+  记录 assembly / component / foundation / shared / infrastructure 五层与既有例外。
+- **分层检查器** `tools/check_layering.py`：基于 `ast` 的静态检查，支持相对导入绝对化、
+  `from`/`to` 与 `from_glob`/`to_glob` 例外匹配、`--json` 输出和 `--no-fail`；
+  退出码 0（通过）/ 1（违规）/ 2（清单或目录错误）。
+- **门禁测试** `tests/test_architecture/test_layering.py`：真实仓库零违规 +
+  R1/R2/R3 自测 + 例外放行 + CLI 退出码。
+- `.gitignore` 补充 `.ruff_cache/`、`.mypy_cache/` 工具缓存目录。
+- 文档：新增 [架构与分层规则](docs/architecture.md)，说明 R1-R3、清单结构、
+  检查器用法、例外登记流程与当前基线。
+
+### 新增：P1 DVX 标准数据集
+
+- **规格与校验** `dvisionix/data/spec/schema.py`：`dvx_dataset.yaml` v1，
+  支持 `classification` / `multi_task_classification` / `detection` / `segmentation`
+  四种 `data_type`，校验 layout 组合、类别表、`tasks`、`splits`、`parse` 与
+  `seg_mode` / `ignore_index`。
+- **类别表** `dvisionix/data/spec/classes.py`：`ClassTable`，顺序即 label id，
+  拒绝重名，未知标签抛 `AnnotationError`。
+- **扫描** `dvisionix/data/spec/scan.py`：`SampleRef` 与 `scan_samples`，
+  按 layout 分派到 folder / labelme 扫描器，`rel_path` 相对 `spec.root` 且全局唯一。
+- **非破坏性切分** `dvisionix/data/spec/split.py`：`build_splits` 支持
+  `ratio`（seed + 分层）/ `dir`（目录映射）/ `list`（JSON/YAML 清单），
+  统一做覆盖与不重叠校验；`SplitResult` 可保存/加载。
+- **解析器** `dvisionix/data/parsers/`：`folder_per_class` 扫描、labelme
+  扫描/解析（rectangle → boxes，polygon → segments）、polygon → mask 栅格化
+  （背景默认 0，后写覆盖先写，越界裁剪）。
+- **统一数据集** `dvisionix/data/dvx_dataset.py`：`DVXDataset` 按 split 输出
+  `Sample` 契约（分类 `label`、多任务 `label`+`task`、检测 `boxes`+`labels`、
+  分割按需栅格化 `mask`），并提供 `classes` / `task_names` / `num_classes` /
+  `refs` / `split_result` 等只读属性。
+- **数据导出** `dvisionix/data/__init__.py` 增加 `DVXDataset` / `DVXDatasetSpec` /
+  `SplitResult` / `load_spec`（只加不改）；`Sample.EXTENDED_KEYS` 增加 `task`。
+- **工具**：
+  - `tools/init_dataset.py`：只读扫描、推断 layout、生成 `dvx_dataset.yaml` 草稿；
+  - `tools/check_dataset.py`：数据集只读体检（类别/样本统计、检测框与分割多边形质量、
+    `--split-preview` 切分预览、`--json`）。
+- **真实数据验收**：`project/data/{cls,det,multicls,seg}/dvx_dataset.yaml`
+  （数据在仓库外），对应 `tests/test_data/test_acceptance_real_data.py`：
+  2210 / 1646 / 2458 / 766 张，默认切分 1768/442、1317/329、1964/494、613/153。
+- **测试**：`tests/test_data/test_dvx_spec.py`、`test_dvx_classes.py`、
+  `test_dvx_split.py`、`test_dvx_parsers.py`、`test_dvx_dataset.py`。
+- **文档**：新增 [DVX 标准数据集](docs/dataset_spec.md) 与
+  [架构与分层规则](docs/architecture.md)；`docs/README.md`、`README.md`、
+  `docs/quick_start.md` 同步索引与上手命令；`configs/datasets/` 增加分类 / 检测 /
+  分割 / 多任务四份示例模板。
+
+### 尚未接线
+
+- `DVXDataset` 尚未注册到 `DATASETS`，`tools/train.py` / `build_dataset` 还不能按
+  配置直接构建；训练接线（transforms / collate / task 匹配）属于 P2。
+- `seg_mode: query` 只是 schema 保留值，数据层仅实现 `semantic`。
+- 检索（retrieval / re-identification）任务尚未实现。
+- `ignore_index` 目前只做 spec 校验与展示，`DVXDataset` 栅格化背景固定为 0（P2 对齐）。
+
 ## [1.1.1] — 正确性与稳定性修复
 
 > ⚠️ **本批修复会改变检测指标与部分训练结果的口径**，历史实验的 `val_mAP` /

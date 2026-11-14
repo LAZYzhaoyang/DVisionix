@@ -1,0 +1,44 @@
+# DVX 数据集规格示例：多任务分类（folder_per_class）
+#
+# 用法：复制到数据根目录并改名为 dvx_dataset.yaml，按 TODO 修改后执行：
+#   python tools/check_dataset.py --spec <数据根目录>/dvx_dataset.yaml --split-preview
+#
+# 目录要求：<root>/<task.path>/<class>/...；每个任务有自己独立的 classes。
+# 本文件是 DVX 数据集规格（dvx_dataset.yaml），不是训练配置。
+# 注意：每个任务的 classes 顺序就是该任务的 label id；任务名必须唯一。
+# 多任务数据集不要写顶层 classes。
+version: 1
+
+data_type: multi_task_classification
+
+layout: folder_per_class
+
+# TODO 必须改：数据集根目录，相对“本 yaml 所在目录”解析；也支持绝对路径。
+root: ./data/my_multi
+
+# TODO 必须改：每个任务的目录与类别表。
+tasks:
+  - name: licence               # 加载时用 task="licence" 过滤
+    path: licence               # 相对 root 的任务目录
+    classes: [none, short, long]   # 顺序即该任务的 label id
+
+  - name: logo
+    path: logo
+    classes: [integrated, embedded]
+
+splits:
+  mode: ratio
+  ratio: {train: 0.8, val: 0.2}
+  seed: 42
+  stratify: class               # ratio 模式按 (task, label) 分层
+
+parse:
+  recursive: true
+  image_ext: [.jpg, .jpeg, .png, .bmp]
+
+# 可选：如果每个任务目录下已经有 train_data/{train,val} 切片目录，
+# 改用 dir 模式（目录相对每个 task.path 解析）：
+#
+# splits:
+#   mode: dir
+#   dir_map: {train: train_data/train, val: train_data/val}

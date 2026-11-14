@@ -183,3 +183,33 @@ torchrun --nproc_per_node=2 tools/train.py --config configs/classification/demo_
 
 **断点续训在 GPU 上原本必然崩溃**（`map_location` 把 CPU 的 RNG 状态搬到了 GPU），
 现已修复；`configs/classification/linear_eval.yaml` 在 GPU 上同理。
+
+---
+
+## 使用 DVX 标准数据集
+
+自己的数据（分类 / labelme 检测与分割 / 多任务分类）建议先落成一份
+`dvx_dataset.yaml`，再用 `DVXDataset` 加载。最短路径：
+
+```bash
+# 1. 扫描数据目录，生成规格草稿（只读，不移动/改名原始文件）
+python tools/init_dataset.py --root ./data/my_cls --data-type classification \
+  --out ./data/my_cls/dvx_dataset.yaml
+
+# 2. 人工确认 classes 顺序（顺序即 label id）后体检，并预览切分
+python tools/check_dataset.py --spec ./data/my_cls/dvx_dataset.yaml --split-preview
+
+# 3. 加载
+python -c "from dvisionix.data import DVXDataset; ds = DVXDataset('./data/my_cls/dvx_dataset.yaml', split='train'); print(len(ds), ds[0]['label'])"
+```
+
+- 字段含义、`ratio` / `dir` / `list` 三种切分、四类数据集输出结构见
+  [DVX 标准数据集](dataset_spec.md)。
+- 可直接复制的模板见 `configs/datasets/`：
+  [分类](../configs/datasets/classification_folder.example.yaml)、
+  [检测](../configs/datasets/detection_labelme.example.yaml)、
+  [分割](../configs/datasets/segmentation_labelme.example.yaml)、
+  [多任务](../configs/datasets/multi_task_classification.example.yaml)。
+- 检测/分割用 `DataLoader` 时要传 `collate_fn=ds.collate_fn`；多任务分类用
+  `task="<任务名>"` 过滤样本。
+- 训练接线（把 `DVXDataset` 接进 `tools/train.py` 的配置）属于 P2，当前尚未接线。

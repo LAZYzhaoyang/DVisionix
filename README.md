@@ -37,6 +37,13 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 - ✅ 实例/全景分割（MaskFormer/Mask2Former + PQ/SQ/RQ）
 - ✅ 自监督对比学习（SimCLR）+ 线性评估闭环
 
+### 📦 标准化数据
+- **DVX 标准数据集**：一个根目录 + 一份 `dvx_dataset.yaml`，覆盖**分类 / labelme 检测与分割 / 多任务分类**；
+  单任务共用一张类别表（多任务每任务独立类表），切分非破坏性（ratio / dir / list），
+  `DVXDataset` 直接加载。
+  配套 `tools/init_dataset.py`（生成草稿）与 `tools/check_dataset.py`（只读体检），
+  详见 [DVX 标准数据集](docs/dataset_spec.md)。
+
 ### 🛠️ 工具链
 - 超参搜索 `tools/hparam_search.py`（参数网格/随机采样，逐 trial 独立进程）
 - 性能基准 `tools/benchmark.py`（固定输入、可复现、可隔离测峰值内存）
@@ -109,6 +116,25 @@ torchrun --nproc_per_node=2 tools/train.py --config configs/classification/demo_
 > 以保证所有 rank 落在同一目录；DDP 下 `history.csv` / `best_metrics.csv` / TensorBoard
 > 仅由 rank0 写出（rank≠0 的 `val_*` 恒为 0，写出来是假指标）。
 
+### 60 秒上手：用自己的数据（DVX 标准数据集）
+
+```bash
+# 1) 扫描数据目录，生成规格草稿（只读，不移动/改名任何原始文件）
+python tools/init_dataset.py --root ./data/my_cls --data-type classification \
+  --out ./data/my_cls/dvx_dataset.yaml
+
+# 2) 人工确认 classes 顺序后体检，并预览 train/val 切分
+python tools/check_dataset.py --spec ./data/my_cls/dvx_dataset.yaml --split-preview
+
+# 3) 用 DVXDataset 加载（分类示例）
+python -c "from dvisionix.data import DVXDataset; ds = DVXDataset('./data/my_cls/dvx_dataset.yaml', split='train'); print(len(ds), ds[0]['label'])"
+```
+
+`DVXDataset` 支持分类、labelme 检测/分割、多任务分类；字段说明、三种切分模式与四类真实数据
+见 [DVX 标准数据集](docs/dataset_spec.md)，示例模板在 `configs/datasets/`
+（[分类](configs/datasets/classification_folder.example.yaml) 等四份）。
+训练入口尚未接线（P2），当前用于编程式数据加载与数据集体检。
+
 ### 编程式使用
 
 ```python
@@ -169,6 +195,8 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 | [快速开始](docs/quick_start.md) | 安装、Config 驱动训练、编程式训练、训练工程增强 |
 | [配置系统](docs/config_system.md) | Config 加载 / 继承 / CLI 覆盖 / schema 校验 |
 | [数据模块](docs/data.md) | Sample 协议、BaseDataset、transforms、数据集工具箱 |
+| [DVX 标准数据集](docs/dataset_spec.md) | dvx_dataset.yaml 字段、三种切分、DVXDataset 用法与四套真实数据 |
+| [架构与分层规则](docs/architecture.md) | R1-R3、layers.yaml、分层检查器与例外登记流程 |
 | [骨干网络](docs/backbones.md) | 12 种内置骨干与预训练加载 |
 | [自定义模型](docs/custom_models.md) | 自定义 Layer / 注册 / 配置驱动组装 |
 | [目标检测](docs/detection.md) | 组件化检测器、decode、mAP 评估 |

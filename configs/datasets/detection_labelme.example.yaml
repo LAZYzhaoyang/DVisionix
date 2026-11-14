@@ -1,0 +1,38 @@
+# DVX 数据集规格示例：labelme 目标检测
+#
+# 用法：复制到数据根目录并改名为 dvx_dataset.yaml，按 TODO 修改后执行：
+#   python tools/check_dataset.py --spec <数据根目录>/dvx_dataset.yaml --split-preview
+#
+# 目录要求：每张图片旁边有同名的 <stem>.json（空标注写 "shapes": []）。
+# detection 只保留 shape_type=rectangle；其他形状计入 skipped_shapes。
+# 本文件是 DVX 数据集规格（dvx_dataset.yaml），不是训练配置。
+# 注意：classes 的顺序就是 label id，一旦用于训练不要随意调整。
+version: 1
+
+data_type: detection
+
+layout: labelme
+
+# TODO 必须改：数据集根目录，相对“本 yaml 所在目录”解析；也支持绝对路径。
+root: ./data/my_det
+
+# TODO 必须改：全部标注 label 的并集；拼写必须与 JSON 中的 label 完全一致。
+classes:
+  - person
+  - car
+  - bicycle
+
+splits:
+  mode: ratio
+  ratio: {train: 0.8, val: 0.2}
+  seed: 42
+  stratify: none              # 检测通常不分层；需要时改成 class（按单标签分层）
+
+parse:
+  recursive: true             # false 时只看 root 本层，不进入子目录
+  image_ext: [.jpg, .jpeg, .png, .bmp]
+  labelme:
+    ignore_labels: [__ignore__, __background__]   # 这些 label 直接丢弃
+    image_data: ignore        # ignore：容忍内嵌 imageData 并告警；error：直接报错
+    # 形状类型 -> 目标任务；detection 只会用到映射到 detection 的形状（默认 rectangle）
+    shape_types: {rectangle: detection, polygon: segmentation}
