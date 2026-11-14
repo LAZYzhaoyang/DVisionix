@@ -1,0 +1,59 @@
+# DVX 多任务分类示例配置（P3 路由式多任务；外部真实数据模板，不参与 CI 端到端门禁）
+#
+# 数据规格的 data_type 必须是 multi_task_classification，目录结构为
+# ``<任务>/<类别>/*.jpg``；每个样本按自身 task 路由到对应分类头。
+# 因此本配置**没有**全局 model.num_classes —— 类别数由各 head 自带。
+#
+# 用法::
+#   python tools/train.py \
+#     --config configs/examples/dvx_multi_task.yaml \
+#     --cfg-options data.spec=/path/to/multicls/dvx_dataset.yaml \
+#     --work-dir /tmp/dvx_multi_task --force
+#
+# 要求：
+# - spec 的 data_type 必须是 multi_task_classification；
+# - heads 的任务名集合与类别数必须与 spec.tasks 一致（training.contract 会校验）。
+
+experiment_name: "dvx_multi_task"
+
+# 训练任务类型（权威来源：dvisionix/config/schema.py::TASK_TYPES）
+task_type: "multi_task_classification"
+
+model:
+  type: "multi_task_classifier"
+  # 共享骨干：只做一次 backbone 前向，各 head 在特征上按样本路由
+  backbone:
+    type: "mobilenetv3_backbone"
+    features_only: false
+  # 每个任务一个分类头；num_classes = 该任务的类别数
+  heads:
+    licence:
+      type: "cls_head"
+      num_classes: 3
+    logo:
+      type: "cls_head"
+      num_classes: 2
+
+task:
+  type: "MultiTaskClassificationTask"
+
+data:
+  dataset: "dvx"
+  # 占位路径：指向你的多任务 dvx_dataset.yaml（root 相对 spec 所在目录解析）
+  spec: "./data/multicls/dvx_dataset.yaml"
+  image_size: 224
+
+training:
+  num_epochs: 1
+  batch_size: 16
+  amp: false
+  num_workers: 0
+  early_stopping: {enabled: false}
+  # 路由式多任务下，一个 batch 未必包含全部任务：未参与前向的 head 参数在 DDP 反向时
+  # 会被判为"未使用参数"并报错。开启后由 DDP 识别并跳过这些参数（单卡无影响，
+  # 多卡 torchrun 必须开启）。
+  find_unused_parameters: true
+
+# 损失 / 指标由任务按任务名内部创建（每任务一个 CrossEntropy / MetricCollection）
+loss: null
+metrics: null

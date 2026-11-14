@@ -15,6 +15,7 @@ from .detection import DetectionTask
 from .linear_eval import LinearEvalTask
 from .maskformer import MaskFormerTask
 from .multi_label import MultiLabelTask
+from .multi_task_classification import MultiTaskClassificationTask
 from .segmentation import SegmentationTask
 from .simclr import SimCLRTask
 
@@ -25,6 +26,7 @@ for _cls in (
     SegmentationTask,
     MultiLabelTask,
     MaskFormerTask,
+    MultiTaskClassificationTask,
     SimCLRTask,
 ):
     if _cls.__name__ not in TASKS:
@@ -49,6 +51,7 @@ __all__ = [
     "DetectionTask",
     "SegmentationTask",
     "MultiLabelTask",
+    "MultiTaskClassificationTask",
     "MaskFormerTask",
     "SimCLRTask",
     "LinearEvalTask",

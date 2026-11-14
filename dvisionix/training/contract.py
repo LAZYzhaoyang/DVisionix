@@ -28,15 +28,57 @@ def _format_abilities(values: Any) -> str:
     return "、".join(repr(item) for item in items) if items else "未声明（空）"
 
 
+def _check_num_classes_by_task(
+    dataset: Any, model: Any, dataset_num_classes: Any, model_num_classes: Any
+) -> None:
+    """逐任务比对 ``{任务: 类别数}`` 字典，差异一次性列出（契约 P3-3.2）。
+
+    与标量逻辑互斥：多任务分类的标签空间按任务独立，无法折算成一个整数。
+    """
+    dataset_map = {str(name): value for name, value in dataset_num_classes.items()}
+    model_map = {str(name): value for name, value in model_num_classes.items()}
+    missing = sorted(set(dataset_map) - set(model_map))
+    extra = sorted(set(model_map) - set(dataset_map))
+    mismatched = {
+        name: (int(dataset_map[name]), int(model_map[name]))
+        for name in set(dataset_map) & set(model_map)
+        if int(dataset_map[name]) != int(model_map[name])
+    }
+    if not missing and not extra and not mismatched:
+        return
+
+    details = []
+    if missing:
+        details.append(f"模型缺少任务 {missing}（数据集有该任务、模型没有对应分类头）")
+    if extra:
+        details.append(f"模型多出任务 {extra}（模型有该分类头、数据集没有该任务）")
+    for name in sorted(mismatched):
+        dataset_count, model_count = mismatched[name]
+        details.append(
+            f"任务 {name!r} 的类别数不一致（数据集 {dataset_count}，模型 {model_count}）"
+        )
+    raise TaskDataMismatchError(
+        f"数据集 {type(dataset).__name__} 与模型 {type(model).__name__} 的逐任务类别数不一致："
+        + "；".join(details)
+        + "。",
+        hint=(
+            "请让 model.heads 的键与 dvx_dataset.yaml 的 tasks 一一对应，"
+            "且每个分类头的 num_classes 等于该任务 classes 的长度。"
+        ),
+    )
+
+
 def check_task_model(task: Any, model: Any, dataset: Any = None) -> None:
     """校验任务与模型（以及可选的数据集）是否匹配。
 
-    规则（契约 P2-3.1）：
+    规则（契约 P2-3.1 / P3-3.2）：
 
     1. 模型能力（:func:`dvisionix.models.base.model_task_types`）与
        ``task.accepted_model_tasks`` 的交集为空 → ``TaskModelMismatchError``；
-    2. ``dataset`` 与 ``model`` 都暴露 ``num_classes`` 且不相等 →
-       ``TaskDataMismatchError``。
+    2. 多任务分类：``dataset.task_num_classes`` 与 ``model.num_classes`` 都是字典时，
+       要求任务名集合一致且每个任务的类别数一致 → 否则 ``TaskDataMismatchError``；
+    3. 单任务：``dataset`` 与 ``model`` 都暴露整数 ``num_classes`` 且不相等 →
+       ``TaskDataMismatchError``（原有逻辑保持不变）。
 
     Args:
         task: 任务实例（``BaseTask`` 或其子类）。
@@ -45,7 +87,7 @@ def check_task_model(task: Any, model: Any, dataset: Any = None) -> None:
 
     Raises:
         TaskModelMismatchError: 任务与模型能力不匹配。
-        TaskDataMismatchError: 数据集与模型的类别数不一致。
+        TaskDataMismatchError: 数据集与模型的类别数（标量或字典）不一致。
     """
     task_name = type(task).__name__
     model_name = type(model).__name__
@@ -71,9 +113,49 @@ def check_task_model(task: Any, model: Any, dataset: Any = None) -> None:
         return
     dataset_num_classes = getattr(dataset, "num_classes", None)
     model_num_classes = getattr(model, "num_classes", None)
+    dataset_by_task = getattr(dataset, "task_num_classes", None)
+    model_by_task = model_num_classes if isinstance(model_num_classes, dict) else None
+
+    # P3-3.2：多任务分类按任务逐项比对（字典 vs 字典）。
+    if isinstance(dataset_by_task, dict) and model_by_task is not None:
+        _check_num_classes_by_task(dataset, model, dataset_by_task, model_by_task)
+        return
+
+    # 一边是逐任务字典、另一边不是：标签空间结构就不一致，无法逐项比对。
+    if (
+        isinstance(dataset_by_task, dict)
+        and model_num_classes is not None
+        and not isinstance(model_num_classes, dict)
+    ):
+        raise TaskDataMismatchError(
+            f"数据集 {type(dataset).__name__} 暴露的是逐任务类别数 {dict(dataset_by_task)}，"
+            f"而模型 {model_name} 的 num_classes={model_num_classes!r} 不是 {{任务: 类别数}} 字典，"
+            "两者无法逐任务比对。",
+            hint=(
+                "多任务分类请改用按 heads 声明 num_classes 的模型（MultiTaskClassifier），"
+                "并让每个任务的类别数等于数据集中该任务的类别数。"
+            ),
+        )
+    if (
+        model_by_task is not None
+        and dataset_num_classes is not None
+        and not isinstance(dataset_num_classes, dict)
+    ):
+        raise TaskDataMismatchError(
+            f"模型 {model_name} 暴露的是逐任务类别数 {dict(model_num_classes)}，"
+            f"而数据集 {type(dataset).__name__} 的 num_classes={dataset_num_classes!r} 不是字典，"
+            "两者无法逐任务比对。",
+            hint=(
+                "请改用 data_type=multi_task_classification 的数据集"
+                "（其 task_num_classes 给出每个任务的类别数），"
+                "或让模型输出与单标签数据集匹配的 num_classes。"
+            ),
+        )
+
     if (
         dataset_num_classes is not None
         and model_num_classes is not None
+        and not isinstance(model_num_classes, dict)
         and int(dataset_num_classes) != int(model_num_classes)
     ):
         raise TaskDataMismatchError(

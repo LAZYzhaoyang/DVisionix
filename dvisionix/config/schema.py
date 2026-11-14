@@ -73,7 +73,14 @@ EARLY_STOPPING_KEYS = {
 # 训练任务类型的**唯一权威来源**：schema 校验与训练入口（tools/train.py）共用同一份。
 # 注意：这与 models/base.py 的 TASK_TYPES 是**不同概念** ——
 # 前者是「训练任务」类型，后者是 BaseModel 自声明的「模型任务」类型（无 simclr）。
-TASK_TYPES = ("classification", "detection", "segmentation", "simclr")
+TASK_TYPES = (
+    "classification",
+    "detection",
+    "segmentation",
+    # 路由式多任务分类：<任务>/<类别>/*.jpg，每任务一个分类头（P3）
+    "multi_task_classification",
+    "simclr",
+)
 
 _INT_KEYS = ("num_epochs", "batch_size", "num_workers", "log_interval", "accumulate_grad_batches")
 _NUM_KEYS = ("learning_rate", "weight_decay")

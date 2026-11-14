@@ -35,7 +35,7 @@ from .backbones import (
     list_timm_models,
 )
 from .base import TASK_TYPES, BaseModel, model_task_types
-from .classifiers import LinearClassifier
+from .classifiers import LinearClassifier, MultiTaskClassifier
 from .detectors import (
     AnchorGenerator,
     CenterNetDetector,
@@ -206,6 +206,7 @@ __all__ = [
     "detr_decode",
     "maskformer_decode",
     "LinearClassifier",
+    "MultiTaskClassifier",
     "SegmentationModel",
     "SwinUNet",
     "SingleStageDetector",

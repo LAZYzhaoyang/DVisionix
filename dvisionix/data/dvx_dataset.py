@@ -172,6 +172,18 @@ class DVXDataset(BaseDataset):
         return len(names) if names is not None else None
 
     @property
+    def task_num_classes(self) -> dict[str, int] | None:
+        """多任务分类各任务的类别数 ``{任务名: 类别数}``；其它数据类型返回 None。
+
+        契约 P3-3.1：多任务分类没有统一的 ``num_classes``（各任务标签空间独立），
+        因此单独暴露本属性，供 ``training.contract.check_task_model`` 与模型的
+        ``num_classes`` 字典逐任务比对。
+        """
+        if self.data_type != "multi_task_classification":
+            return None
+        return {task.name: len(task.classes) for task in (self._spec.tasks or [])}
+
+    @property
     def refs(self) -> list[SampleRef]:
         """当前 split（若指定了 ``task`` 则再按任务过滤）的样本引用列表。"""
         return list(self._refs)

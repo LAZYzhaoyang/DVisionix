@@ -175,3 +175,122 @@ def test_dvx_without_spec_raises_config_error():
     cfg = _make_config("./placeholder/dvx_dataset.yaml", spec=None)
     with pytest.raises(ConfigError, match="data.spec"):
         train_tool.build_data(cfg, _make_task())
+
+
+# ----------------------------------------------------------------------
+# P3：路由式多任务分类装配
+# ----------------------------------------------------------------------
+
+MULTI_TASK_NAMES = ("licence", "logo")
+MULTI_TASK_CLASSES = ["a", "b"]
+MULTI_TASK_SAMPLES_PER_CLASS = 2
+
+
+@pytest.fixture()
+def dvx_multi_task_spec(tmp_path):
+    """迷你 DVX 多任务数据集：2 任务 x 2 类 x 2 张 8x8 图片 + dvx_dataset.yaml。
+
+    按契约 §5 构造（``<任务>/<类别>/*.jpg``）。ratio 取 0.5/0.5：在按
+    ``(task, label)`` 分层的 2 样本小组里各分 1 张，train/val 都非空。
+    """
+    root = tmp_path / "data"
+    for task_name in MULTI_TASK_NAMES:
+        for class_name in MULTI_TASK_CLASSES:
+            for index in range(MULTI_TASK_SAMPLES_PER_CLASS):
+                _write_image(root / task_name / class_name / f"{class_name}_{index}.jpg")
+
+    spec_dir = tmp_path / "specs"
+    spec_dir.mkdir(parents=True, exist_ok=True)
+    spec_path = spec_dir / "dvx_dataset.yaml"
+    lines = [
+        "version: 1",
+        "data_type: multi_task_classification",
+        "layout: folder_per_class",
+        "root: ../data",
+        "tasks:",
+    ]
+    for task_name in MULTI_TASK_NAMES:
+        lines += [
+            f"  - name: {task_name}",
+            f"    path: {task_name}",
+            "    classes:",
+            *[f"      - {class_name}" for class_name in MULTI_TASK_CLASSES],
+        ]
+    lines += [
+        "splits:",
+        "  mode: ratio",
+        "  ratio: {train: 0.5, val: 0.5}",
+        "  seed: 42",
+        "  stratify: class",
+        "",
+    ]
+    spec_path.write_text("\n".join(lines), encoding="utf-8")
+    return spec_path
+
+
+def _make_multi_task_config(spec_path):
+    """构造多任务装配所需的最小 Config（无全局 model.num_classes）。"""
+    return Config(
+        {
+            "task_type": "multi_task_classification",
+            "model": {
+                "type": "multi_task_classifier",
+                "backbone": {"type": "mobilenetv3_backbone", "features_only": False},
+                "heads": {
+                    task_name: {
+                        "type": "cls_head",
+                        "num_classes": len(MULTI_TASK_CLASSES),
+                    }
+                    for task_name in MULTI_TASK_NAMES
+                },
+            },
+            "data": {
+                "dataset": "dvx",
+                "spec": str(spec_path),
+                "image_size": IMAGE_SIZE,
+            },
+            "training": {"num_epochs": 1, "batch_size": 2, "num_workers": 0},
+        }
+    )
+
+
+def test_multi_task_dvx_assembly_routes_by_task(dvx_multi_task_spec):
+    """多任务 DVX 装配：不注入 num_classes，``batch["task"]`` 为 list[str]，模型可按 task 路由。"""
+    from dvisionix.models import build_model
+    from tools import train as train_tool
+
+    cfg = _make_multi_task_config(dvx_multi_task_spec)
+
+    # 1) 任务装配：多任务不注入全局 num_classes（类别数在 model.heads 中）
+    task_cfg = train_tool.build_task_cfg(cfg)
+    assert task_cfg["type"] == "MultiTaskClassificationTask"
+    assert "num_classes" not in task_cfg
+
+    task = build_task(task_cfg)
+
+    # 2) 数据装配：DataLoader 能出 batch，且 task 字段保持 list[str]
+    train_loader, val_loader = train_tool.build_data(cfg, task)
+    assert train_loader.dataset.data_type == "multi_task_classification"
+    assert train_loader.dataset.task_names == list(MULTI_TASK_NAMES)
+    assert len(train_loader.dataset) > 0 and len(val_loader.dataset) > 0
+
+    batch = next(iter(train_loader))
+    assert isinstance(batch["task"], list)
+    assert all(isinstance(name, str) for name in batch["task"])
+    assert len(batch["task"]) == batch["label"].shape[0] == batch["image"].shape[0]
+
+    # 3) 模型装配：多任务模型按样本 task 路由到对应头
+    model = build_model(cfg.model.to_dict())
+    assert model.task_names == MULTI_TASK_NAMES
+    assert model.num_classes == {
+        task_name: len(MULTI_TASK_CLASSES) for task_name in MULTI_TASK_NAMES
+    }
+
+    model.eval()
+    with torch.no_grad():
+        outputs = model(batch["image"], task=batch["task"])
+
+    expected_counts = {name: batch["task"].count(name) for name in set(batch["task"])}
+    assert set(outputs) == set(expected_counts)
+    for name, count in expected_counts.items():
+        assert outputs[name].shape == (count, len(MULTI_TASK_CLASSES))

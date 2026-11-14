@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 # 作者: Zhaoyang Li
 # 用途: P2 任务 / 模型 / 数据契约校验测试。
-"""P2 任务 / 模型 / 数据契约校验测试（契约 P2-1 ~ P2-3）。
+"""P2 任务 / 模型 / 数据契约校验测试（契约 P2-1 ~ P2-3、P3-3）。
 
 覆盖：
 
 - ``model_task_types``：``supported_tasks`` 优先、``task_type`` 回退、均无返回 ``()``；
-- 7 个内置任务的契约类属性与 ``build_transforms`` 映射；
+- 8 个内置任务的契约类属性与 ``build_transforms`` 映射；
 - 「分类模型 + 分割任务」「检测模型 + 分类任务」必须报 ``TaskModelMismatchError``；
 - DVX 数据集 ``data_type`` 不匹配、``num_classes`` 不一致、缺少 batch 字段
   必须报 ``TaskDataMismatchError``；
+- 多任务分类（P3-3）：``task_num_classes`` 与模型 ``num_classes`` 字典逐任务比对，
+  类别数不一致 / 任务名缺失或多余必须报 ``TaskDataMismatchError``；
 - 匹配时放行、非 DVX 数据集（无 ``data_type``）跳过数据类型检查；
 - Trainer 接线：校验发生在 ``_wrap_model`` / 第一次前向之前。
 """
@@ -23,9 +25,14 @@ import torch
 from torch.utils.data import DataLoader
 
 from dvisionix.data import CustomDataset, DVXDataset, DVXDatasetSpec
-from dvisionix.data.spec import ParseConfig, SplitConfig
+from dvisionix.data.spec import ParseConfig, SplitConfig, TaskSpec
 from dvisionix.errors import TaskDataMismatchError, TaskModelMismatchError
-from dvisionix.models import GridDetectionModel, SimpleCNN, SimpleSegmentationModel
+from dvisionix.models import (
+    GridDetectionModel,
+    MultiTaskClassifier,
+    SimpleCNN,
+    SimpleSegmentationModel,
+)
 from dvisionix.models.base import BaseModel, model_task_types
 from dvisionix.training import (
     BaseTask,
@@ -39,6 +46,7 @@ from dvisionix.training import (
     Trainer,
 )
 from dvisionix.training.contract import check_batch_fields, check_task_data, check_task_model
+from dvisionix.training.tasks import MultiTaskClassificationTask
 
 pytestmark = pytest.mark.unit
 
@@ -80,6 +88,68 @@ def _make_dvx_classification_dataset(tmp_path, classes=("cat", "dog")):
         spec_path=str(tmp_path / "dvx_dataset.yaml"),
     )
     return DVXDataset(spec, split="train")
+
+
+def _make_dvx_multi_task_dataset(tmp_path, tasks=None):
+    """构造一个真实的两任务 DVX 数据集（licence 2 类、logo 1 类，每类 2 张）。"""
+    root = tmp_path / "dvx_multi_task"
+    if tasks is None:
+        tasks = [
+            TaskSpec(name="licence", path="T_licence", classes=["无", "短牌照"]),
+            TaskSpec(name="logo", path="T_logo", classes=["一体奇瑞标"]),
+        ]
+    for task in tasks:
+        for cls in task.classes:
+            for index in range(2):
+                _write_image(root / task.path / cls / f"{cls}_{index}.png")
+    spec = DVXDatasetSpec(
+        version=1,
+        data_type="multi_task_classification",
+        layout="folder_per_class",
+        root=str(root),
+        classes=None,
+        tasks=list(tasks),
+        splits=SplitConfig(
+            mode="ratio",
+            ratio={"train": 0.5, "val": 0.5},
+            seed=42,
+            stratify="class",
+        ),
+        parse=ParseConfig(),
+        spec_path=str(tmp_path / "dvx_multi_task.yaml"),
+    )
+    return DVXDataset(spec, split="train")
+
+
+MULTI_TASK_STAGES = [
+    {"type": "conv_norm_act", "in_channels": 3, "out_channels": 8, "stride": 2},
+    {"type": "conv_norm_act", "in_channels": 8, "out_channels": 16, "stride": 2},
+]
+
+
+def _make_multi_task_model(num_classes):
+    """按 {任务: 类别数} 构建 MultiTaskClassifier（不做前向，仅用于契约校验）。"""
+    return MultiTaskClassifier(
+        backbone={
+            "type": "sequential_backbone",
+            "stages": MULTI_TASK_STAGES,
+            "input_size": 8,
+        },
+        heads={name: {"num_classes": count} for name, count in num_classes.items()},
+    )
+
+
+class _ScalarMultiTaskModel(BaseModel):
+    """声明多任务能力、但 num_classes 仍是标量的模型（用于测混用类型的报错分支）。"""
+
+    supported_tasks = ("multi_task_classification",)
+
+    def __init__(self, num_classes):
+        super().__init__()
+        self.num_classes = num_classes
+
+    def forward(self, x, task=None, **kwargs):
+        return {}
 
 
 def _tiny_loader(n=4, num_classes=3):
@@ -196,6 +266,13 @@ TASK_CONTRACT_TABLE = [
         ("classification",),
         ("image", "label"),
     ),
+    (
+        MultiTaskClassificationTask,
+        "multi_task_classification",
+        ("multi_task_classification",),
+        ("multi_task_classification",),
+        ("image", "label", "task"),
+    ),
 ]
 
 
@@ -224,6 +301,7 @@ def test_task_contract_attributes(
         (SegmentationTask, "SegmentationTransforms"),
         (MaskFormerTask, "SegmentationTransforms"),
         (SimCLRTask, "SimCLRTransforms"),
+        (MultiTaskClassificationTask, "ClassificationTransforms"),
     ],
 )
 def test_task_build_transforms(task_cls, transform_name):
@@ -307,6 +385,95 @@ class TestTaskModelContract:
         task = UndeclaredTask(num_classes=3)
         # 检测模型也不报错：任务没有声明任何能力，无从判断
         check_task_model(task, GridDetectionModel(num_classes=3))
+
+
+class TestMultiTaskNumClassesContract:
+    """P3-3：多任务分类的字典类别数校验（``task_num_classes`` vs 模型 ``num_classes``）。"""
+
+    def test_dataset_exposes_task_num_classes(self, tmp_path):
+        """DVX 多任务数据集：task_num_classes 为 {任务: 类别数}，num_classes 仍为 None。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)
+
+        assert dataset.data_type == "multi_task_classification"
+        assert dataset.task_names == ["licence", "logo"]
+        assert dataset.num_classes is None
+        assert dataset.task_num_classes == {"licence": 2, "logo": 1}
+
+    def test_task_filter_keeps_full_task_table(self, tmp_path):
+        """``task=`` 过滤只影响样本，不影响 spec 级的任务类别表。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)
+        filtered = DVXDataset(dataset.spec, split="train", task="licence")
+
+        assert filtered.task_num_classes == {"licence": 2, "logo": 1}
+
+    def test_single_task_dataset_returns_none(self, tmp_path):
+        dataset = _make_dvx_classification_dataset(tmp_path)
+        assert dataset.task_num_classes is None
+
+    def test_matching_multi_task_setup_passes(self, tmp_path):
+        """任务 + 模型 + 数据集三者一致：放行。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)
+        task = MultiTaskClassificationTask()
+        model = _make_multi_task_model({"licence": 2, "logo": 1})
+
+        check_task_model(task, model, dataset)
+        check_task_data(task, dataset)
+
+    def test_num_classes_mismatch_raises(self, tmp_path):
+        """某个任务的类别数不一致：报 TaskDataMismatchError 并列出差异。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)  # licence 2 / logo 1
+        model = _make_multi_task_model({"licence": 2, "logo": 2})
+
+        with pytest.raises(TaskDataMismatchError) as excinfo:
+            check_task_model(MultiTaskClassificationTask(), model, dataset)
+
+        message = str(excinfo.value)
+        assert "logo" in message
+        assert "数据集 1" in message and "模型 2" in message
+        assert "提示" in message
+
+    def test_missing_task_name_raises(self, tmp_path):
+        """模型缺少数据集里的某个任务头：报错并提示缺少的任务名。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)
+        model = _make_multi_task_model({"licence": 2})
+
+        with pytest.raises(TaskDataMismatchError) as excinfo:
+            check_task_model(MultiTaskClassificationTask(), model, dataset)
+
+        message = str(excinfo.value)
+        assert "缺少" in message and "logo" in message
+        assert "提示" in message
+
+    def test_extra_task_name_raises(self, tmp_path):
+        """模型多出数据集里没有的分类头：报错并提示多出的任务名。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)
+        model = _make_multi_task_model({"licence": 2, "logo": 1, "brand": 4})
+
+        with pytest.raises(TaskDataMismatchError, match="brand"):
+            check_task_model(MultiTaskClassificationTask(), model, dataset)
+
+    def test_dict_model_with_scalar_dataset_raises(self, tmp_path):
+        """模型给逐任务类别数、数据集只有标量 num_classes：结构不符，报错。"""
+        dataset = _make_dvx_classification_dataset(tmp_path)  # num_classes=2
+        model = _make_multi_task_model({"licence": 2, "logo": 1})
+
+        with pytest.raises(TaskDataMismatchError, match="无法逐任务比对"):
+            check_task_model(MultiTaskClassificationTask(), model, dataset)
+
+    def test_scalar_model_with_dict_dataset_raises(self, tmp_path):
+        """数据集给逐任务类别数、模型只有标量 num_classes：同样报错。"""
+        dataset = _make_dvx_multi_task_dataset(tmp_path)
+        model = _ScalarMultiTaskModel(num_classes=2)
+
+        with pytest.raises(TaskDataMismatchError, match="无法逐任务比对"):
+            check_task_model(MultiTaskClassificationTask(), model, dataset)
+
+    def test_dataset_without_num_classes_is_skipped(self):
+        """没有 num_classes / task_num_classes 的数据集（非 DVX）：跳过类别数校验。"""
+        dataset = CustomDataset(samples=[{"image": "unused.png", "label": 0}])
+        model = _make_multi_task_model({"licence": 2, "logo": 1})
+
+        check_task_model(MultiTaskClassificationTask(), model, dataset)
 
 
 class TestTaskDataContract:

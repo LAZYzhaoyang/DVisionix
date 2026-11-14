@@ -45,8 +45,14 @@ _TASK_MAPPING = {
     "classification": "ClassificationTask",
     "detection": "DetectionTask",
     "segmentation": "SegmentationTask",
+    # 路由式多任务分类（P3）：每个样本按自身 task 路由到对应分类头
+    "multi_task_classification": "MultiTaskClassificationTask",
     "simclr": "SimCLRTask",
 }
+
+#: 多任务分类的任务类型名。该任务没有全局 ``model.num_classes``：
+#: 类别数由每个 head 自带（模型 ``num_classes`` 是 dict）。
+_MULTI_TASK_CLASSIFICATION = "multi_task_classification"
 
 
 def build_transforms(task, image_size, train):
@@ -153,7 +159,6 @@ def build_data(cfg, task, work_dir=None):
     """
     task_type = cfg.task_type
     image_size = cfg.data.image_size
-    num_classes = cfg.model.num_classes
 
     data_cfg = cfg.data
     dataset_name = data_cfg.get("dataset", "custom")
@@ -175,6 +180,9 @@ def build_data(cfg, task, work_dir=None):
     elif dataset_name in ("custom", "synthetic") or data_cfg.get("synthetic", False):
         n_train = data_cfg.get("num_samples", 64)
         n_val = data_cfg.get("val_samples", 16)
+        # 只有合成/自定义数据源需要全局类别数；多任务分类没有全局类别数，
+        # 因此不得在函数开头无条件读取 cfg.model.num_classes（P3 契约 §4.4）。
+        num_classes = cfg.model.num_classes
         cache_dir = os.path.join(work_dir, ".cache", "synthetic", task_type) if work_dir else None
         # train / val 必须用不同 split，否则二者共用文件名序列、验证集成为训练集子集
         train_ds = build_synthetic_dataset(
@@ -233,7 +241,10 @@ def build_task_cfg(cfg):
     task_cfg = dict(cfg.get("task", {}) or {})
     if "type" not in task_cfg:
         task_cfg["type"] = _TASK_MAPPING[cfg.task_type]
-    task_cfg.setdefault("num_classes", cfg.model.num_classes)
+    # 多任务分类没有全局类别数：模型 num_classes 是 {task: C} 的 dict，且由 heads 自带，
+    # 因此不向任务注入 num_classes（P3 契约 §4.4）。其余任务保持原行为。
+    if cfg.task_type != _MULTI_TASK_CLASSIFICATION:
+        task_cfg.setdefault("num_classes", cfg.model.num_classes)
 
     training = cfg.get("training", {}) or {}
     optimizer_cfg = dict(training.get("optimizer", {}) or {})
@@ -328,7 +339,11 @@ def main():
 
     cfg = Config.from_yaml(args.config)
     cfg.update_from_cli(args.cfg_options)
-    cfg.validate(["task_type", "model.num_classes", "training.num_epochs"])
+    required_keys = ["task_type", "model.num_classes", "training.num_epochs"]
+    if cfg.get("task_type") == _MULTI_TASK_CLASSIFICATION:
+        # 多任务分类的类别数分散在各 head 中，不存在全局 model.num_classes
+        required_keys.remove("model.num_classes")
+    cfg.validate(required_keys)
     schema_warnings = cfg.validate_schema(cfg.task_type)
 
     resume = None if args.force else (args.resume or cfg.get("resume", False))
