@@ -16,7 +16,7 @@
 
 - cls：2210 张，5 类（顺序固定），80/20 分层切分 1768/442；
 - det：1646 张、20 类（排序）、10014 个框，80/20 切分 1317/329；
-- multicls：2458 张（licence 1076 / logo 1382），dir 切分 1964/494；
+- multicls：2458 张（licence 1076 / logo 1382），ratio 切分 1967/491；
 - seg：766 张、18 类（__background__ + 17 类）、4348 个多边形，80/20 切分 613/153。
 """
 
@@ -48,7 +48,7 @@ EXPECTED_TOTAL = {"cls": 2210, "det": 1646, "multicls": 2458, "seg": 766}
 EXPECTED_SPLITS = {
     "cls": {"train": 1768, "val": 442},
     "det": {"train": 1317, "val": 329},
-    "multicls": {"train": 1964, "val": 494},
+    "multicls": {"train": 1967, "val": 491},
     "seg": {"train": 613, "val": 153},
 }
 
@@ -217,12 +217,16 @@ def test_multicls_scan() -> None:
     ]
     assert spec.class_names("licence") == ["无", "短牌照", "长牌照"]
     assert spec.class_names("logo") == ["一体奇瑞标", "嵌入奇瑞标"]
+    # 标准多任务结构 <任务>/<类别>/*.jpg，不使用 dir_map / 额外 subdir
+    assert spec.splits is not None and spec.splits.mode == "ratio"
+    assert spec.splits.dir_map is None
 
     refs = _scan("multicls")
     assert len(refs) == EXPECTED_TOTAL["multicls"]
     assert len({ref.rel_path for ref in refs}) == len(refs)
-    # dir 模式只扫描 train_data，不应把扁平类目录重复计入
-    assert all("train_data/" in ref.rel_path for ref in refs)
+    task_paths = {task.name: task.path for task in spec.tasks}
+    assert all(ref.rel_path.startswith(f"{task_paths[ref.task]}/") for ref in refs)
+    assert not any("train_data/" in ref.rel_path for ref in refs)
 
     licence = Counter(ref.label for ref in refs if ref.task == "licence")
     logo = Counter(ref.label for ref in refs if ref.task == "logo")

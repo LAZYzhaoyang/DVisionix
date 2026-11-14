@@ -20,7 +20,7 @@ DVX 是 v2 引入的数据集描述格式：**一个数据集 = 一个根目录 
 2. **多级目录只影响路径，不携带语义**。
    目录层级本身不表示任务或 split；`rel_path`（相对 `root` 的 posix 路径）只用来稳定地
    标识样本。唯一的例外是 `folder_per_class`：**目录名命中 `classes` 的目录才被当作类别目录**，
-   其余目录（如 `train_data/`、`images/`）只是路径的一部分。
+   其余目录（如 `split_dirs/`、`images/`）只是路径的一部分。
 3. **单任务数据集的所有标注共用一张类别表**。
    `classes` 的顺序就是 label id（0、1、2……），检测、分割、分类都不例外；多任务分类是
    例外，每个任务各有一张独立类别表（`tasks[*].classes`）。顺序一旦用于训练就不要随意调整，
@@ -70,21 +70,19 @@ classes: [cat, dog]
 - 隐藏目录/隐藏文件（`.` 开头）跳过；图片扩展名按 `parse.image_ext` 做**小写比较**。
 - 同一目录下同一 stem 同时存在多种格式（如 `x.jpg` 与 `x.png`）→ `AnnotationError`。
 
-多任务分类是同样的布局，只是每个任务有自己的子目录和独立类别表：
+多任务分类是同样的布局，标准结构就是 `<任务>/<类别>/*.jpg`：每个任务有自己的任务子目录
+和独立类别表，**不需要**任何额外的中间层（例如再包一层 `split_dirs/`）。
 
 ```text
 my_multi/
 ├── dvx_dataset.yaml
-├── licence/
-│   ├── 无/
+├── licence/                    # <任务>/：对应 tasks[*].path
+│   ├── 无/                     # <类别>/：对应 tasks[*].classes
 │   ├── 短牌照/
 │   └── 长牌照/
-├── logo/
-│   ├── 一体奇瑞标/
-│   └── 嵌入奇瑞标/
-└── train_data/                 # 可选：已有的切片目录（dir 模式使用）
-    ├── train/...
-    └── val/...
+└── logo/
+    ├── 一体奇瑞标/
+    └── 嵌入奇瑞标/
 ```
 
 ```yaml
@@ -95,10 +93,15 @@ root: .
 tasks:
   - {name: licence, path: licence, classes: [无, 短牌照, 长牌照]}
   - {name: logo, path: logo, classes: [一体奇瑞标, 嵌入奇瑞标]}
+splits:
+  mode: ratio
+  ratio: {train: 0.8, val: 0.2}
+  seed: 42
+  stratify: class               # ratio 按 (task, label) 分层
 ```
 
 每个任务的类别 id 从 0 开始独立编号；样本同时带 `task` 名与 `label`。
-多任务数据集**不允许**再写顶层 `classes`。
+多任务数据集**不允许**再写顶层 `classes`。`ratio` 切分在内存中完成，不会移动任何图片。
 
 ### 2.2 `labelme`（检测 / 分割）
 
@@ -126,8 +129,9 @@ classes: [person, car]
 
 规则：
 
-- 图片与 `<stem>.json` 必须同目录同名；缺 JSON → `AnnotationError`（空标注要写 `"shapes": []`，
-  这样是合法的负样本，不是"没有标注"）。
+- 图片与 `<stem>.json` 必须同目录同名；**缺 JSON 的图片会被跳过**，扫描结束后统一发一次
+  `UserWarning`（含数量与最多 10 个示例相对路径）。空标注要写 `"shapes": []`，这样会作为
+  合法的**负样本**保留，不是"没有标注"；JSON 损坏/结构非法仍抛 `AnnotationError`。
 - 默认映射下，`detection` 只保留 `rectangle`：取四个角点的 min/max 得到 `[x1, y1, x2, y2]`
   （兼容旋转矩形）；`segmentation` 只保留 `polygon`（可由 `parse.labelme.shape_types` 调整）。
 - 其他形状（`circle` / `line` / `point` / `linestrip` / `mask`……）跳过，并计入
@@ -248,20 +252,23 @@ splits:
 splits:
   mode: dir
   dir_map:
-    train: train_data/train
-    val: train_data/val
+    train: split_dirs/train
+    val: split_dirs/val
 ```
 
 - 每个样本的 `rel_path` 必须落在**至少一个** `dir_map` 目录下；未被任何目录覆盖 → `SplitError`
   （列出前 5 个样例）。
 - 目录可以嵌套：同时命中多个时按**最长目录**归属，并记 warning（建议显式避免）。
-- 多任务时 `dir_map` 相对每个 `task.path` 解析（例如 `train_data/train` 实际是
-  `<root>/<task.path>/train_data/train`）。
-- 已经有 `train_data/{train,val}` 切片、同时根目录又有扁平类目录时，同一批图片会以两个
-  不同 `rel_path` 被扫描两次。`scan_samples` 在 `dir` 模式下会自动收敛到 `dir_map` 的
-  **公共一级子目录**（`train_data/train` + `train_data/val` → `train_data`），并向 **stderr**
-  打印一行说明；也可以编程式调用 `scan_samples(spec, subdir="train_data")` 显式指定。
-  真实 `multicls` 数据集就属于这种情况。
+- 多任务时 `dir_map` 相对每个 `task.path` 解析（例如 `split_dirs/train` 实际是
+  `<root>/<task.path>/split_dirs/train`）。
+- 扫描范围**不会**随 `dir_map` 自动收敛：`scan_samples` 始终扫描整个 `<root>`（多任务为每个
+  `task.path` 的整棵子树）。如果数据里同时保留扁平类目录与切片目录，同一批图片会以两个
+  `rel_path` 被计入，`dir` 切分会如实报告"未被覆盖"——请让 `dir_map` 覆盖全部扫描结果，
+  或只用切片目录。
+- 确实需要把扫描限制在某个已有子目录层时，可以编程式调用
+  `scan_samples(spec, subdir="split_dirs")` **显式**指定；不传就按标准布局扫描。
+  `dir` 仍是通用切分能力，适合数据本身已按目录划分（如 `train/` / `val/`）的场景；
+  标准的多任务分类结构 `<任务>/<类别>/*.jpg` 请直接用 `ratio`。
 
 ### 4.3 `list`：按清单文件切分
 
@@ -375,7 +382,7 @@ python tools/check_dataset.py \
 ```
 
 输出包含类别数、样本数、每类分布、标注质量（检测框/多边形/跳过形状等）以及切分预览。
-常见问题（未知标签、缺 JSON、类别表为空、`train` 为空等）会以退出码 `1` 结束；
+常见问题（未知标签、类别表为空、`train` 为空等）会以退出码 `1` 结束；
 只有 warning 时退出码仍为 `0`。需要机器可读结果时加 `--json`（stdout 只输出 JSON）。
 
 ### 5.3 第三步：用 `DVXDataset` 加载
@@ -609,7 +616,7 @@ print(batch["image"].shape, batch["task"][:2], batch["label"][:2])
 |---|---|---|---|---|---|
 | `cls` | `project/data/cls/dvx_dataset.yaml` | classification / folder_per_class | 5 | 2210 | 1768 / 442，ratio 0.8/0.2，stratify class |
 | `det` | `project/data/det/dvx_dataset.yaml` | detection / labelme | 20 | 1646 | 1317 / 329，ratio 0.8/0.2，stratify none |
-| `multicls` | `project/data/multicls/dvx_dataset.yaml` | multi_task_classification / folder_per_class | 5（licence 3 + logo 2） | 2458 | 1964 / 494，dir 模式 |
+| `multicls` | `project/data/multicls/dvx_dataset.yaml` | multi_task_classification / folder_per_class | 5（licence 3 + logo 2） | 2458 | 1967 / 491，ratio 0.8/0.2，stratify class |
 | `seg` | `project/data/seg/dvx_dataset.yaml` | segmentation / labelme | 18（`__background__` + 17） | 766 | 613 / 153，ratio 0.8/0.2，stratify none |
 
 实测统计（`check_dataset --split-preview --json`，2026-11-14）：
@@ -620,8 +627,8 @@ print(batch["image"].shape, batch["task"][:2], batch["label"][:2])
   越界框、退化框、缺失尺寸均为 0；2 个 JSON 内嵌 `imageData`（按默认 `ignore` 处理并告警）；
   80/20 切分后 train 1317 / val 329。
 - **multicls**：licence 1076（无 442 / 短牌照 30 / 长牌照 604）、logo 1382
-  （一体奇瑞标 856 / 嵌入奇瑞标 526），合计 2458；`dir` 模式自动收敛到 `train_data`
-  公共子目录，train 1964 / val 494，无重复样本。
+  （一体奇瑞标 856 / 嵌入奇瑞标 526），合计 2458；标准结构 `<任务>/<类别>/*.jpg`，
+  按 `(task, label)` 分层做 80/20 `ratio` 切分，train 1967 / val 491，无重复样本。
 - **seg**：18 类（`__background__` 目标数为 0），4348 个多边形；每样本 3~9 个多边形
   （中位数 5）；按多边形面积估算的像素覆盖率 mean 0.161 / min 0.039 / max 0.230；
   越界顶点、空 polygons、跳过形状均为 0；80/20 切分后 train 613 / val 153。
@@ -663,12 +670,13 @@ for name in ("cls", "det", "multicls", "seg"):
 | 现象 / 报错 | 原因 | 处理 |
 |---|---|---|
 | `AnnotationError: labelme 标注含未登记类别` | 标注 label 不在 `classes` 中，或拼写/大小写不一致 | 把 label 加入 `classes`（注意插入位置会改变后续 id）；或修正标注 |
-| `AnnotationError: labelme 标注缺失` | 图片旁没有同名 `<stem>.json` | 用 labelme 补标注；空标注写 `"shapes": []`；确实无标注的图片移出数据集 |
+| `UserWarning: N 张图片缺少同名 labelme JSON，已跳过` | 图片旁没有同名 `<stem>.json` | 扫描会跳过这些图片并汇总告警；需要训练这些样本时用 labelme 补标注，空标注写 `"shapes": []`（保留为负样本） |
+| `AnnotationError: labelme 标注缺失`（仅 `parse_labelme_file` 单文件 API） | 调用方显式给出的 JSON 路径不存在 | 检查传入的 JSON 路径；目录扫描请用 `scan_labelme`（缺 JSON 只会告警并跳过） |
 | `AnnotationError: 同一 stem 的图片格式冲突` | 同一目录存在 `x.jpg` 与 `x.png` | 只保留一种格式；扫描器不猜测哪个是样本 |
 | 图片完全没被扫描到 | 扩展名不在 `parse.image_ext` 中（大小写不敏感），或目录被隐藏 | 补充扩展名（带前导点）；检查图片是否在隐藏目录/隐藏文件中 |
 | 扫不到样本 / `SplitError: 没有可切分的样本` | `folder_per_class` 的目录名与 `classes` 不完全一致，或图片扩展名不在白名单 | 核对目录名与 `classes` 字符串（区分大小写）及 `parse.image_ext` |
 | `AnnotationError: 扫描得到重复的 rel_path` | 多任务 `task.path` 互相重叠，同一图片被两个任务扫到 | 让各任务目录互不重叠；同一图片只能属于一个任务 |
-| `SplitError: N 个样本未被 dir_map 覆盖` | 扁平类目录与 `train_data` 切片目录同时存在，同一图片被扫成两个 `rel_path` | 让 `dir_map` 覆盖全部扫描结果，或只保留切片目录；`dir` 模式下 `scan_samples` 会自动收敛公共子目录并在 stderr 提示 |
+| `SplitError: N 个样本未被 dir_map 覆盖` | 扁平类目录与切片目录同时存在，同一图片被扫成两个 `rel_path` | 让 `dir_map` 覆盖全部扫描结果，或只保留切片目录；扫描不会自动收敛子目录，也可显式传 `scan_samples(spec, subdir=...)` |
 | `SplitError: 样本同时出现在 ...` | `list` 清单中同一路径写了两次或跨 split 重复 | 删除重复条目；每个样本只能出现一次 |
 | `SplitError: 缺少切分配置` | 规格没写 `splits` | 补 `splits`，或向 `DVXDataset` 传 `split_result` |
 | `check_dataset` 报「切分产生的 train 为空」 | `train` 比例为 0 / 样本太少 | 提高 `train` 比例或补充样本 |

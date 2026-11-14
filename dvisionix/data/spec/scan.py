@@ -14,11 +14,10 @@
 - ``layout == "labelme"``：构造类别表后调用
   :func:`dvisionix.data.parsers.labelme.scan_labelme`。
 
-``splits.mode == "dir"`` 时（只可能是 folder_per_class），如果 ``dir_map`` 的各目录共享
-同一个一级子目录（例如 ``train_data/train`` 与 ``train_data/val`` 共享 ``train_data``），
-扫描会自动收敛到这个公共子目录：否则同一批图片会同时以"扁平类目录"和"切片目录"两种
-``rel_path`` 被计入，既重复又会让 dir 切分报告"未被覆盖"。这是**自动推断**，因此会向
-stderr 打印一行说明（契约 P1-0 第 5 条）；调用方也可以显式传 ``subdir`` 覆盖它。
+``splits.mode == "dir"`` 时（只可能是 folder_per_class）**不再**根据 ``dir_map`` 自动推断
+扫描子目录：扫描始终覆盖整个 ``<root>`` / ``<root>/<task.path>``。标准的多任务
+分类结构就是 ``<任务>/<类别>/*.jpg``，不需要额外的 ``subdir``。``subdir`` 仅作为
+**显式可选参数**保留（显式传入才生效），用于把扫描限制在某个已有子目录层。
 
 ``scan_samples`` 返回的列表按 ``rel_path`` 升序且 ``rel_path`` 唯一（确定性，契约 P1-4）。
 
@@ -34,9 +33,6 @@ stderr 打印一行说明（契约 P1-0 第 5 条）；调用方也可以显式�
 
 from __future__ import annotations
 
-import os
-import posixpath
-import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -90,8 +86,8 @@ def scan_samples(spec: DVXDatasetSpec, subdir: str | None = None) -> list[Sample
     Args:
         spec: 数据集规格；函数开头会调用 ``spec.validate()`` 做一次完整校验。
         subdir: 可选的额外子目录层（仅 folder_per_class 生效），相对
-            ``<spec.root>/<task.path>``。默认 None 时按 ``splits.dir_map`` 自动推断
-            （见模块 docstring）；显式传入时以传入值为准。
+            ``<spec.root>/<task.path>``。**不再自动推断**：标准多任务结构
+            ``<任务>/<类别>/*.jpg`` 无需此参数，只有显式传入时才把扫描限制在该子目录内。
 
     Returns:
         样本列表，``rel_path`` 相对 ``spec.root`` 且全局唯一，按 ``rel_path`` 升序。
@@ -102,8 +98,7 @@ def scan_samples(spec: DVXDatasetSpec, subdir: str | None = None) -> list[Sample
     """
     spec.validate()
     if spec.layout == "folder_per_class":
-        scan_subdir = _resolve_scan_subdir(spec, subdir)
-        refs = _scan_folder_layout(spec, scan_subdir)
+        refs = _scan_folder_layout(spec, subdir)
     elif spec.layout == "labelme":
         if subdir:
             raise DatasetSpecError(
@@ -146,57 +141,6 @@ def _scan_labelme_layout(spec: DVXDatasetSpec) -> list[SampleRef]:
 
     class_table = ClassTable(spec.class_names())
     return scan_labelme(spec.root, spec, class_table)
-
-
-# ---------------------------------------------------------------------------
-# dir 模式的公共子目录推断
-# ---------------------------------------------------------------------------
-
-
-def _resolve_scan_subdir(spec: DVXDatasetSpec, subdir: str | None) -> str | None:
-    """返回本次 folder 扫描使用的额外子目录层（显式值优先，否则按 dir_map 推断）。"""
-    if subdir is not None:
-        return subdir
-    splits = spec.splits
-    if splits is None or splits.mode != "dir" or not splits.dir_map:
-        return None
-    derived = _common_subdir([value for value in splits.dir_map.values() if isinstance(value, str)])
-    if not derived:
-        return None
-    bases = [os.path.join(spec.root, task.path) for task in (spec.tasks or [])]
-    if not bases:
-        bases = [spec.root]
-    if not all(os.path.isdir(os.path.join(base, derived)) for base in bases):
-        # 推断出的目录并非每个数据集目录下都存在：放弃推断，让 dir 切分去报告未覆盖样本
-        return None
-    print(
-        f"[DVX] splits.mode=dir：仅扫描公共子目录 {derived!r}"
-        "（多任务下相对每个 task.path），避免扁平类目录与切片目录重复计入",
-        file=sys.stderr,
-    )
-    return derived
-
-
-def _common_subdir(dir_values: list[str]) -> str | None:
-    """求若干相对目录的公共一级子目录前缀（按路径分量比较，无公共前缀返回 None）。"""
-    components = [_relative_components(value) for value in dir_values]
-    if not components or any(not parts for parts in components):
-        return None
-    common: list[str] = []
-    for position in range(min(len(parts) for parts in components)):
-        candidates = {parts[position] for parts in components}
-        if len(candidates) != 1:
-            break
-        common.append(components[0][position])
-    return posixpath.join(*common) if common else None
-
-
-def _relative_components(value: str) -> list[str]:
-    """把相对目录拆成路径分量（posix 风格，去掉 ``./`` 与空段）。"""
-    text = value.replace("\\", "/").strip()
-    if not text or posixpath.isabs(text):
-        return []
-    return [part for part in text.split("/") if part not in ("", ".", "..")]
 
 
 # ---------------------------------------------------------------------------

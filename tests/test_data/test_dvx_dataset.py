@@ -12,7 +12,7 @@
   classification / multi_task_classification / detection（含空标注）/ segmentation（含空标注）；
 - 分割掩码：用 ``polygons_to_mask`` 栅格化、背景 0、后写覆盖先写、``(H, W) int64``；
 - 切分：ratio 结果与 ``split_result`` 下标一致、传入 ``split_result`` 时直接使用、
-  dir 模式（multicls 公共子目录推断）、``split`` 不存在 / 下标越界报错；
+  dir 模式（按已有 train_data 目录切分，不推断子目录）、``split`` 不存在 / 下标越界报错；
 - ``task`` 参数：仅多任务可用、按任务过滤、未知任务报错；
 - 复用 BaseDataset 流程：先读图再进 transforms、``_check_sample_keys`` 不把 ``task`` 当未知字段；
 - DataLoader 能取 batch（分类默认 collate；检测/分割用 dataset 自带的 collate_fn）。
@@ -233,12 +233,10 @@ def segmentation_spec(tmp_path):
 
 @pytest.fixture()
 def multicls_dir_spec(tmp_path):
-    """multicls 布局：扁平类目录 + train_data/{train,val} 重复，dir 模式只扫公共子目录。"""
+    """已有 train_data/{train,val} 切片的目录布局：dir 模式直接按目录切分。"""
     root = tmp_path / "data"
-    _write_image(root / "T_licence" / "无" / "flat.jpg")
     _write_image(root / "T_licence" / "train_data" / "train" / "无" / "train.jpg")
     _write_image(root / "T_licence" / "train_data" / "val" / "无" / "val.jpg")
-    _write_image(root / "T_logo" / "一体奇瑞标" / "flat.jpg")
     _write_image(root / "T_logo" / "train_data" / "train" / "一体奇瑞标" / "train.jpg")
     _write_image(root / "T_logo" / "train_data" / "val" / "一体奇瑞标" / "val.jpg")
     tasks = [
@@ -397,15 +395,16 @@ class TestSplits:
 
         assert len(dataset) == 1
 
-    def test_dir_mode_scans_common_subdir(self, multicls_dir_spec, capsys):
+    def test_dir_mode_uses_existing_split_dirs(self, multicls_dir_spec):
         train = DVXDataset(multicls_dir_spec)
         val = DVXDataset(multicls_dir_spec, split="val")
-        captured = capsys.readouterr()
 
         assert len(train) == 2 and len(val) == 2
         assert all("train_data/train/" in ref.rel_path for ref in train.refs)
         assert all("train_data/val/" in ref.rel_path for ref in val.refs)
-        assert "train_data" in captured.err  # 自动推断必须显式打印
+        # 覆盖全部扫描样本且互不重叠：dir 切分不需要任何自动子目录推断
+        assert {ref.rel_path for ref in train.refs}.isdisjoint({ref.rel_path for ref in val.refs})
+        assert len(train) + len(val) == 4
 
     def test_unknown_split_raises(self, classification_spec):
         with pytest.raises(SplitError, match="test"):

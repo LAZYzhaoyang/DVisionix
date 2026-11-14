@@ -8,10 +8,10 @@
 - ``folder``：类别目录识别、非类目录忽略、最近类祖先、递归开关、多任务 task.path、
   ``subdir``、中文类名、扩展名大小写、隐藏目录、同 stem 冲突、越界 root；
 - ``labelme``：rectangle（2 点/旋转 4 点）/ polygon、形状类型过滤、ignore_labels、
-  未知标签、缺 JSON、JSON 语法错误、扩展名冲突、imageData（ignore/error）、
+  未知标签、缺 JSON 跳过并告警、JSON 语法错误、扩展名冲突、imageData（ignore/error）、
   image_size 与 cv2 兜底、空 shapes、退化多边形、非法矩形；
 - ``rasterize``：覆盖顺序、越界裁剪、空列表、浮点取整、dtype/shape、参数校验；
-- ``scan``：按 layout 分派、多任务聚合、dir 模式公共子目录推断、显式 subdir、
+- ``scan``：按 layout 分派、多任务聚合、显式 subdir（``dir_map`` 不再推断子目录）、
   重复 rel_path、``SampleRef`` 默认值。
 
 全部夹具用 ``tmp_path`` + numpy + cv2 现场生成，**不依赖** ``project/data``。
@@ -30,7 +30,7 @@ from dvisionix.data.spec.classes import ClassTable
 from dvisionix.data.spec.scan import SampleRef, scan_samples
 from dvisionix.data.spec.schema import DVXDatasetSpec, ParseConfig, SplitConfig, TaskSpec
 from dvisionix.data.spec.split import build_splits
-from dvisionix.errors import AnnotationError, DatasetSpecError
+from dvisionix.errors import AnnotationError, DatasetSpecError, SplitError
 
 pytestmark = pytest.mark.unit
 
@@ -528,15 +528,83 @@ def test_scan_labelme_degenerate_polygon_counted_as_skipped(tmp_path):
     assert ref.meta["skipped_shapes"] == 1
 
 
-def test_scan_labelme_missing_json(tmp_path):
+def test_scan_labelme_missing_json_is_skipped_with_warning(tmp_path):
     root = tmp_path / "data"
     _write_image(root / "A" / "x.jpg")
     spec = _spec(tmp_path, data_type="detection", classes=["cat"], root=root)
 
-    with pytest.raises(AnnotationError, match="标注缺失") as excinfo:
-        scan_labelme(spec.root, spec, ClassTable(["cat"]))
+    with pytest.warns(UserWarning, match="缺少同名 labelme JSON") as record:
+        refs = scan_labelme(spec.root, spec, ClassTable(["cat"]))
 
-    assert "x.json" in str(excinfo.value)
+    assert refs == []
+    assert len(record) == 1  # 只发一次汇总告警
+    message = str(record[0].message)
+    assert "1 张图片" in message and "已跳过" in message
+    assert "A/x.jpg" in message
+
+
+def test_scan_labelme_mixed_missing_json_returns_matched(tmp_path):
+    """1 张有 JSON、1 张没有：只返回有标注的那条，并告警被跳过的一项。"""
+    root = tmp_path / "data"
+    _write_image(root / "A" / "has.jpg")
+    _write_labelme(root / "A" / "has.json", [_rect("cat", 1, 1, 4, 4)])
+    _write_image(root / "A" / "missing.jpg")
+    spec = _spec(tmp_path, data_type="detection", classes=["cat"], root=root)
+
+    with pytest.warns(UserWarning, match="A/missing.jpg") as record:
+        refs = scan_labelme(spec.root, spec, ClassTable(["cat"]))
+
+    assert _image_refs(refs) == ["A/has.jpg"]
+    assert refs[0].boxes.shape == (1, 4)
+    assert refs[0].labels.tolist() == [0]
+    assert "1 张图片" in str(record[0].message)
+
+
+def test_scan_labelme_all_missing_json_returns_empty_and_warns(tmp_path):
+    root = tmp_path / "data"
+    _write_image(root / "A" / "a.jpg")
+    _write_image(root / "A" / "b.jpg")
+    spec = _spec(tmp_path, data_type="detection", classes=["cat"], root=root)
+
+    with pytest.warns(UserWarning, match="2 张图片缺少同名 labelme JSON") as record:
+        refs = scan_labelme(spec.root, spec, ClassTable(["cat"]))
+
+    assert refs == []
+    message = str(record[0].message)
+    assert "A/a.jpg" in message and "A/b.jpg" in message
+
+
+def test_scan_labelme_missing_json_samples_capped_at_ten(tmp_path):
+    root = tmp_path / "data"
+    for index in range(12):
+        _write_image(root / "A" / f"img_{index:02d}.jpg")
+    spec = _spec(tmp_path, data_type="detection", classes=["cat"], root=root)
+
+    with pytest.warns(UserWarning) as record:
+        refs = scan_labelme(spec.root, spec, ClassTable(["cat"]))
+
+    assert refs == []
+    message = str(record[0].message)
+    assert "12 张图片" in message
+    assert "A/img_00.jpg" in message and "A/img_09.jpg" in message
+    assert "A/img_10.jpg" not in message  # 最多列 10 个示例
+    assert "其余省略" in message
+
+
+def test_scan_labelme_missing_json_keeps_empty_shapes_as_negative_sample(tmp_path):
+    """空 shapes 的 JSON 是负样本，不因同目录其他图片缺 JSON 而被跳过。"""
+    root = tmp_path / "data"
+    _write_image(root / "A" / "empty.jpg")
+    _write_labelme(root / "A" / "empty.json", [])
+    _write_image(root / "A" / "nojson.jpg")
+    spec = _spec(tmp_path, data_type="detection", classes=["cat"], root=root)
+
+    with pytest.warns(UserWarning, match="A/nojson.jpg"):
+        refs = scan_labelme(spec.root, spec, ClassTable(["cat"]))
+
+    assert _image_refs(refs) == ["A/empty.jpg"]
+    assert refs[0].boxes.shape == (0, 4)
+    assert refs[0].meta["shape_count"] == 0
 
 
 def test_scan_labelme_stem_conflict(tmp_path):
@@ -935,19 +1003,16 @@ def test_scan_samples_segmentation_layout(tmp_path):
     assert refs[0].segment_labels.tolist() == [1]
 
 
-def test_scan_samples_dir_mode_limits_to_common_subdir(tmp_path, capsys):
-    """multicls 场景：扁平类目录与 train_data 重复时只扫描公共子目录。"""
+def test_scan_samples_does_not_infer_subdir_from_dir_map(tmp_path, capsys):
+    """``dir_map`` 不再触发自动子目录收敛：整棵任务目录都会被扫描，也不打印提示。"""
     root = tmp_path / "data"
     _write_image(root / "T_licence" / "无" / "flat.jpg")
     _write_image(root / "T_licence" / "train_data" / "train" / "无" / "train.jpg")
     _write_image(root / "T_licence" / "train_data" / "val" / "无" / "val.jpg")
-    _write_image(root / "T_logo" / "一体奇瑞标" / "flat.jpg")
-    _write_image(root / "T_logo" / "train_data" / "train" / "一体奇瑞标" / "train.jpg")
-    _write_image(root / "T_logo" / "train_data" / "val" / "一体奇瑞标" / "val.jpg")
     spec = _spec(
         tmp_path,
         data_type="multi_task_classification",
-        tasks=[("licence", "T_licence", ["无"]), ("logo", "T_logo", ["一体奇瑞标"])],
+        tasks=[("licence", "T_licence", ["无"])],
         splits=SplitConfig(
             mode="dir", dir_map={"train": "train_data/train", "val": "train_data/val"}
         ),
@@ -957,36 +1022,18 @@ def test_scan_samples_dir_mode_limits_to_common_subdir(tmp_path, capsys):
     refs = scan_samples(spec)
     captured = capsys.readouterr()
 
-    assert len(refs) == 4
-    assert all("/train_data/" in ref.rel_path for ref in refs)
-    assert "train_data" in captured.err  # 自动推断必须显式打印
-
-    result = build_splits(refs, spec.splits, spec)
-    assert len(result.splits["train"]) == 2
-    assert len(result.splits["val"]) == 2
-
-
-def test_scan_samples_dir_mode_falls_back_when_subdir_missing(tmp_path):
-    root = tmp_path / "data"
-    _write_image(root / "T1" / "cat" / "flat.jpg")
-    _write_image(root / "T1" / "train_data" / "train" / "cat" / "train.jpg")
-    (root / "T2").mkdir(parents=True, exist_ok=True)  # T2 没有 train_data
-    spec = _spec(
-        tmp_path,
-        data_type="multi_task_classification",
-        tasks=[("one", "T1", ["cat"]), ("two", "T2", ["cat"])],
-        splits=SplitConfig(
-            mode="dir", dir_map={"train": "train_data/train", "val": "train_data/val"}
-        ),
-        root=root,
-    )
-
-    refs = scan_samples(spec)
-
-    assert _image_refs(refs) == ["T1/cat/flat.jpg", "T1/train_data/train/cat/train.jpg"]
+    assert _image_refs(refs) == [
+        "T_licence/train_data/train/无/train.jpg",
+        "T_licence/train_data/val/无/val.jpg",
+        "T_licence/无/flat.jpg",
+    ]
+    assert "仅扫描公共子目录" not in captured.err
+    # 扫描范围未被收敛：dir 切分如实报告扁平类目录的样本未被覆盖
+    with pytest.raises(SplitError, match="未被 dir_map 覆盖"):
+        build_splits(refs, spec.splits, spec)
 
 
-def test_scan_samples_dir_mode_without_common_prefix_scans_all(tmp_path):
+def test_scan_samples_scans_all_directories_regardless_of_dir_map(tmp_path):
     root = tmp_path / "data"
     _write_image(root / "train" / "cat" / "a.jpg")
     _write_image(root / "val" / "cat" / "b.jpg")

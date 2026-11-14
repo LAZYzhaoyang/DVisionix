@@ -22,13 +22,19 @@
   JSON 缺这两个字段时用 ``cv2`` 读取图片实际尺寸兜底并告警（不静默推断）；
 - ``imageData`` 非空时按 ``spec.parse.labelme.image_data`` 处理：
   ``ignore`` 容忍并在 ``meta["image_data_present"]`` 记账，``error`` 直接报错；
-- 缺失同名 ``.json``、JSON 语法错误、图片扩展名冲突、标注结构非法都抛
-  ``AnnotationError``（消息带 JSON/图片路径与原因）；
+- 缺失同名 ``.json`` 的图片**跳过**（不报错），扫描结束后汇总为**一次**
+  ``UserWarning``，消息含跳过数量与最多 10 个示例相对路径；``"shapes": []`` 的 JSON
+  仍作为**负样本**保留；
+- JSON 语法错误、图片扩展名冲突、标注结构非法都抛 ``AnnotationError``
+  （消息带 JSON/图片路径与原因）；
 - 隐藏目录与隐藏文件（``.`` 开头）跳过；图片扩展名按 ``spec.parse.image_ext`` 小写比较。
 
 ``scan_labelme`` 按 ``spec.data_type`` 只保留目标形状：detection 只要 ``rectangle``，
 segmentation 只要 ``polygon``（具体由 ``spec.parse.labelme.shape_types`` 的
 ``shape -> detection/segmentation`` 映射决定），另一种形状计入跳过数。
+
+注意：跳过缺 JSON 只发生在**目录扫描**（``scan_labelme``）里；单文件 API
+:func:`parse_labelme_file` 由调用方显式给出 JSON 路径，文件缺失仍抛 ``AnnotationError``。
 
 用法::
 
@@ -135,6 +141,10 @@ def scan_labelme(root: str, spec: DVXDatasetSpec, class_table: ClassTable) -> li
     只有 ``spec.data_type`` 对应的形状会被保留：detection 填 ``boxes`` / ``labels``，
     segmentation 填 ``segments`` / ``segment_labels``；另一种形状计入 ``skipped_shapes``。
 
+    没有同名 ``<stem>.json`` 的图片会被**跳过**（不报错）：扫描结束后若存在跳过项，
+    统一发**一次** ``UserWarning``，消息含数量与最多 10 个示例相对路径。
+    ``"shapes": []`` 的 JSON 是合法负样本，仍会保留在返回值中。
+
     Args:
         root: 扫描根目录（通常是 ``spec.root``）。
         spec: 数据集规格，提供 ``data_type``、``parse`` 配置与 ``spec.root``。
@@ -144,9 +154,10 @@ def scan_labelme(root: str, spec: DVXDatasetSpec, class_table: ClassTable) -> li
         样本列表（``rel_path`` 相对 ``spec.root``，posix 风格），按 ``rel_path`` 升序。
         每个样本的 ``meta`` 含 ``skipped_shapes``（跳过形状数）、``shape_count``
         （实际使用的形状数）与 ``image_data_present``（是否内嵌图像数据）。
+        全部图片都缺 JSON 时返回空列表（同样告警），由 ``build_splits`` 报空数据集。
 
     Raises:
-        AnnotationError: 根目录不存在、缺失同名 JSON、JSON 非法、未知标签、图片格式冲突等。
+        AnnotationError: 根目录不存在、JSON 非法、未知标签、图片格式冲突等。
         DatasetSpecError: ``data_type`` 不是 detection/segmentation，或
             ``parse.labelme.shape_types`` 中没有属于该数据类型的形状。
     """
@@ -162,6 +173,7 @@ def scan_labelme(root: str, spec: DVXDatasetSpec, class_table: ClassTable) -> li
     extensions = {extension.lower() for extension in spec.parse.image_ext}
 
     refs: list[SampleRef] = []
+    skipped_missing_json: list[str] = []
     image_data_count = 0
     # labelme 没有"类别目录"这一层：recursive=False 表示只看根目录下的图片，不进入任何子目录
     scan_dirs = iter_dirs(root_path, True) if spec.parse.recursive else [root_path]
@@ -172,11 +184,9 @@ def scan_labelme(root: str, spec: DVXDatasetSpec, class_table: ClassTable) -> li
             image_path = os.path.abspath(os.path.join(dirpath, name))
             json_path = os.path.splitext(image_path)[0] + ".json"
             if not os.path.isfile(json_path):
-                raise AnnotationError(
-                    f"labelme 标注缺失: 图片 {image_path} 没有同名 JSON（期望 {json_path}）",
-                    hint="labelme 布局要求每张图片旁边有 <stem>.json；"
-                    "请用 labelme 导出标注，或把没有标注的图片移出数据集",
-                )
+                # 缺失标注不是数据错误：跳过该图片，扫描结束后统一告警（见模块 docstring）
+                skipped_missing_json.append(rel_path_posix(image_path, spec.root))
+                continue
             parsed = _read_labelme(json_path, class_table, ignore_labels, allowed_shape_types)
             if parsed.image_data_present:
                 if image_data_mode == "error":
@@ -219,6 +229,12 @@ def scan_labelme(root: str, spec: DVXDatasetSpec, class_table: ClassTable) -> li
                 )
             )
 
+    if skipped_missing_json:
+        warnings.warn(
+            _missing_json_message(skipped_missing_json),
+            UserWarning,
+            stacklevel=2,
+        )
     if image_data_count:
         warnings.warn(
             f"{image_data_count} 个 labelme JSON 内嵌了 imageData，"
@@ -228,6 +244,13 @@ def scan_labelme(root: str, spec: DVXDatasetSpec, class_table: ClassTable) -> li
         )
     refs.sort(key=lambda ref: ref.rel_path)
     return refs
+
+
+def _missing_json_message(skipped: Sequence[str]) -> str:
+    """构造"缺同名 JSON 已跳过"的告警消息（最多列 10 个示例相对路径）。"""
+    preview = ", ".join(list(skipped)[:10])
+    suffix = "；其余省略" if len(skipped) > 10 else ""
+    return f"{len(skipped)} 张图片缺少同名 labelme JSON，已跳过（示例：{preview}{suffix}）"
 
 
 # ---------------------------------------------------------------------------

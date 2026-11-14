@@ -294,7 +294,7 @@ def scan_samples(spec: DVXDatasetSpec) -> list[SampleRef]:
 规则：
 - 递归扫描时跳过隐藏目录（`.` 开头）与 `dvx_dataset.yaml`。
 - 图片按 `parse.image_ext` 匹配（小写比较）；**同一 stem 的 `.jpg`/`.png` 同时存在时视为冲突** → `AnnotationError`。
-- labelme：必须存在**同名** `.json`（`<stem>.json`）；缺失 → `AnnotationError`（消息给出样例路径）；解析失败 → `AnnotationError` 含 JSON 路径与原因。
+- labelme：图片必须存在**同名** `.json`（`<stem>.json`）；**缺失 → 跳过该图片并发一次 `UserWarning`（含数量与最多 10 个示例路径），不报错**；JSON 存在但解析失败 → `AnnotationError` 含 JSON 路径与原因；`shapes` 为空视为负样本保留。
 - labelme 形状：`rectangle` → `[x1,y1,x2,y2]`（取四个点的 min/max，兼容旋转矩形）；`polygon` → `(P,2)`；其余形状跳过并计入告警计数。
 - 类别：`shape["label"]` 必须能在 `ClassTable` 中查到；`ignore_labels` 中的直接丢弃；未知标签 → `AnnotationError`（列出未知标签集合，最多 5 个样例）。
 - 空 shapes 允许（负样本），但 `check_dataset` 会统计。
@@ -429,10 +429,10 @@ $PY tools/check_dataset.py --spec FILE [--json] [--split-preview]
 
 - `cls`：`data_type: classification`，`layout: folder_per_class`，5 类（中文，顺序：幻影灰/新卡其白/新碳晶黑/科技灰/纳斯达克银），`splits: ratio 0.8/0.2 seed 42 stratify class`。
 - `det`：`data_type: detection`，`layout: labelme`，**20 类并集**（顺序由 init 工具生成后人工确认），`splits: ratio 0.8/0.2 seed 42 stratify none`。
-- `multicls`：`data_type: multi_task_classification`，`layout: folder_per_class`，`tasks` 两任务；`splits: mode dir, dir_map {train: train_data/train, val: train_data/val}`。
+- `multicls`：`data_type: multi_task_classification`，`layout: folder_per_class`，标准结构 `<任务>/<类别>/*.jpg`，`tasks` 两任务；`splits: mode ratio {train: 0.8, val: 0.2} seed 42 stratify class`（**不使用 dir_map**）。
 - `seg`：`data_type: segmentation`，`layout: labelme`，`seg_mode: semantic`，类表 `[__background__, <17 类按现有 label 排序>]`，`ignore_index: 255`，`splits: ratio 0.8/0.2 seed 42 stratify none`。
 
-> 注意：`cls` 无 split 目录；`det`/`seg` 无 split 目录；`multicls` 已有 `train_data/{train,val}` 且与扁平类目录重复，`dir` 模式只扫描 `train_data` 下目录即可避免重复。
+> 注意：`cls` / `det` / `seg` / `multicls` 四个数据集都**没有预先划分的 split 目录**，统一用 `ratio` 模式在读取时构建切分（非破坏性）。
 
 ## P1-11 测试清单（`tests/`）
 
@@ -489,10 +489,9 @@ $PY -m black --check dvisionix tools tests
    `(polygons, polygon_labels, box_label_ids, skipped_count)`——第三个返回值是**矩形类别 id**，不返回框坐标；
    矩形几何统一由 `scan_labelme → SampleRef.boxes` 提供（共用内部解析，无重复读盘）。
    契约 P1-6 中"注意 boxes 与 segments 分开返回"一句仅指 `SampleRef` 字段，不指该函数返回值。
-2. **`scan_samples(spec, subdir=None)`**：为支持 `multicls` 的 `dir` 切分而新增可选参数。
-   `subdir=None` 且 `layout=folder_per_class` 且 `splits.mode=dir` 时，自动取 `dir_map` 各目录的公共一级子目录
-   （`train_data/train` + `train_data/val` → `train_data`），仅当其在每个 `task.path` 下都存在时才采用，
-   并向 **stderr** 打印一行说明（不污染 `check_dataset --json` 的 stdout）。
+2. **`scan_samples(spec, subdir=None)`**：`subdir` 仅作为**显式可选参数**保留（显式传入才扫描该子目录层）；
+   **不再**根据 `dir_map` 自动推断公共子目录，也不再向 stderr 打印自动收敛信息。
+   （原自动推断逻辑是为旧 multicls 的 `train_data/` 重复目录而加，用户已清理该目录，故移除，见附三。）
 3. **同 stem 多格式冲突**：`folder` 与 `labelme` 两种布局都做检测，冲突抛 `AnnotationError`。
 4. **异常类型划分**：扫描期数据问题（目录缺失/缺 JSON/未知标签/扩展名冲突/重复 rel_path）、
    rasterize 参数问题 → `AnnotationError`；空类别表、labelme 被用于非 detection/segmentation、
@@ -502,3 +501,14 @@ $PY -m black --check dvisionix tools tests
 7. **空标注语义**：detection 空 shapes → `boxes (0,4) float32` + `labels (0,) int64`；
    segmentation → `segments == []` + `segment_labels (0,) int64`（不用 None）。
 8. **`SampleRef.meta` 自由字段**：folder 写 `class_name`；labelme 写 `skipped_shapes` / `shape_count` / `image_data_present`。
+
+---
+
+## 附三：P1 用户反馈修正（2026-11-15）
+
+1. **缺标注改为跳过**：图片没有同名 labelme JSON 时不再报错，跳过并对全部跳过项发一次 `UserWarning`
+   （含数量 + 最多 10 个示例相对路径）；`shapes` 为空的 JSON 仍作为**负样本**保留；
+   损坏/非法 JSON、未知标签仍抛 `AnnotationError`。
+2. **多任务标准结构**：`<任务>/<类别>/*.jpg`。`multicls` 规格改用 `ratio` 切分，不再使用 `dir_map`；
+   `scan.py` 移除"自动推断公共一级子目录"的魔法，`subdir` 仅作为显式可选参数保留。
+   `splits.mode: dir` 仍是通用能力（适用于数据本身已按目录划分的用户）。

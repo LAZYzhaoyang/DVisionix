@@ -36,9 +36,9 @@ parse:
   recursive: true
   image_ext: [.jpg, .jpeg, .png, .bmp]
 
-# 可选：如果每个任务目录下已经有 train_data/{train,val} 切片目录，
-# 改用 dir 模式（目录相对每个 task.path 解析）：
+# 可选（仅当数据本身已按目录划分时才用）：把切片目录挂在每个任务目录下，
+# 改用 dir 模式（目录相对每个 task.path 解析）。标准结构 <任务>/<类别>/ 不需要这一层。
 #
 # splits:
 #   mode: dir
-#   dir_map: {train: train_data/train, val: train_data/val}
+#   dir_map: {train: split_dirs/train, val: split_dirs/val}

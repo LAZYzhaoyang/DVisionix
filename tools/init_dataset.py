@@ -521,7 +521,9 @@ def _warn_labelme_shape_types(
 ) -> None:
     """提示图像/JSON 数量不一致，以及与本数据类型不匹配的形状。"""
     if json_count != image_count:
-        _warn(f"图片 {image_count} 张，JSON {json_count} 个，数量不一致；扫描时缺 JSON 会报错")
+        _warn(
+            f"图片 {image_count} 张，JSON {json_count} 个，数量不一致；扫描时会跳过缺 JSON 的图片并告警"
+        )
     expected = "rectangle" if data_type == "detection" else "polygon"
     unexpected = {name: count for name, count in shape_types.items() if name != expected}
     if unexpected:
