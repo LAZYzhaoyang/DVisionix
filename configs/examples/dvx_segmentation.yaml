@@ -1,0 +1,61 @@
+# DVX 分割任务示例配置（外部真实数据模板，不参与 CI 端到端门禁）
+#
+# 用途：把一份 dvx_dataset.yaml（data_type: segmentation，labelme 布局）接进训练入口。
+# data.spec 是**占位相对路径**，请替换为你的 dvx_dataset.yaml 实际位置（相对执行目录）。
+#
+# 用法::
+#   python tools/train.py \
+#     --config configs/examples/dvx_segmentation.yaml \
+#     --cfg-options data.spec=/path/to/seg/dvx_dataset.yaml \
+#     --work-dir /tmp/dvx_seg --force
+#
+# 要求：
+# - spec 的 data_type 必须是 segmentation；
+# - num_classes 必须与 spec 的类别数一致（本模板按 DVX 分割 18 类，含 __background__）。
+_base_: "../../dvisionix/config/defaults/segmentation.yaml"
+
+experiment_name: "dvx_segmentation"
+
+model:
+  _delete_: true
+  type: "segmentation_model"
+  num_classes: 18
+  # SegFormer（MiT 编码器 + SegFormer 头），骨干为项目内置实现
+  backbone:
+    type: "mit_backbone"
+    embed_dims: [32, 64, 128, 256]
+    depths: [1, 1, 1, 1]
+  head:
+    type: "segformer_head"
+    num_classes: 18
+    channels: 64
+
+task:
+  type: "SegmentationTask"
+  num_classes: 18
+  ignore_index: 255
+
+loss:
+  _delete_: true
+  type: "cross_entropy"
+  ignore_index: 255
+
+data:
+  dataset: "dvx"
+  # 占位路径：指向你的 dvx_dataset.yaml（root 相对 spec 所在目录解析）
+  spec: "./data/seg/dvx_dataset.yaml"
+  image_size: 256
+
+training:
+  num_epochs: 1
+  batch_size: 4
+  optimizer: {type: adam, lr: 0.001}
+  device: "auto"
+  num_workers: 0
+  amp: false
+  early_stopping: {enabled: false}
+
+checkpoint:
+  save_dir: "checkpoints"
+  monitor: "val_loss"
+  mode: "min"

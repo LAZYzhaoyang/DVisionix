@@ -24,8 +24,17 @@ class ClsHead(BaseModel):
         layers.append(nn.Linear(in_channels, num_classes))
         self.fc = nn.Sequential(*layers)
 
-    def forward(self, x):
-        """ClsHead 前向：x -> logits (B, num_classes)。"""
+    def forward(self, x, labels=None):
+        """ClsHead 前向：x -> logits (B, num_classes)。
+
+        Args:
+            x: 特征向量 (B, in_channels)。
+            labels: 真实标签，**本头不使用**。接受它是为了与
+                ``ClassificationTask`` / ``LinearClassifier`` 的 kwargs 透传契约
+                保持一致 —— 训练步会无条件传 ``labels=``，普通分类头若拒绝该参数，
+                最主流的 ``LinearClassifier + ClsHead + ClassificationTask`` 路径会在
+                第一个 batch 直接 ``TypeError``。
+        """
         return self.fc(x)
 
 

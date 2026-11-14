@@ -18,6 +18,18 @@ class MultiLabelTask(BaseTask):
     输入：batch["image"] (B, C, H, W)、batch["label"] (B, K) 0/1 张量。
     """
 
+    task_type = "multi_label"
+    accepted_model_tasks = ("classification",)
+    accepted_data_types = ("multi_label",)
+    required_batch_fields = ("image", "label")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回多标签任务的预设变换（复用 ``ClassificationTransforms``）。"""
+        from ...data.transforms import ClassificationTransforms
+
+        return ClassificationTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         num_classes: Optional[int] = None,

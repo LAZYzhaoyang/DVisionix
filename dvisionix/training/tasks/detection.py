@@ -21,6 +21,18 @@ class DetectionTask(BaseTask):
     默认损失：GridDetectionLoss；默认指标：COCO-style mAP。
     """
 
+    task_type = "detection"
+    accepted_model_tasks = ("detection",)
+    accepted_data_types = ("detection",)
+    required_batch_fields = ("image", "boxes", "labels")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回检测任务的预设变换（``DetectionTransforms``）。"""
+        from ...data.transforms import DetectionTransforms
+
+        return DetectionTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         num_classes: int,

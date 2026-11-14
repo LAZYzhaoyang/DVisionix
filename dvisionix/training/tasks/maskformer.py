@@ -24,6 +24,22 @@ class MaskFormerTask(BaseTask):
     默认损失：MaskFormerLoss（匈牙利匹配 + CE + mask BCE + Dice）；默认指标：MaskAveragePrecision（mask mAP）。
     """
 
+    task_type = "segmentation"
+    accepted_model_tasks = ("segmentation",)
+    accepted_data_types = (
+        "segmentation",
+        "instance_segmentation",
+        "panoptic_segmentation",
+    )
+    required_batch_fields = ("image", "mask")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回实例/全景分割的预设变换（``SegmentationTransforms``）。"""
+        from ...data.transforms import SegmentationTransforms
+
+        return SegmentationTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         num_classes: int,

@@ -24,8 +24,12 @@ class MultiLabelHead(BaseModel):
         layers.append(nn.Linear(in_channels, num_classes))
         self.fc = nn.Sequential(*layers)
 
-    def forward(self, x):
-        """MultiLabelHead 前向：x -> 多标签 logits (B, num_classes)。"""
+    def forward(self, x, labels=None):
+        """MultiLabelHead 前向：x -> 多标签 logits (B, num_classes)。
+
+        ``labels`` 本头不使用，仅为与 ``ClassificationTask`` / ``LinearClassifier``
+        的 kwargs 透传契约保持一致而接受。
+        """
         return self.fc(x)
 
 

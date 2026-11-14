@@ -10,7 +10,7 @@ Trainer 只负责执行循环。自定义任务继承 ``BaseTask`` 并实现
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 import torch
 import torch.nn as nn
@@ -66,6 +66,31 @@ class BaseTask(ABC):
     #: 由 Trainer 在 fit() 里按配置写入；只有配合 ``DataLoader(pin_memory=True)``
     #: 的锁页内存才能真正与计算重叠，CPU 上无收益也无副作用。
     non_blocking: bool = False
+
+    # ------------------------------------------------------------------
+    # 任务契约（P2-2）：由 Task 声明自己需要的模型能力 / 数据类型 / batch 字段
+    # ------------------------------------------------------------------
+    #: 任务类型名，用于日志与错误信息（如 ``"classification"``）。
+    task_type: ClassVar[str] = ""
+    #: 任务可接受的模型任务能力集合；空元组表示"未声明"（自定义任务应显式声明）。
+    accepted_model_tasks: ClassVar[tuple[str, ...]] = ()
+    #: 任务可接受的数据集 ``data_type`` 集合（对应 ``dvx_dataset.yaml`` 的 data_type）。
+    accepted_data_types: ClassVar[tuple[str, ...]] = ()
+    #: 训练 batch 必须携带的字段，首个训练 batch 会据此校验一次。
+    required_batch_fields: ClassVar[tuple[str, ...]] = ("image",)
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回该任务的预设 ``TransformPipeline``；默认 ``None`` 表示不提供。
+
+        约定：子类在**函数内部** import 变换类，避免
+        ``data.transforms -> training.tasks`` 的循环依赖。
+
+        Args:
+            train: True 构建训练期增广，False 构建验证/推理期确定性变换。
+            image_size: 目标图像边长（像素）。
+        """
+        return None
 
     def to_device(self, value: Any, device: torch.device) -> Any:
         """把 batch（或其一部分）搬到设备上，遵循 ``self.non_blocking``。"""

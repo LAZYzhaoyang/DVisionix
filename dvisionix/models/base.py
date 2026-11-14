@@ -7,7 +7,7 @@
 ``dvisionix.models.toy``，本文件只保留 ``BaseModel`` 契约。
 """
 
-from typing import Optional
+from typing import ClassVar, Optional
 
 import torch
 import torch.nn as nn
@@ -23,10 +23,16 @@ class BaseModel(nn.Module):
         - ``forward`` 只返回 **原始预测**（logits / raw 张量 / dict），不包含 NMS / decode
           等后处理；后处理统一放在 ``dvisionix.models.postprocess`` 或独立解码器中。
         - ``task_type`` 应取 ``TASK_TYPES`` 之一。
+        - ``supported_tasks`` 可声明模型支持的任务能力集合（P2-1）；默认空元组表示
+          "未显式声明，由 ``task_type`` 推导"。
         - 可选实现 ``init_weights`` 做权重初始化，``from_config`` 支持配置化构建。
 
     提供 freeze/unfreeze、参数统计、设备查询等通用能力。
     """
+
+    #: 模型支持的任务能力集合（如 ``("classification",)``）。
+    #: 默认空元组表示"由 ``task_type`` 推导"；多任务模型可显式声明多个能力。
+    supported_tasks: ClassVar[tuple[str, ...]] = ()
 
     def __init__(self, task_type: Optional[str] = None):
         super().__init__()
@@ -76,4 +82,35 @@ class BaseModel(nn.Module):
         return torch.device("cpu")
 
 
-__all__ = ["BaseModel", "TASK_TYPES"]
+def model_task_types(model: nn.Module) -> tuple[str, ...]:
+    """返回模型声明的任务能力。
+
+    取值优先级（契约 P2-1）：
+
+    1. ``model.supported_tasks``（实例或类属性）非空 → 直接使用；
+    2. 实例/类的 ``task_type`` 非空 → 包装成单元素元组；
+    3. 两者都没有 → 空元组 ``()``。
+
+    空能力表示"模型没有声明任何完整任务能力"（例如 ``FeatureBackboneBase`` 这类
+    非任务模型），由调用方（``training.contract``）决定如何报错。
+
+    Args:
+        model: 待查询的模型（``nn.Module`` 即可，不要求继承 ``BaseModel``）。
+
+    Returns:
+        模型声明的任务能力元组；未声明时为空元组。
+    """
+    supported = getattr(model, "supported_tasks", ())
+    if isinstance(supported, str):
+        # 容错：误写成字符串时按单个能力处理，避免 tuple("classification") 拆成字符
+        supported = (supported,)
+    if supported:
+        return tuple(str(item) for item in supported)
+
+    task_type = getattr(model, "task_type", None)
+    if task_type:
+        return (str(task_type),)
+    return ()
+
+
+__all__ = ["BaseModel", "TASK_TYPES", "model_task_types"]

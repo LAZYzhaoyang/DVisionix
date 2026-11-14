@@ -20,6 +20,18 @@ class SegmentationTask(BaseTask):
     默认损失：CrossEntropy(ignore_index=255)；默认指标：mIoU / pixel_accuracy。
     """
 
+    task_type = "segmentation"
+    accepted_model_tasks = ("segmentation",)
+    accepted_data_types = ("segmentation",)
+    required_batch_fields = ("image", "mask")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回分割任务的预设变换（``SegmentationTransforms``）。"""
+        from ...data.transforms import SegmentationTransforms
+
+        return SegmentationTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         num_classes: int,

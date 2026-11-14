@@ -21,6 +21,18 @@ class LinearEvalTask(BaseTask):
     惰性构建线性头，优化器只含线性头参数。
     """
 
+    task_type = "linear_eval"
+    accepted_model_tasks = ("classification",)
+    accepted_data_types = ("classification",)
+    required_batch_fields = ("image", "label")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回线性评估的预设变换（复用 ``ClassificationTransforms``）。"""
+        from ...data.transforms import ClassificationTransforms
+
+        return ClassificationTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         num_classes: int,

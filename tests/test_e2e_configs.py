@@ -46,8 +46,10 @@ TEMPLATE_CONFIGS = frozenset(
 
 #: 非训练配置目录：``configs/datasets/`` 存放 DVX 数据规格示例（``dvx_dataset.yaml``），
 #: 它们描述"数据长什么样"而不是"如何训练"，因此不参与端到端门禁。
+#: ``configs/examples/`` 存放外部真实数据模板（``data.dataset: dvx`` + 占位 ``data.spec``），
+#: 依赖仓库外的真实数据，CI 无法提供，因此同样不参与门禁。
 #: 目录级排除比逐文件登记更稳：新增示例模板不会让全量 CI 变红。
-NON_TRAINING_DIR_PREFIXES = ("datasets/",)
+NON_TRAINING_DIR_PREFIXES = ("datasets/", "examples/")
 
 #: 已知无法训练的配置 —— 机制保留，供未来新配置的临时豁免使用。
 #: 登记时必须带 ``xfail(strict=True)``，因此一旦修复就会立刻变成 XPASS 失败，

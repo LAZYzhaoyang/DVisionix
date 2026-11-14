@@ -19,6 +19,18 @@ class SimCLRTask(BaseTask):
     batch 需含 ``image1`` / ``image2``（由 SimCLRTransforms 生成）。
     """
 
+    task_type = "simclr"
+    accepted_model_tasks = ("classification",)
+    accepted_data_types = ("simclr",)
+    required_batch_fields = ("image1", "image2")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回 SimCLR 双视角增强（``SimCLRTransforms``）。"""
+        from ...data.transforms import SimCLRTransforms
+
+        return SimCLRTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         learning_rate: Optional[float] = None,

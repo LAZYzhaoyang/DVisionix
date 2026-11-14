@@ -34,7 +34,7 @@ from .backbones import (
     ViTBackbone,
     list_timm_models,
 )
-from .base import TASK_TYPES, BaseModel
+from .base import TASK_TYPES, BaseModel, model_task_types
 from .classifiers import LinearClassifier
 from .detectors import (
     AnchorGenerator,
@@ -173,6 +173,7 @@ from .toy import DetHead, GridDetectionModel, SimpleCNN, SimpleSegmentationModel
 __all__ = [
     "BaseModel",
     "TASK_TYPES",
+    "model_task_types",
     "TimmBackbone",
     "TimmClassifier",
     "SequentialBackbone",

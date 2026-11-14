@@ -3,6 +3,8 @@
 # 用途: 分类组合模型 / 分类头 / 检测脚手架测试（S2）。
 """分类组合模型 / 分类头 / 检测脚手架测试（S2）。"""
 
+import inspect
+
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -65,6 +67,61 @@ def test_multi_label_head_and_loss():
     assert logits.shape == (4, 5)
     loss = BinaryCrossEntropy()(logits, torch.randint(0, 2, (4, 5)))
     assert torch.isfinite(loss)
+
+
+def _forward_accepts_labels(cls):
+    """``forward`` 是否接受 ``labels``：显式参数或 ``**kwargs`` 均可。"""
+    parameters = inspect.signature(cls.forward).parameters
+    if "labels" in parameters:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values())
+
+
+def test_all_classification_heads_accept_labels_kwarg():
+    """反射契约：``heads/classification`` 下所有已注册分类头都必须接受 labels。
+
+    ``ClassificationTask.training_step`` 会无条件把 ``labels=`` 透传给模型，
+    ``LinearClassifier.forward`` 又原样转给 head —— 任何一个分类头拒绝该参数，
+    都会让对应组合在**第一个 batch** 直接 TypeError。
+    """
+    module_prefix = "dvisionix.models.heads.classification"
+    registered = {HEADS.get(name) for name in HEADS.keys()}
+    head_classes = sorted(
+        (
+            cls
+            for cls in registered
+            if inspect.isclass(cls) and getattr(cls, "__module__", "").startswith(module_prefix)
+        ),
+        key=lambda cls: cls.__name__,
+    )
+    # 自检：不能因为注册表/导入退化而遍历到空集合，导致契约测试假绿
+    assert len(head_classes) >= 10, [cls.__name__ for cls in head_classes]
+    offenders = [cls.__name__ for cls in head_classes if not _forward_accepts_labels(cls)]
+    assert not offenders, f"以下分类头拒绝 labels= 透传: {offenders}"
+
+
+def test_linear_classifier_with_cls_head_runs_classification_task():
+    """端到端回归：``LinearClassifier + ClsHead + ClassificationTask`` 必须可训练。
+
+    修复前 ``ClsHead.forward`` 不接受 ``labels``，而训练步无条件透传，
+    第一个 batch 即 ``TypeError: ClsHead.forward() got an unexpected keyword
+    argument 'labels'``。
+    """
+    from dvisionix.training import ClassificationTask
+
+    model = LinearClassifier(
+        backbone={"type": "sequential_backbone", "stages": STAGES},
+        head={"type": "cls_head"},
+        num_classes=5,
+    )
+    task = ClassificationTask(num_classes=5)
+    batch = {
+        "image": torch.randn(4, 3, 64, 64),
+        "label": torch.randint(0, 5, (4,)),
+    }
+    result = task.training_step(model, batch, torch.device("cpu"))
+    assert "loss" in result
+    assert torch.isfinite(result["loss"]), f"loss 非有限值: {result['loss']}"
 
 
 def test_head_registries():

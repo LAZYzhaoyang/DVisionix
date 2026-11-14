@@ -25,13 +25,8 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 from dvisionix.config import Config
-from dvisionix.data import CustomDataset, build_dataset
-from dvisionix.data.transforms import (
-    ClassificationTransforms,
-    DetectionTransforms,
-    SegmentationTransforms,
-    SimCLRTransforms,
-)
+from dvisionix.data import CustomDataset, DVXDataset, build_dataset
+from dvisionix.errors import ConfigError
 from dvisionix.models import build_model
 from dvisionix.training import (
     build_task,
@@ -54,17 +49,28 @@ _TASK_MAPPING = {
 }
 
 
-def build_transforms(task_type, image_size, train):
-    """按任务类型构建训练/验证变换流水线。"""
-    if task_type == "classification":
-        return ClassificationTransforms(train=train, image_size=image_size)
-    if task_type == "detection":
-        return DetectionTransforms(train=train, image_size=image_size)
-    if task_type == "segmentation":
-        return SegmentationTransforms(train=train, image_size=image_size)
-    if task_type == "simclr":
-        return SimCLRTransforms(train=train, image_size=image_size)
-    raise ValueError(f"Unknown task_type: {task_type}")
+def build_transforms(task, image_size, train):
+    """向任务索取预设变换流水线（契约 P2-2：任务承担任务知识）。
+
+    训练入口不再按 ``task_type`` 硬编码 if/else 分派，而是统一委托
+    ``task.build_transforms(train, image_size)``。
+
+    Args:
+        task: 任务实例。
+        image_size: 目标图像边长。
+        train: True 构建训练变换，False 构建验证变换。
+
+    Raises:
+        ConfigError: 任务未提供预设变换（``build_transforms`` 返回 None）。
+    """
+    transforms = task.build_transforms(train, image_size)
+    if transforms is None:
+        raise ConfigError(
+            f"任务 {type(task).__name__} 未提供预设变换（build_transforms 返回 None）",
+            hint="该任务未提供预设变换；请在任务类中实现 build_transforms(train, image_size)，"
+            "或改用已提供预设变换的内置任务",
+        )
+    return transforms
 
 
 def build_synthetic_dataset(
@@ -124,22 +130,49 @@ def build_synthetic_dataset(
     return CustomDataset(samples=samples, task_type=task_type, transforms=transforms)
 
 
-def build_data(cfg, work_dir=None):
+def build_data(cfg, task, work_dir=None):
     """根据配置构建 (train_loader, val_loader)。
 
+    数据源三选一：
+
+    - ``data.dataset: dvx`` + ``data.spec``：按 ``dvx_dataset.yaml`` 构建
+      ``DVXDataset``（分类 / 检测 / 分割 / 多任务分类）；
+    - ``custom`` / ``synthetic``：内存合成数据（无网络环境快速验证）；
+    - 其它名称：走 ``build_dataset`` 的公开数据集预设。
+
+    预设变换统一来自 ``task.build_transforms``（契约 P2-2），不再由本入口按
+    ``task_type`` 硬编码。
+
     Args:
+        cfg: 全局配置。
+        task: 任务实例（提供 ``build_transforms``）。
         work_dir: 工作目录；合成数据缓存写到 work_dir/.cache/synthetic（隔离代码库）。
+
+    Raises:
+        ConfigError: ``data.dataset: dvx`` 缺少 ``data.spec``，或任务未提供预设变换。
     """
     task_type = cfg.task_type
     image_size = cfg.data.image_size
     num_classes = cfg.model.num_classes
 
-    train_tf = build_transforms(task_type, image_size, train=True)
-    val_tf = build_transforms(task_type, image_size, train=False)
-
     data_cfg = cfg.data
     dataset_name = data_cfg.get("dataset", "custom")
-    if dataset_name in ("custom", "synthetic") or data_cfg.get("synthetic", False):
+    spec_path = None
+    if dataset_name == "dvx":
+        spec_path = data_cfg.get("spec")
+        if not spec_path:
+            raise ConfigError(
+                "data.dataset 为 dvx 时必须提供 data.spec（dvx_dataset.yaml 路径）",
+                hint="例如 data.spec: ./data/cls/dvx_dataset.yaml",
+            )
+
+    train_tf = build_transforms(task, image_size, train=True)
+    val_tf = build_transforms(task, image_size, train=False)
+
+    if dataset_name == "dvx":
+        train_ds = DVXDataset(spec_path, split="train", transforms=train_tf)
+        val_ds = DVXDataset(spec_path, split="val", transforms=val_tf)
+    elif dataset_name in ("custom", "synthetic") or data_cfg.get("synthetic", False):
         n_train = data_cfg.get("num_samples", 64)
         n_val = data_cfg.get("val_samples", 16)
         cache_dir = os.path.join(work_dir, ".cache", "synthetic", task_type) if work_dir else None
@@ -318,7 +351,11 @@ def main():
     for w in schema_warnings:
         logger.warning(w)
 
-    train_loader, val_loader = build_data(cfg, work_dir=work_dir)
+    # 构造顺序（契约 P2-5）：config -> task -> transforms(task) -> data -> model -> trainer。
+    # 先建任务，数据装配才能向任务索取预设变换（P2-2），入口不再硬编码任务分派。
+    task = build_task(build_task_cfg(cfg))
+
+    train_loader, val_loader = build_data(cfg, task, work_dir=work_dir)
     logger.info(f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
 
     model = build_model(cfg.model.to_dict())
@@ -330,8 +367,6 @@ def main():
     if pretrained_backbone:
         load_backbone(model, pretrained_backbone)
         logger.info(f"Backbone pretrained weights loaded from: {pretrained_backbone}")
-
-    task = build_task(build_task_cfg(cfg))
 
     trainer = build_trainer(
         cfg,

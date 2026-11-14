@@ -34,7 +34,12 @@ from dvisionix.registry import METRICS
 def _cls_logits():
     targets = torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 0, 0])
     idx = torch.tensor([0, 1, 2, 3, 4, 0, 1, 2, 1, 1])  # 8 对 2 错
+    # one-hot×10 会让**非目标类全部并列 0**，torch.topk 的平票顺序未定义，
+    # TopK 断言会随 torch 版本漂移。这里给非目标类加上互不相等的确定偏移：
+    # 目标类仍远高于其它类，argmax 与 accuracy=0.8 不变，但第 2 名唯一确定
+    # （错误样本的目标类恒为第 2 名 → top-2 准确率恒为 1.0）。
     logits = torch.nn.functional.one_hot(idx, 5).float() * 10
+    logits = logits - torch.arange(5).float() * 1e-3
     return logits, targets
 
 

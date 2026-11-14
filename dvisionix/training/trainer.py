@@ -31,6 +31,7 @@ from ..utils import get_device, set_seed
 from ..utils.logging import TrainingLogger
 from .callbacks import Callback, CallbackList, ModelCheckpoint, ProgressBar
 from .checkpoint import strip_wrapper_prefixes
+from .contract import check_batch_fields, check_task_data, check_task_model
 from .tasks import BaseTask
 
 #: 完整 checkpoint 的结构版本。
@@ -213,13 +214,53 @@ def _gather_tuple(seq: List[Any]) -> Any:
     return _concat_objects(preds), _concat_objects(targets)
 
 
+def _move_objects(value: Any, device: torch.device) -> Any:
+    """把嵌套结构里的张量递归搬到 ``device``，非张量原样返回。
+
+    支持 ``Tensor / dict / list / tuple``（含 namedtuple），覆盖内置任务的
+    ``preds = (boxes_list, scores_list, labels_list)`` 等变长容器结构。
+
+    DDP 跨设备聚合依赖它：``all_gather_object`` 收集到的张量仍停留在各自 GPU，
+    直接 ``torch.cat`` 会因跨设备而失败；聚合前统一转 CPU、合并后再搬回训练设备，
+    是 NCCL 下最稳妥的对象聚合方式（契约 P2-4.2）。
+    """
+    if isinstance(value, torch.Tensor):
+        if value.device == device:
+            return value
+        return value.to(device)
+    if isinstance(value, dict):
+        return {key: _move_objects(item, device) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_move_objects(item, device) for item in value]
+    if isinstance(value, tuple):
+        parts = [_move_objects(item, device) for item in value]
+        if hasattr(value, "_fields"):
+            return type(value)(*parts)
+        return tuple(parts)
+    return value
+
+
 def _gather_preds_targets(
-    step_result: Dict[str, Any], world_size: int, rank: int
+    step_result: Dict[str, Any],
+    world_size: int,
+    rank: int,
+    device: Optional[torch.device] = None,
 ) -> Optional[Tuple[Any, Any]]:
     """``all_gather`` 各 rank 的 (preds, targets) 并递归合并。
 
     训练中验证与独立 ``Trainer.validate()`` **共用本函数**，以保证两条路径的全局
     指标口径一致（CodePlan 7.4 步骤 2-1 / D8）。
+
+    聚合前先把 preds/targets 递归搬到 **CPU**：``all_gather_object`` 会 pickle 对象，
+    而各 rank 的张量停留在各自的 GPU 上，合并阶段的 ``torch.cat`` 会直接报
+    "Expected all tensors to be on the same device"。给定 ``device`` 时，合并结果
+    会再递归搬回该设备，供 ``task.update_metrics`` 正常使用。
+
+    Args:
+        step_result: 单步验证结果（需含 ``preds`` / ``targets``）。
+        world_size: 进程数。
+        rank: 当前 rank。
+        device: 合并结果要搬回的训练设备；None 时保持 CPU（供旧调用方使用）。
 
     Returns:
         rank0 上返回合并后的 ``(preds, targets)``；非 rank0 或 step_result 不含
@@ -231,11 +272,19 @@ def _gather_preds_targets(
     targets = step_result.get("targets")
     if preds is None or targets is None:
         return None
+    # 统一转 CPU 再通信：避免各 rank 的 GPU 张量被 cat 到同一设备时失败
+    cpu_payload = (
+        _move_objects(preds, torch.device("cpu")),
+        _move_objects(targets, torch.device("cpu")),
+    )
     gathered: List[Any] = [None] * world_size
-    dist.all_gather_object(gathered, (preds, targets))
+    dist.all_gather_object(gathered, cpu_payload)
     if rank != 0:
         return None
-    return _gather_tuple(gathered)
+    merged = _gather_tuple(gathered)
+    if device is None:
+        return merged
+    return _move_objects(merged[0], device), _move_objects(merged[1], device)
 
 
 class Trainer:
@@ -362,6 +411,8 @@ class Trainer:
         self.current_epoch = 0
         self.global_step = 0
         self.stop_training = False
+        #: 首个训练 batch 的字段校验只做一次（整个 fit 一次），避免每步开销。
+        self._batch_fields_checked = False
         self.history: List[Dict[str, float]] = []
         self.teacher_logits = None  # DistillCallback 使用
 
@@ -372,13 +423,23 @@ class Trainer:
         import torch.distributed as dist
 
         if self.strategy == "auto":
-            # 进程组已初始化即意味着处于分布式启动中（torchrun / mp.spawn），
-            # 与是否 CUDA 无关 —— CPU gloo 是官方的回归路径（CodePlan 7.4 步骤 2-1）。
-            self.strategy = (
-                "ddp"
-                if dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
-                else "none"
+            # 判定为 DDP 的条件（满足任一即可，契约 P2-4.1）：
+            # 1. 进程组已初始化且 world_size > 1（torchrun / mp.spawn / 手动 init）；
+            # 2. 环境里同时存在 RANK 与 WORLD_SIZE 且 WORLD_SIZE > 1 —— torchrun
+            #    会注入这些变量，但此时进程组可能尚未初始化，不能只看 dist 状态。
+            # 两者都不满足时保持单进程，避免误把普通 python 启动当成分布式。
+            group_ready = (
+                dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1
             )
+            launched_by_torchrun = False
+            rank_env = os.environ.get("RANK")
+            world_env = os.environ.get("WORLD_SIZE")
+            if rank_env is not None and world_env is not None:
+                try:
+                    launched_by_torchrun = int(world_env) > 1
+                except (TypeError, ValueError):
+                    launched_by_torchrun = False
+            self.strategy = "ddp" if (group_ready or launched_by_torchrun) else "none"
         if self.strategy == "ddp":
             if not dist.is_initialized():
                 if "RANK" not in os.environ or "WORLD_SIZE" not in os.environ:
@@ -503,6 +564,15 @@ class Trainer:
             set_seed(self.seed + self.rank)
         # 把搬运策略下发给 Task（Task 负责把 batch 搬到设备）
         self.task.non_blocking = self.non_blocking
+
+        # P2-3：训练开始前完成任务 / 模型 / 数据契约校验。必须在 _wrap_model 之前，
+        # 这样拿到的是用户传入的真实模型（而不是 DDP / compile 包装后的对象），
+        # 校验失败时不会留下已构造的优化器与 DDP 包装。
+        dataset = getattr(self.train_loader, "dataset", None)
+        check_task_model(self.task, model, dataset)
+        check_task_data(self.task, dataset)
+        self._batch_fields_checked = False
+
         self.model = self._wrap_model(model)
 
         # 配置优化器和学习率调度器
@@ -639,6 +709,12 @@ class Trainer:
 
         total_batches = len(loader)
         for batch_idx, batch in enumerate(loader):
+            if not self._batch_fields_checked:
+                # P2-3：首个训练 batch 校验一次必需字段，确保数据管线的
+                # data_type / transforms / collate 与任务一致；失败发生在
+                # 第一次前向与反向之前。
+                check_batch_fields(self.task, batch)
+                self._batch_fields_checked = True
             self.callbacks.on_batch_begin(self, batch_idx, mode, batch)
 
             with torch.autocast(device_type=self.device.type, enabled=bool(self.scaler)):
@@ -716,7 +792,7 @@ class Trainer:
         最容易被忽视的开销，没有度量就无法判断是否需要优化（CodePlan 7.7 步骤 5-2）。
         """
         start = time.perf_counter()
-        merged = _gather_preds_targets(step_result, self.world_size, self.rank)
+        merged = _gather_preds_targets(step_result, self.world_size, self.rank, device=self.device)
         elapsed_ms = (time.perf_counter() - start) * 1000.0
 
         preds = step_result.get("preds")

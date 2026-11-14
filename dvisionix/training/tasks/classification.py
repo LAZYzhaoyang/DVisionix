@@ -20,6 +20,18 @@ class ClassificationTask(BaseTask):
     默认损失：CrossEntropy；默认指标：accuracy / precision / recall / f1。
     """
 
+    task_type = "classification"
+    accepted_model_tasks = ("classification",)
+    accepted_data_types = ("classification",)
+    required_batch_fields = ("image", "label")
+
+    @classmethod
+    def build_transforms(cls, train: bool, image_size: int):
+        """返回分类任务的预设变换（``ClassificationTransforms``）。"""
+        from ...data.transforms import ClassificationTransforms
+
+        return ClassificationTransforms(train=train, image_size=image_size)
+
     def __init__(
         self,
         num_classes: Optional[int] = None,

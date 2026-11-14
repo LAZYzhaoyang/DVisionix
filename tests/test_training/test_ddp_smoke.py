@@ -3,19 +3,29 @@
 # 用途: DDP 多卡冒烟测试。
 """DDP 多卡冒烟测试。
 
-本机无多卡时自动跳过；在有 2+ 张 CUDA 卡的机器上通过以下命令运行：
+本测试**必须由 torchrun 启动**（否则单进程跑 DDP 断言没有意义、且在缺进程组时
+直接报错）；本机无多卡时同样跳过。在有 2+ 张 CUDA 卡的机器上运行：
 
     torchrun --nproc_per_node=2 -m pytest tests/test_training/test_ddp_smoke.py -q
 """
+
+import os
 
 import pytest
 import torch
 import torch.distributed as dist
 
-pytestmark = pytest.mark.skipif(
-    not torch.cuda.is_available() or torch.cuda.device_count() < 2,
-    reason="需要 2+ 张 CUDA 卡（本机无 GPU 时跳过）",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not torch.cuda.is_available() or torch.cuda.device_count() < 2,
+        reason="需要 2+ 张 CUDA 卡（本机无 GPU 时跳过）",
+    ),
+    pytest.mark.skipif(
+        "RANK" not in os.environ or "WORLD_SIZE" not in os.environ,
+        reason="必须由 torchrun 启动（未检测到 RANK/WORLD_SIZE）；"
+        "请用 torchrun --nproc_per_node=2 -m pytest tests/test_training/test_ddp_smoke.py -q",
+    ),
+]
 
 
 def test_ddp_smoke_train_and_metrics():
