@@ -5,9 +5,9 @@
 
 ## [Unreleased] — v2 开发中
 
-> 本小节记录 v2 重构 P0 / P1 阶段的变更；版本号尚未变更（仍为 1.1.1），
-> 训练侧的 DVX 接线在 P2。接口契约见
-> [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)。
+> 本小节记录 v2 重构 P0 / P1 / P2 阶段的变更；版本号尚未变更（仍为 1.1.1）。
+> 接口契约见 [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md) 与
+> [P2 实现契约](docs/design/v2_p2_contract.md)。
 
 ### 新增：P0 架构基线
 
@@ -63,13 +63,74 @@
   `docs/quick_start.md` 同步索引与上手命令；`configs/datasets/` 增加分类 / 检测 /
   分割 / 多任务四份示例模板。
 
-### 尚未接线
+### 新增 / 修复：P2 训练契约、DVX 接线与 DDP
 
-- `DVXDataset` 尚未注册到 `DATASETS`，`tools/train.py` / `build_dataset` 还不能按
-  配置直接构建；训练接线（transforms / collate / task 匹配）属于 P2。
+- **三级契约校验** `dvisionix/training/contract.py`（新增）：
+  - `check_task_model`：模型能力（`model_task_types`）与 `task.accepted_model_tasks`
+    必须有交集；数据集与模型都暴露 `num_classes` 时还必须一致，否则分别抛
+    `TaskModelMismatchError` / `TaskDataMismatchError`；
+  - `check_task_data`：DVX 数据集的 `data_type` 必须在 `task.accepted_data_types` 内；
+    没有 `data_type` 的 `CustomDataset` / 公开数据集预设直接放行；
+  - `check_batch_fields`：训练 batch 必须含 `required_batch_fields`，只在第一个训练
+    batch 检查一次。
+  - 错误消息统一包含「发生了什么 + 提示：如何修复」；未声明能力的自定义任务按
+    「渐进式契约」跳过对应校验，内置 7 个任务均已显式声明。
+- **模型能力声明** `dvisionix/models/base.py`：新增 `BaseModel.supported_tasks` 与
+  `model_task_types()`（优先 `supported_tasks`，回退 `task_type`），并从
+  `dvisionix.models` 导出。
+- **Task 承担任务知识**：`BaseTask` 增加 `task_type` / `accepted_model_tasks` /
+  `accepted_data_types` / `required_batch_fields` 与 `build_transforms()`；7 个内置任务
+  （`ClassificationTask` / `MultiLabelTask` / `DetectionTask` / `SegmentationTask` /
+  `MaskFormerTask` / `SimCLRTask` / `LinearEvalTask`）逐一声明契约并提供预设变换。
+- **训练入口接线**：`Trainer.fit()` 在 `_wrap_model` 之前完成模型 / 数据校验，第一个
+  训练 batch 前完成字段校验；失败时不会包装 DDP / 构造优化器，也不会执行任何优化步。
+- **DVX 数据集接入** `tools/train.py`：新增 `data.dataset: "dvx"` + `data.spec`
+  数据源，按 split 构建 `DVXDataset` 并使用任务的预设变换与数据集自带的
+  `collate_fn`；保留 `synthetic` 与公开数据集预设路径。构造顺序改为
+  `config → task → transforms(task) → data → model → trainer`，不再按 `task_type`
+  硬编码 if/else；任务未提供变换时抛 `ConfigError`。
+- **训练配置模板** `configs/examples/dvx_{classification,detection,segmentation}.yaml`：
+  `data.spec` 为占位路径的外部数据模板；`tests/test_e2e_configs.py` 将 `examples/`
+  排除出 CI 端到端门禁，避免依赖仓库外数据。
+- **分类头 labels 兼容**：`ClsHead` / `MultiLabelHead.forward` 接受 `labels=None`。
+  此前 `ClassificationTask` 训练步会无条件传 `labels=`，而 `LinearClassifier` 会把
+  kwargs 透传给头，最主流的 `LinearClassifier + ClsHead + ClassificationTask` 路径
+  在第一个 batch 必崩；现已修复，并新增反射契约测试防止同类问题复发。
+- **DDP 修复**：
+  - `strategy: auto` 现在同时识别「进程组已初始化且 world_size > 1」与 torchrun 注入的
+    `RANK` / `WORLD_SIZE`；torchrun 下日志显示 `strategy: ddp`，入口的
+    `Train batches: 8` 经 `DistributedSampler` 切分为每 rank 4 个 batch（`8 → 4/4`）。
+  - 多卡验证聚合改为先把 `preds` / `targets` 递归搬到 CPU，再 `all_gather_object`；
+    合并后搬回训练设备再更新指标，修复跨设备 `torch.cat` 报
+    "Expected all tensors to be on the same device"。支持
+    `Tensor` / `dict` / `list` / `tuple`（含检测的
+    `(boxes_list, scores_list, labels_list)`）。
+  - `tests/test_training/test_ddp_smoke.py` 增加"必须由 torchrun 启动"的 skip 守卫；
+    `tests/test_metrics/test_metrics.py` 的 TopK 夹具改为非目标类互不相等，去掉平票
+    导致的断言漂移。
+- **测试**：新增 `tests/test_training/test_contracts.py`、
+  `tests/test_training/test_dvx_config_smoke.py`；全量 `pytest tests -q` 为
+  **903 passed / 1 skipped / 0 failed**。
+- **真实数据验收**（1 epoch，仅用于确认链路跑通，**不作为模型效果结论**）：
+  cls `val_accuracy` 0.9231、det `val_mAP` 0.0176、seg `val_mIoU` 0.1701；
+  torchrun 2 卡 DDP 冒烟通过。
+- **文档**：新增 [训练契约与自适应训练](docs/training_contracts.md)；
+  `docs/dataset_spec.md` / `docs/quick_start.md` / `README.md` / `docs/README.md`
+  同步训练接线、契约与示例命令。
+
+### 尚未接线 / 已知边界
+
+- `DVXDataset` 仍未注册到 `DATASETS`；训练入口通过 `data.dataset: dvx` + `data.spec`
+  的专用分支构建，`build_dataset({...})` 不能按名字直接构建。
+- 多任务分类训练（模型 + Task）尚未实现（P3）；数据层可加载
+  `multi_task_classification` 规格，但内置任务没有接受该 `data_type` 的 Task，
+  训练入口会被契约校验拦下。
+- DDP 已验证范围为单机多卡；多机（多节点）DDP 未验证。
+- P2 范围不含推理与导出链路。
 - `seg_mode: query` 只是 schema 保留值，数据层仅实现 `semantic`。
 - 检索（retrieval / re-identification）任务尚未实现。
-- `ignore_index` 目前只做 spec 校验与展示，`DVXDataset` 栅格化背景固定为 0（P2 对齐）。
+- `ignore_index` 目前只做 spec 校验与展示，`DVXDataset` 栅格化背景固定为 0；
+  训练配置的 `ignore_index` 需与规格保持一致。
 
 ## [1.1.1] — 正确性与稳定性修复
 

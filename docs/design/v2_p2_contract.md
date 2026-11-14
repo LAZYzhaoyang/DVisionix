@@ -36,6 +36,8 @@ def model_task_types(model: nn.Module) -> tuple[str, ...]:
 
 - **不修改** `TASK_TYPES = {"classification","detection","segmentation"}` 的既有语义。
 - 不改动任何既有模型的构造行为；仅新增声明能力。
+- **类属性声明**：子类可直接写 `task_type = "detection"`；`BaseModel.__init__` 未显式传
+  `task_type=` 时**不写实例属性**，否则 `None` 会覆盖子类的类属性声明（P2 实现中修正）。
 - 建议：为 `FeatureBackboneBase` 等非任务模型保持 `()`（它们不是完整模型）。
 
 ## 2. P2-2 Task 契约（`dvisionix/training/tasks/base.py`）

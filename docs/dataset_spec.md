@@ -4,12 +4,13 @@ DVX 是 v2 引入的数据集描述格式：**一个数据集 = 一个根目录 
 规格文件声明"数据在哪里、有什么标注、怎么切分"，`DVXDataset` 按声明把样本读成符合
 `Sample` 契约的 dict，可直接交给 `DataLoader`（检测/分割需使用专用 collate，见 §6.3）。
 
-> 适用范围：v2 开发中（P1 已完成，尚未发布）。训练侧的配置接线在 P2，
-> 当前 `tools/train.py` **还不能**通过 YAML 配置直接构建 `DVXDataset`，见文末「边界说明」。
+> 适用范围：v2 开发中（P1 数据层 + P2 训练接线已完成，尚未发布）。
+> `tools/train.py` 已支持 `data.dataset: dvx` + `data.spec`，配置驱动训练见 §5.4；
+> 任务 / 模型 / 数据契约校验见 [训练契约与自适应训练](training_contracts.md)。
 > 运行示例前请先激活 conda 环境 `dvisionix`。
 
 相关文档：[数据模块](data.md)、[快速开始](quick_start.md)、
-[架构与分层规则](architecture.md)。
+[训练契约与自适应训练](training_contracts.md)、[架构与分层规则](architecture.md)。
 
 ---
 
@@ -30,7 +31,8 @@ DVX 是 v2 引入的数据集描述格式：**一个数据集 = 一个根目录 
    绝不移动、改名或删除原始文件；同一份数据 + 同一个 seed 得到完全相同的切分。
 5. **`data_type` 描述"有什么标注"，不决定"训练什么"**。
    `data_type: detection` 表示样本带检测框，具体训练目标（分类/检测/蒸馏/检索……）
-   由训练任务决定。本期只完成数据层，训练目标接线在 P2。
+   由训练任务决定。P2 已把 `DVXDataset` 接入 `tools/train.py`，训练目标由配置中的
+   `task.type` 选择（见 §5.4）。
 
 ---
 
@@ -405,6 +407,28 @@ print(sample["image"].shape, sample["label"])   # (3, 224, 224) tensor(...)
 
 三种数据类型的完整写法见下一节。
 
+### 5.4 第四步：用 DVX 数据集训练
+
+`tools/train.py` 通过 `data.dataset: dvx` + `data.spec` 直接构建 `DVXDataset`，
+变换由任务的 `build_transforms` 提供，检测/分割会自动使用数据集自带的 `collate_fn`：
+
+```bash
+python tools/train.py \
+  --config configs/examples/dvx_classification.yaml \
+  --cfg-options data.spec=./data/my_cls/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_cls
+```
+
+- `data.dataset: "dvx"` 时必须提供 `data.spec`（`dvx_dataset.yaml` 路径）；
+  `data.spec` 的相对路径按**当前工作目录**解析，规格里的 `root` 相对**规格文件所在目录**解析。
+- `model.num_classes` 必须与 spec 的类别数一致；不一致时训练入口会在训练开始前
+  抛 `TaskDataMismatchError`，而不是训练到一半才报（见
+  [训练契约](training_contracts.md)）。
+- 检测、分割把 `--config` 换成
+  `configs/examples/dvx_detection.yaml` / `configs/examples/dvx_segmentation.yaml`
+  即可；三份模板的 `data.spec` 都是占位路径，使用前请替换。
+- 示例配置默认 `training.device: auto`、`training.amp: false`；AMP 需要显式改成 `true`。
+
 ---
 
 ## 6. 编程用法
@@ -654,11 +678,13 @@ for name in ("cls", "det", "multicls", "seg"):
 ```
 
 > 真实数据根目录不在仓库内；请把上面的绝对路径换成自己的数据位置。
-> 仓库内另附四份示例模板（它们是 DVX 规格，不是 `tools/train.py` 的训练配置）：
+> 仓库内另附四份 DVX 规格模板（它们不是 `tools/train.py` 的训练配置）：
 > [分类](../configs/datasets/classification_folder.example.yaml)、
 > [检测](../configs/datasets/detection_labelme.example.yaml)、
 > [分割](../configs/datasets/segmentation_labelme.example.yaml)、
 > [多任务](../configs/datasets/multi_task_classification.example.yaml)。
+> 训练配置模板见 `configs/examples/dvx_{classification,detection,segmentation}.yaml`
+> （用法见 §5.4）。
 
 ---
 
@@ -705,9 +731,11 @@ parse:
   因此"背景"在掩码里就是 0。
 - `__background__` 同时出现在 `ignore_labels` 中：标注文件里即使有 `label: __background__`
   的形状也会被丢弃，不会变成目标 id 0。
-- `ignore_index: 255` 是**给训练侧**的忽略像素值（`CrossEntropy` / mIoU 等），
-  当前 `DVXDataset` 的栅格化固定背景为 0，**尚未消费**该字段；P2 接线训练时需让训练配置的
-  `ignore_index` 与规格保持一致，否则背景会被当作前景参与 loss/指标。
+- `ignore_index: 255` 是**给训练侧**的忽略像素值（`CrossEntropy` / mIoU 等）。
+  P2 训练接线后，示例配置 `configs/examples/dvx_segmentation.yaml` 的
+  `loss.ignore_index` 与规格保持一致；但 `DVXDataset` 的栅格化仍固定背景为 0，
+  **尚未消费**该字段。若你的数据包含 void 像素，需要确保训练配置的 `ignore_index`
+  与 spec 一致，否则这些像素会被当成某个类别参与 loss/指标。
 - `seg_mode: query` 目前只是 schema 接受的保留值，`DVXDataset` 只实现 `semantic` 栅格化。
 
 ---
@@ -715,10 +743,12 @@ parse:
 ## 9. 边界说明
 
 - **`data_type` ≠ 训练目标**。规格只描述标注形态；同一份 `detection` 数据可以用于检测，
-  也可以用于其他消费 `boxes`/`labels` 的任务，具体由训练任务（P2）决定。
-- **尚未接入 `tools/train.py`**。`DVXDataset` 已导出且可编程式使用，但还没有注册到
-  `DATASETS`，`build_dataset({...})` 与 `tools/train.py --config` 目前无法按配置构建它；
-  训练接线（含 transforms/collate/task 预设的匹配）属于 P2。
+  也可以用于其他消费 `boxes`/`labels` 的任务，具体由训练任务决定。
+- **`DVXDataset` 未注册到 `DATASETS`**。训练入口通过 `data.dataset: dvx` +
+  `data.spec` 的专用分支构建它（§5.4），`build_dataset({...})` 仍不能按名字直接构建。
+- **多任务分类训练尚未实现（P3）**。数据层可加载、体检 `multi_task_classification`
+  规格，但内置任务没有接受该 `data_type` 的 Task，也没有多任务分类模型；走训练入口时
+  会被契约校验拦下。
 - **检索任务尚未实现**。本期没有 retrieval / re-identification 的 spec 类型、样本字段与评估；
   后续如需支持，应新增 `data_type` 而不是复用分类字段。
 - **`query` 分割模式尚未实现**。schema 接受 `seg_mode: query` 以便向前兼容，但数据层没有

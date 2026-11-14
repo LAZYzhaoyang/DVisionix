@@ -34,13 +34,20 @@ class BaseModel(nn.Module):
     #: 默认空元组表示"由 ``task_type`` 推导"；多任务模型可显式声明多个能力。
     supported_tasks: ClassVar[tuple[str, ...]] = ()
 
+    #: 模型任务类型；子类可直接声明为类属性（如 ``task_type = "detection"``），
+    #: 也可在构造时通过 ``super().__init__(task_type=...)`` 传入。
+    task_type: Optional[str] = None
+
     def __init__(self, task_type: Optional[str] = None):
         super().__init__()
-        if task_type is not None and task_type not in TASK_TYPES:
-            raise ValueError(
-                f"Invalid task_type {task_type!r}, expected one of {sorted(TASK_TYPES)}"
-            )
-        self.task_type = task_type
+        if task_type is not None:
+            if task_type not in TASK_TYPES:
+                raise ValueError(
+                    f"Invalid task_type {task_type!r}, expected one of {sorted(TASK_TYPES)}"
+                )
+            self.task_type = task_type
+        # 未显式传参时**不写实例属性**：否则 None 会覆盖子类的类属性声明，
+        # 使 model_task_types() 读不到能力（自定义模型常用 "task_type = ..." 写法）。
 
     def forward(self, x, **kwargs):
         """前向传播，子类必须实现，只返回原始预测。"""

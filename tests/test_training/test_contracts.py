@@ -133,6 +133,19 @@ class TestModelTaskTypes:
         assert model_task_types(SimpleSegmentationModel(num_classes=3)) == ("segmentation",)
         assert model_task_types(GridDetectionModel(num_classes=3)) == ("detection",)
 
+    def test_class_level_task_type_declaration_is_respected(self):
+        """子类用类属性声明 task_type 时，``super().__init__()`` 不应把它覆盖成 None。"""
+
+        class ClassAttrDetectionModel(BaseModel):
+            task_type = "detection"
+
+            def forward(self, x):
+                return x
+
+        model = ClassAttrDetectionModel()
+        assert model.task_type == "detection"
+        assert model_task_types(model) == ("detection",)
+
 
 # ---------------------------------------------------------------------------
 # P2-2 Task 契约

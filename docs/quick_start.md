@@ -212,4 +212,40 @@ python -c "from dvisionix.data import DVXDataset; ds = DVXDataset('./data/my_cls
   [多任务](../configs/datasets/multi_task_classification.example.yaml)。
 - 检测/分割用 `DataLoader` 时要传 `collate_fn=ds.collate_fn`；多任务分类用
   `task="<任务名>"` 过滤样本。
-- 训练接线（把 `DVXDataset` 接进 `tools/train.py` 的配置）属于 P2，当前尚未接线。
+- 训练入口已支持 `data.dataset: dvx` + `data.spec`，见下一节；契约校验与自适应训练见
+  [训练契约与自适应训练](training_contracts.md)。
+
+---
+
+## 用 DVX 标准数据集训练
+
+`tools/train.py` 通过 `data.dataset: dvx` + `data.spec` 直接构建 `DVXDataset`，
+`data.spec` 指向你的 `dvx_dataset.yaml`（三份模板里的 `data.spec` 是占位路径）：
+
+```bash
+# 分类
+python tools/train.py \
+  --config configs/examples/dvx_classification.yaml \
+  --cfg-options data.spec=./data/my_cls/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_cls
+
+# 检测
+python tools/train.py \
+  --config configs/examples/dvx_detection.yaml \
+  --cfg-options data.spec=./data/my_det/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_det
+
+# 分割
+python tools/train.py \
+  --config configs/examples/dvx_segmentation.yaml \
+  --cfg-options data.spec=./data/my_seg/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_seg
+```
+
+- `model.num_classes` 必须与 spec 的类别数一致（分割通常含 `__background__`）；
+  不一致会在训练开始前抛 `TaskDataMismatchError`，由契约校验兜底。
+- 数据变换由任务的 `build_transforms` 提供，检测/分割的 `collate_fn` 由入口自动使用。
+- `training.device: auto` 按可用设备自动选择；AMP 仍由 `training.amp` 显式控制
+  （示例配置均为 `false`）。
+- 三级契约、7 个内置任务契约、自定义任务/模型声明与 `strategy: auto` 的行为见
+  [训练契约与自适应训练](training_contracts.md)。
