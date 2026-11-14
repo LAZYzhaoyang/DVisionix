@@ -12,14 +12,14 @@
 
 DVisionix 面向个人科研与工程实践，目标是做一个「自己的算法工具箱」：
 骨干、颈部、头部、损失、指标、任务、回调全部**注册即用**，可以像搭积木一样自由组合，
-覆盖分类、目标检测、语义/实例分割与自监督对比学习。
+覆盖分类、目标检测、语义/实例分割、路由式多任务分类与自监督对比学习。
 
 ---
 
 ## ✨ 核心特性
 
 ### 🏆 统一训练架构
-- **Task 组件**：任务逻辑（分类/检测/分割/自监督/线性评估）与训练循环完全解耦，自定义任务继承 `BaseTask` 即可
+- **Task 组件**：任务逻辑（分类/检测/分割/多任务/自监督/线性评估）与训练循环完全解耦，自定义任务继承 `BaseTask` 即可
 - **通用 Trainer**：支持任意任务，无需修改训练代码
 - **Callback 系统**：ModelCheckpoint / EarlyStopping / EMA / 知识蒸馏 / 进度条，灵活生命周期钩子
 - **训练契约校验**：任务↔模型能力、任务↔DVX `data_type`、batch 必需字段三级校验，
@@ -36,6 +36,7 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 
 ### 📊 完整任务支持
 - ✅ 图像分类（含度量学习：ArcFace/CosFace/SphereFace/AdaFace/NormFace/CurricularFace/PartialFC/Circle）
+- ✅ 路由式多任务分类（共享骨干只前向一次，按样本 `task` 路由到各任务分类头，各任务标签空间独立）
 - ✅ 目标检测（FCOS / RetinaNet / YOLOv5/7/8/9/10/11 / DETR / RT-DETR / DeformableDETR / DINO-lite / CenterNet）
 - ✅ 语义分割（Seg/FCN/DeepLabV3(+)/UNet/SegFormer(+V2/V3)/PSP/UPerNet/BiSeNet/MaskFormer/Mask2Former/SwinUNet）
 - ✅ 实例/全景分割（MaskFormer/Mask2Former + PQ/SQ/RQ）
@@ -133,7 +134,7 @@ python tools/check_dataset.py --spec ./data/my_cls/dvx_dataset.yaml --split-prev
 # 3) 用 DVXDataset 加载（分类示例）
 python -c "from dvisionix.data import DVXDataset; ds = DVXDataset('./data/my_cls/dvx_dataset.yaml', split='train'); print(len(ds), ds[0]['label'])"
 
-# 4) 用 DVX 数据集训练（分类示例；检测/分割见 configs/examples/）
+# 4) 用 DVX 数据集训练（分类示例；检测/分割/多任务见 configs/examples/）
 python tools/train.py --config configs/examples/dvx_classification.yaml \
   --cfg-options data.spec=./data/my_cls/dvx_dataset.yaml --work-dir /tmp/dvx_cls
 ```
@@ -141,9 +142,11 @@ python tools/train.py --config configs/examples/dvx_classification.yaml \
 `DVXDataset` 支持分类、labelme 检测/分割、多任务分类；字段说明、三种切分模式与四类真实数据
 见 [DVX 标准数据集](docs/dataset_spec.md)，数据模板在 `configs/datasets/`
 （[分类](configs/datasets/classification_folder.example.yaml) 等四份）。
-训练入口通过 `data.dataset: dvx` + `data.spec` 构建它；`model.num_classes` 必须与
-spec 类别数一致，由契约校验兜底。检测/分割配置模板见 `configs/examples/`，
-三级校验与自适应训练见 [训练契约与自适应训练](docs/training_contracts.md)。
+训练入口通过 `data.dataset: dvx` + `data.spec` 构建它；单任务训练的 `model.num_classes`
+必须与 spec 类别数一致，由契约校验兜底。检测/分割配置模板见 `configs/examples/`，
+路由式多任务分类（`<任务>/<类别>/*.jpg`，每任务一个分类头）见
+[多任务分类](docs/multi_task.md)，三级校验与自适应训练见
+[训练契约与自适应训练](docs/training_contracts.md)。
 
 ### 编程式使用
 
@@ -177,13 +180,13 @@ dvisionix/
 │   ├── heads/           # 分类(11) · 分割(14) · 检测(10)，每头一文件
 │   ├── losses/          # BaseLoss + LossComposer + 分类/分割/检测损失（含 assigner/matcher）
 │   ├── detectors/       # SingleStageDetector 脚手架 + 12 个检测器（decode 与模型同文件）
-│   ├── classifiers/     # LinearClassifier（组合器）
+│   ├── classifiers/     # LinearClassifier（组合器）/ MultiTaskClassifier（路由式多任务）
 │   ├── segmenters/      # SegmentationModel / SwinUNet（组合器）
 │   ├── postprocess.py   # NMS / IoU / 共享契约解码器
 │   └── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel / DetHead）
 ├── training/
 │   ├── trainer.py       # 统一训练引擎（Task 驱动 / DDP / AMP / 梯度累积 / resume / torch.compile）
-│   ├── tasks/           # BaseTask + 7 个内置任务（分类/检测/分割/多标签/SimCLR/线性评估/MaskFormer）
+│   ├── tasks/           # BaseTask + 8 个内置任务（分类/检测/分割/多标签/多任务/SimCLR/线性评估/MaskFormer）
 │   ├── callbacks/       # ProgressBar / ModelCheckpoint / EarlyStopping / EMA / DistillCallback
 │   ├── optim/           # OPTIMIZERS / SCHEDULERS 注册表（含 warmup 调度器）
 │   └── workdir.py / builder.py / checkpoint.py / evaluation.py
@@ -206,7 +209,8 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 | [配置系统](docs/config_system.md) | Config 加载 / 继承 / CLI 覆盖 / schema 校验 |
 | [数据模块](docs/data.md) | Sample 协议、BaseDataset、transforms、数据集工具箱 |
 | [DVX 标准数据集](docs/dataset_spec.md) | dvx_dataset.yaml 字段、三种切分、DVXDataset 用法与四套真实数据 |
-| [训练契约与自适应训练](docs/training_contracts.md) | 任务/模型/数据三级契约、7 个内置任务、自定义能力声明、`strategy: auto` / `device` / AMP |
+| [训练契约与自适应训练](docs/training_contracts.md) | 任务/模型/数据三级契约、8 个内置任务、自定义能力声明、`strategy: auto` / `device` / AMP |
+| [路由式多任务分类](docs/multi_task.md) | 共享骨干 + 每任务一个分类头、数据与配置、单卡/DDP 训练、指标命名与限制 |
 | [架构与分层规则](docs/architecture.md) | R1-R3、layers.yaml、分层检查器与例外登记流程 |
 | [骨干网络](docs/backbones.md) | 12 种内置骨干与预训练加载 |
 | [自定义模型](docs/custom_models.md) | 自定义 Layer / 注册 / 配置驱动组装 |
@@ -226,7 +230,7 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-测试状态**以 CI 运行结果为准**。当前实测 **903 passed / 1 skipped / 0 failed**
+测试状态**以 CI 运行结果为准**。当前实测 **963 passed / 1 skipped / 0 failed**
 （v1.1.0 基线为 447 passed + 2 skipped），`ruff` / `black` 全绿。
 `test_ddp_cpu.py` 的两条多进程用例需要创建命名管道，在禁止命名管道的受限沙箱中可能失败；
 本机与常规 CI 环境可正常运行。

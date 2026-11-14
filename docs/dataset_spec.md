@@ -4,13 +4,15 @@ DVX 是 v2 引入的数据集描述格式：**一个数据集 = 一个根目录 
 规格文件声明"数据在哪里、有什么标注、怎么切分"，`DVXDataset` 按声明把样本读成符合
 `Sample` 契约的 dict，可直接交给 `DataLoader`（检测/分割需使用专用 collate，见 §6.3）。
 
-> 适用范围：v2 开发中（P1 数据层 + P2 训练接线已完成，尚未发布）。
+> 适用范围：v2 开发中（P1 数据层 + P2 训练接线 + P3 多任务分类训练已完成，尚未发布）。
 > `tools/train.py` 已支持 `data.dataset: dvx` + `data.spec`，配置驱动训练见 §5.4；
-> 任务 / 模型 / 数据契约校验见 [训练契约与自适应训练](training_contracts.md)。
+> 任务 / 模型 / 数据契约校验见 [训练契约与自适应训练](training_contracts.md)，
+> 多任务分类训练见 [路由式多任务分类](multi_task.md)。
 > 运行示例前请先激活 conda 环境 `dvisionix`。
 
 相关文档：[数据模块](data.md)、[快速开始](quick_start.md)、
-[训练契约与自适应训练](training_contracts.md)、[架构与分层规则](architecture.md)。
+[训练契约与自适应训练](training_contracts.md)、[路由式多任务分类](multi_task.md)、
+[架构与分层规则](architecture.md)。
 
 ---
 
@@ -74,6 +76,8 @@ classes: [cat, dog]
 
 多任务分类是同样的布局，标准结构就是 `<任务>/<类别>/*.jpg`：每个任务有自己的任务子目录
 和独立类别表，**不需要**任何额外的中间层（例如再包一层 `split_dirs/`）。
+数据加载、体检与可视化见本节示例；训练接线与模型/任务契约见
+[路由式多任务分类](multi_task.md)。
 
 ```text
 my_multi/
@@ -417,16 +421,26 @@ python tools/train.py \
   --config configs/examples/dvx_classification.yaml \
   --cfg-options data.spec=./data/my_cls/dvx_dataset.yaml \
   --work-dir /tmp/dvx_cls
+
+# 多任务分类
+python tools/train.py \
+  --config configs/examples/dvx_multi_task.yaml \
+  --cfg-options data.spec=./data/my_multi/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_multi_task
 ```
 
 - `data.dataset: "dvx"` 时必须提供 `data.spec`（`dvx_dataset.yaml` 路径）；
   `data.spec` 的相对路径按**当前工作目录**解析，规格里的 `root` 相对**规格文件所在目录**解析。
-- `model.num_classes` 必须与 spec 的类别数一致；不一致时训练入口会在训练开始前
-  抛 `TaskDataMismatchError`，而不是训练到一半才报（见
+- 单任务训练的 `model.num_classes` 必须与 spec 的类别数一致；不一致时训练入口会在训练
+  开始前抛 `TaskDataMismatchError`，而不是训练到一半才报（见
   [训练契约](training_contracts.md)）。
-- 检测、分割把 `--config` 换成
-  `configs/examples/dvx_detection.yaml` / `configs/examples/dvx_segmentation.yaml`
-  即可；三份模板的 `data.spec` 都是占位路径，使用前请替换。
+- 多任务分类没有全局 `model.num_classes`：类别数由 `model.heads` 自带，并与 spec 的
+  `tasks` 逐任务比对，训练命令、DDP 注意事项与限制见
+  [路由式多任务分类](multi_task.md)。
+- 检测、分割、多任务把 `--config` 换成
+  `configs/examples/dvx_detection.yaml` / `configs/examples/dvx_segmentation.yaml` /
+  `configs/examples/dvx_multi_task.yaml` 即可；四份模板的 `data.spec` 都是占位路径，
+  使用前请替换。
 - 示例配置默认 `training.device: auto`、`training.amp: false`；AMP 需要显式改成 `true`。
 
 ---
@@ -474,12 +488,14 @@ ds = DVXDataset(spec, split="val", split_result=saved)
 | `classes` | `list[str]` / `None` | 单任务类别表；多任务分类为 `None` |
 | `task_names` | `list[str]` / `None` | 多任务分类的任务名；其他类型为 `None` |
 | `num_classes` | int / None | 单任务类别数；多任务分类为 `None` |
+| `task_num_classes` | `dict[str, int]` / None | 多任务分类的 `{任务: 类别数}`；其他类型为 `None`。即使 `task=` 过滤样本，也返回完整任务表 |
 | `refs` | `list[SampleRef]` | 当前 split（及 `task` 过滤后）的样本引用 |
 | `split_result` | `SplitResult` | 实际使用的切分结果 |
-| `collate_fn` | callable / None | 检测/分割为专用 collate；分类为 `None`（用默认 collate） |
+| `collate_fn` | callable / None | 检测/分割为专用 collate；分类与多任务分类为 `None`（用默认 collate） |
 
 多任务分类没有统一类别表：请用 `ds.spec.num_classes("licence")`、`ds.spec.class_names("licence")`
-取某个任务的类别信息。
+取某个任务的类别信息，或用 `ds.task_num_classes` 一次取全部任务的类别数
+（`{"licence": 3, "logo": 2}`）。
 
 ### 6.3 `__getitem__` 返回结构
 
@@ -626,6 +642,9 @@ print(batch["image"].shape, batch["task"][:2], batch["label"][:2])
 ```
 
 多任务分类的 `ratio` 切分按 `(task, label)` 分层；`dir` 切分的目录相对每个 `task.path` 解析。
+`DataLoader` 的默认 collate 会把每个样本的 `task` 拼成 `list[str]`，正好满足
+`MultiTaskClassificationTask` 的 `required_batch_fields`；用多任务配置训练的命令、
+DDP 的 `find_unused_parameters` 要求与指标命名见 [路由式多任务分类](multi_task.md)。
 
 ---
 
@@ -683,7 +702,8 @@ for name in ("cls", "det", "multicls", "seg"):
 > [检测](../configs/datasets/detection_labelme.example.yaml)、
 > [分割](../configs/datasets/segmentation_labelme.example.yaml)、
 > [多任务](../configs/datasets/multi_task_classification.example.yaml)。
-> 训练配置模板见 `configs/examples/dvx_{classification,detection,segmentation}.yaml`
+> 训练配置模板见
+> `configs/examples/dvx_{classification,detection,segmentation,multi_task}.yaml`
 > （用法见 §5.4）。
 
 ---
@@ -746,9 +766,11 @@ parse:
   也可以用于其他消费 `boxes`/`labels` 的任务，具体由训练任务决定。
 - **`DVXDataset` 未注册到 `DATASETS`**。训练入口通过 `data.dataset: dvx` +
   `data.spec` 的专用分支构建它（§5.4），`build_dataset({...})` 仍不能按名字直接构建。
-- **多任务分类训练尚未实现（P3）**。数据层可加载、体检 `multi_task_classification`
-  规格，但内置任务没有接受该 `data_type` 的 Task，也没有多任务分类模型；走训练入口时
-  会被契约校验拦下。
+- **多任务分类训练已支持（P3）**。`multi_task_classification` 规格可由
+  `MultiTaskClassificationTask` + `MultiTaskClassifier` 直接训练（路由式：共享骨干、
+  每任务一个分类头、标签空间独立）；目录结构就是标准 `<任务>/<类别>/*.jpg`。
+  用法、DDP 要求与已知限制（margin 头、`synthetic` 数据源、跨任务共享标签空间等）
+  见 [路由式多任务分类](multi_task.md)。数据层仍只负责加载与切分，不参与模型/任务选择。
 - **检索任务尚未实现**。本期没有 retrieval / re-identification 的 spec 类型、样本字段与评估；
   后续如需支持，应新增 `data_type` 而不是复用分类字段。
 - **`query` 分割模式尚未实现**。schema 接受 `seg_mode: query` 以便向前兼容，但数据层没有

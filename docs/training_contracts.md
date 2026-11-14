@@ -1,13 +1,15 @@
 # 训练契约与自适应训练
 
-> 适用范围：v2 开发中（P2 已完成，尚未发布）。本页面向使用 `tools/train.py`
+> 适用范围：v2 开发中（P3 已完成，尚未发布）。本页面向使用 `tools/train.py`
 > 或编程式 `Trainer` 的使用者，说明训练开始前的**任务 / 模型 / 数据**契约校验、
-> 7 个内置任务分别接受什么、如何为自定义任务与模型声明能力，以及
+> 8 个内置任务分别接受什么、如何为自定义任务与模型声明能力，以及
 > `strategy: auto` / `device: auto` / AMP 的当前行为。
 >
-> 接口定义以 [P2 实现契约](design/v2_p2_contract.md) 为准，本页只描述实际行为。
+> 接口定义以 [P2 实现契约](design/v2_p2_contract.md) 与
+> [P3 实现契约](design/v2_p3_contract.md) 为准，本页只描述实际行为。
 > 相关文档：[DVX 标准数据集](dataset_spec.md)、[快速开始](quick_start.md)、
-> [配置系统](config_system.md)、[自定义模型](custom_models.md)。
+> [配置系统](config_system.md)、[自定义模型](custom_models.md)、
+> [路由式多任务分类](multi_task.md)。
 
 ---
 
@@ -22,6 +24,7 @@ P2 之前，下面这些错配往往要等模型前向、损失计算甚至训�
 | 分类任务配 `data_type: detection` 的 DVX 数据 | 等到 batch 才缺字段 | 装配后、训练前抛 `TaskDataMismatchError` |
 | 检测任务但 collate 没产出 `boxes` / `labels` | 第一次前向才报 KeyError | 第一个训练 batch 前抛 `TaskDataMismatchError` |
 | `model.num_classes` 与 `dvx_dataset.yaml` 的 `classes` 数量不一致 | 标签越界或 loss 形状错误 | 训练前抛 `TaskDataMismatchError` |
+| 多任务 `model.heads` 的任务名 / 类别数与 spec 的 `tasks` 不一致 | 训练到某个任务才因标签越界失败 | 训练前抛 `TaskDataMismatchError`，一次列出差异 |
 
 这些错误都继承 `DVisionixError`，消息统一为「发生了什么 + 提示：如何修复」，
 可以直接按提示改配置或改声明。
@@ -43,7 +46,7 @@ trainer.fit(model)                                       │
 
 | 级别 | 校验函数 | 检查内容 | 失败异常 | 触发时机 |
 |---|---|---|---|---|
-| 任务 ↔ 模型 | `check_task_model` | 模型能力与 `accepted_model_tasks` 是否有交集；数据集与模型的 `num_classes` 是否一致 | `TaskModelMismatchError` / `TaskDataMismatchError` | `Trainer.fit()` 开始处，早于 DDP / `torch.compile` 包装 |
+| 任务 ↔ 模型 | `check_task_model` | 模型能力与 `accepted_model_tasks` 是否有交集；数据集与模型的类别数是否一致（单任务比较整数，多任务比较 `{任务: 类别数}` 字典） | `TaskModelMismatchError` / `TaskDataMismatchError` | `Trainer.fit()` 开始处，早于 DDP / `torch.compile` 包装 |
 | 任务 ↔ 数据 | `check_task_data` | DVX 数据集的 `data_type` 是否在 `accepted_data_types` 内 | `TaskDataMismatchError` | 同上 |
 | batch ↔ 任务 | `check_batch_fields` | 训练 batch 是否为 dict、是否含 `required_batch_fields` | `TaskDataMismatchError` | 整个 `fit()` 的**第一个训练 batch**，只检查一次 |
 
@@ -77,12 +80,29 @@ trainer.fit(model)                                       │
 dvx_dataset.yaml 的 classes），或确认 data.spec 指向了正确的数据集。
 ```
 
+多任务分类没有全局类别数，走的是**字典类别数**分支：`DVXDataset.task_num_classes`
+是 `{任务: 类别数}`，多任务模型的 `num_classes` 也是同样的字典时，逐任务比较
+（任务名集合一致 + 每个任务的类别数一致）。缺失、多余或不一致会一次性列出：
+
+```text
+数据集 DVXDataset 与模型 MultiTaskClassifier 的逐任务类别数不一致：
+任务 'logo' 的类别数不一致（数据集 2，模型 3）。
+提示：请让 model.heads 的键与 dvx_dataset.yaml 的 tasks 一一对应，
+且每个分类头的 num_classes 等于该任务 classes 的长度。
+```
+
+一边是逐任务字典、另一边是整数（例如多任务模型配单标签数据集）时同样报
+`TaskDataMismatchError`，提示改用结构匹配的数据集 / 模型。多任务完整用法见
+[路由式多任务分类](multi_task.md)。
+
 修复方向：
 
 - 换模型：让模型声明任务需要的能力（见 §5），或改用与模型匹配的任务；
 - 核对配置：`task.type` 与 `model.type` 是否配对；
-- 核对类别数：`model.num_classes`、示例配置里的 `task.num_classes` 与
-  `dvx_dataset.yaml` 的 `classes` 数量保持一致（分割通常含 `__background__`）。
+- 核对类别数：单任务让 `model.num_classes`、示例配置里的 `task.num_classes` 与
+  `dvx_dataset.yaml` 的 `classes` 数量保持一致（分割通常含 `__background__`）；
+  多任务让 `model.heads` 的键与 `tasks[*].name` 一一对应，且每个头的
+  `num_classes` 等于该任务 `classes` 的长度。
 
 ### 2.3 任务 ↔ 数据 `data_type`
 
@@ -104,7 +124,7 @@ DVX 规格的 `data_type` 与内置任务的大致对应关系：
 | `classification` | `ClassificationTask`、`LinearEvalTask` |
 | `detection` | `DetectionTask` |
 | `segmentation` | `SegmentationTask`、`MaskFormerTask` |
-| `multi_task_classification` | **暂无**（训练任务与模型属于 P3，训练入口会由契约校验拦下） |
+| `multi_task_classification` | `MultiTaskClassificationTask`（配套模型 `MultiTaskClassifier`，见 [路由式多任务分类](multi_task.md)） |
 
 > 内置任务的 `accepted_data_types` 还包含 `multi_label` / `simclr` /
 > `instance_segmentation` / `panoptic_segmentation` 等值，但当前 DVX 规格只产生上表
@@ -139,12 +159,12 @@ DVX 规格的 `data_type` 与内置任务的大致对应关系：
 - `num_classes` 一致性校验**不受影响**，仍会执行（传入数据集时）；
 - `required_batch_fields` 默认是 `("image",)`，可用子类覆盖。
 
-内置 7 个任务均已显式声明，所以「分割任务配分类模型」仍会在训练开始前被拦下。
+内置 8 个任务均已显式声明，所以「分割任务配分类模型」仍会在训练开始前被拦下。
 渐进式规则只用于兼容尚未补声明的自定义任务；新任务建议主动声明，避免把错配留到运行期。
 
 ---
 
-## 3. 7 个内置任务的契约表
+## 3. 8 个内置任务的契约表
 
 以下以代码中的类属性为准（与 `tests/test_training/test_contracts.py` 的契约表一致）：
 
@@ -157,6 +177,7 @@ DVX 规格的 `data_type` 与内置任务的大致对应关系：
 | `MaskFormerTask` | `segmentation` | `("segmentation",)` | `("segmentation", "instance_segmentation", "panoptic_segmentation")` | `("image", "mask")` |
 | `SimCLRTask` | `simclr` | `("classification",)` | `("simclr",)` | `("image1", "image2")` |
 | `LinearEvalTask` | `linear_eval` | `("classification",)` | `("classification",)` | `("image", "label")` |
+| `MultiTaskClassificationTask` | `multi_task_classification` | `("multi_task_classification",)` | `("multi_task_classification",)` | `("image", "label", "task")` |
 
 字段含义：
 
@@ -165,18 +186,21 @@ DVX 规格的 `data_type` 与内置任务的大致对应关系：
   `task_type` 比较。
 - `accepted_data_types`：任务可接受的 `DVXDataset.data_type`。
 - `required_batch_fields`：训练 batch 必须携带的键；检测是变长的 `boxes` + `labels`，
-  分割是 `mask`，SimCLR 是双视角 `image1` / `image2`。
+  分割是 `mask`，SimCLR 是双视角 `image1` / `image2`，多任务是 `image` + `label` +
+  按样本的 `task`（`list[str]`）。
 
 关于配置入口的两个细节：
 
 1. 配置顶层的 `task_type` 只能是 `classification` / `detection` / `segmentation` /
-   `simclr`；`tools/train.py` 的缺省 `task.type` 映射也只覆盖这四类。
+   `multi_task_classification` / `simclr`（共 5 个训练任务类型，权威来源是
+   `dvisionix/config/schema.py::TASK_TYPES`）；`tools/train.py` 的缺省 `task.type`
+   映射 `_TASK_MAPPING` 与它完全一致，也包含 `multi_task_classification`。
    使用 `MultiLabelTask` / `LinearEvalTask` / `MaskFormerTask` 时，请在配置里显式写
    `task.type`（例如 `task_type: classification` + `task.type: LinearEvalTask`）。
    其中 `MultiLabelTask` / `MaskFormerTask` 还需要能产出对应 batch 字段的数据源
    （DVX 规格当前不产生 `multi_label` / `instance_segmentation` /
    `panoptic_segmentation`，见 §2.3）。
-2. 7 个任务都实现了 `build_transforms(train, image_size)`；配置驱动训练时由
+2. 8 个任务都实现了 `build_transforms(train, image_size)`；配置驱动训练时由
    `tools/train.py` 向任务索取预设变换，任务返回 `None` 会直接抛 `ConfigError`
    （自定义任务需自行实现，见 §4）。
 
@@ -247,7 +271,7 @@ class MyClassificationTask(BaseTask):
 配置写法示例：
 
 ```yaml
-task_type: classification        # 顶层仍是四种训练类型之一
+task_type: classification        # 顶层是 5 个训练任务类型之一
 task:
   type: "MyClassificationTask"   # 注册名（类名），必须已在当前进程 import/注册
   num_classes: 5
@@ -302,7 +326,8 @@ from dvisionix.registry import MODELS
 
 @MODELS.register()
 class MyMultiAbilityModel(BaseModel):
-    # 声明自己同时具备分类与分割能力；这不会让多任务训练自动可用（见 §8）
+    # 声明自己同时具备分类与分割能力；这不会让它自动变成多任务分类模型
+    # （多任务训练需要 MultiTaskClassifier 的 heads 契约，见 multi_task.md）
     supported_tasks = ("classification", "segmentation")
 
     def __init__(self, num_classes=10):
@@ -381,7 +406,7 @@ training:
   `torch.autocast`；
 - CPU / MPS 上写 `amp: true` 不会启用混合精度（也不会因此报错）；
 - 日志里的 `amp: False/True` 就是最终是否启用；
-- 三个 DVX 示例配置都显式写了 `amp: false`。
+- 四个 DVX 示例配置都显式写了 `amp: false`。
 
 ---
 
@@ -401,32 +426,35 @@ python tools/train.py \
 
 - `data.spec` 指向 `dvx_dataset.yaml`；相对路径按**当前工作目录**解析，规格里的
   `root` 相对**规格文件所在目录**解析；
-- `model.num_classes` 必须与 spec 的类别数一致，否则由 §2.2 的契约校验在训练前拦下；
-- `configs/examples/dvx_{classification,detection,segmentation}.yaml` 是训练配置模板，
-  `data.spec` 为占位路径，使用前请替换；
+- 单任务训练的 `model.num_classes` 必须与 spec 的类别数一致，否则由 §2.2 的契约校验
+  在训练前拦下；多任务训练没有全局 `model.num_classes`，改由 `model.heads` 与 spec 的
+  `tasks` 逐任务比对，见 [路由式多任务分类](multi_task.md)；
+- `configs/examples/dvx_{classification,detection,segmentation,multi_task}.yaml` 是训练
+  配置模板，`data.spec` 为占位路径，使用前请替换；
 - `data.dataset` 不写时默认 `custom`，仍保留合成数据与公开数据集预设路径。
 
 ---
 
 ## 8. 已知边界
 
-- **多任务分类训练尚未实现（P3）**。数据层可以加载/体检 `multi_task_classification`
-  的 DVX 规格，但没有接受该 `data_type` 的内置任务，也没有多任务分类模型；
-  当前训练入口会在契约校验阶段拦下。§5 的 `supported_tasks` 只表示模型可声明多个能力，
-  不等于多任务训练可用。
+- **多任务分类（P3）已可用，但有明确限制**：只支持路由式分类，margin 头（ArcFace /
+  CosFace 等）因路由前向不透传 `labels` 而**暂不支持**（强行使用不会报错，但 margin 会
+  静默失效）；`synthetic` 数据源不支持多任务；跨任务共享标签空间、检索训练、多任务推理/
+  导出专项均未实现。详见 [路由式多任务分类](multi_task.md)。
+  §5 的 `supported_tasks` 只表示模型可以声明多个能力，不等于多任务训练自动可用。
 - **DDP 当前是单机多卡**。`torchrun --nproc_per_node=N` 的单机场景已验证；多机
-  （多节点）DDP 不在 P2 验收范围，也未做专门适配与验证。
+  （多节点）DDP 未做专门适配与验证。
 - **验证聚合先转 CPU**。多卡验证时 `preds` / `targets` 会先递归搬到 CPU 再
   `all_gather_object`，合并后搬回训练设备供 `task.update_metrics` 使用。这是为了规避
   跨设备 `torch.cat` 崩溃；代价是每次验证的一次 CPU 往返，`preds` 很大时通信与内存开销
   会上升。指标只在 rank0 上用全局结果计算，非 rank0 的 `val_*` 不作为训练结果。
 - **`DVXDataset` 未注册到 `DATASETS`**。它通过 `data.dataset: dvx` + `data.spec` 的专用
   分支构建；`build_dataset({...})` 仍不能按名字直接构建它。
-- **P2 范围不含推理与导出**。本页只覆盖训练入口、契约与自适应训练；v2 的推理/导出链路
-  不在 P2 范围内，不要据此认为它们已完成。
+- **P3 仍不含推理与导出专项**。本页只覆盖训练入口、契约与自适应训练；多任务模型的
+  推理/导出链路不在 P3 验收范围内，不要据此认为它们已完成。
 - **契约校验有边界**：非 DVX 数据集跳过 `data_type` 校验；自定义任务未声明能力时跳过
-  对应校验；`num_classes` 只在数据集与模型都暴露该属性时比较。这些是渐进式兼容的
-  取舍，不是“所有错配都能被拦下”的保证。
+  对应校验；`num_classes` 只在数据集与模型都暴露该属性时比较（多任务比较两个字典）。
+  这些是渐进式兼容的取舍，不是“所有错配都能被拦下”的保证。
 
 ---
 
@@ -440,6 +468,10 @@ $PY -m pytest tests/test_training/test_contracts.py -q
 
 # DVX 训练入口装配（快速，不真正训练）
 $PY -m pytest tests/test_training/test_dvx_config_smoke.py -q
+
+# 多任务模型 / 任务 / 契约
+$PY -m pytest tests/test_models/test_multi_task.py \
+  tests/test_training/test_multi_task_task.py -q
 
 # DDP：须由 torchrun 启动，且需要 2+ 张 CUDA 卡
 torchrun --nproc_per_node=2 -m pytest tests/test_training/test_ddp_smoke.py -q

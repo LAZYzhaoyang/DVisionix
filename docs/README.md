@@ -7,7 +7,8 @@
 - [快速开始](quick_start.md) - 安装、Config 驱动训练、编程式训练、训练工程增强
 - [配置系统](config_system.md) - Config 加载、继承、CLI 覆盖、schema 校验
 - [DVX 标准数据集](dataset_spec.md) - 一个根目录 + 一份 dvx_dataset.yaml；字段、三种切分、DVXDataset、训练接线与四套真实数据
-- [训练契约与自适应训练](training_contracts.md) - 任务/模型/数据三级校验、7 个内置任务契约、自定义能力声明、`strategy: auto` / `device` / AMP
+- [训练契约与自适应训练](training_contracts.md) - 任务/模型/数据三级校验、8 个内置任务契约、自定义能力声明、`strategy: auto` / `device` / AMP
+- [路由式多任务分类](multi_task.md) - 共享骨干 + 每任务一个分类头、`multi_task_classification` 数据、配置/训练/DDP 与已知限制
 - [v1.1 变更与迁移指南](v1.1_changes.md) - 20 项缺陷修复、行为变更、新配置项、API 变化
 
 ## 核心模块
@@ -24,7 +25,7 @@
 - [架构与分层规则](architecture.md) - R1-R3、layers.yaml、check_layering 用法与例外登记流程
 
 ## 工具与入口
-- `tools/train.py` - 配置驱动统一训练入口（分类/检测/分割/自监督，支持 DVX 数据集、resume / DDP / work_dir / ONNX 导出）
+- `tools/train.py` - 配置驱动统一训练入口（分类/检测/分割/多任务/自监督，支持 DVX 数据集、resume / DDP / work_dir / ONNX 导出）
 - `tools/hparam_search.py` - 超参搜索（参数网格/随机采样，逐 trial 独立进程）
 - `tools/benchmark.py` - 性能基准（EMA / PQ / mAP / matcher / assigner / 数据加载 / 导入开销）
 

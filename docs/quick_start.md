@@ -220,7 +220,7 @@ python -c "from dvisionix.data import DVXDataset; ds = DVXDataset('./data/my_cls
 ## 用 DVX 标准数据集训练
 
 `tools/train.py` 通过 `data.dataset: dvx` + `data.spec` 直接构建 `DVXDataset`，
-`data.spec` 指向你的 `dvx_dataset.yaml`（三份模板里的 `data.spec` 是占位路径）：
+`data.spec` 指向你的 `dvx_dataset.yaml`（四份模板里的 `data.spec` 是占位路径）：
 
 ```bash
 # 分类
@@ -240,12 +240,29 @@ python tools/train.py \
   --config configs/examples/dvx_segmentation.yaml \
   --cfg-options data.spec=./data/my_seg/dvx_dataset.yaml \
   --work-dir /tmp/dvx_seg
+
+# 路由式多任务分类（结构：<任务>/<类别>/*.jpg，data_type: multi_task_classification）
+python tools/train.py \
+  --config configs/examples/dvx_multi_task.yaml \
+  --cfg-options data.spec=./data/my_multi/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_multi_task
+
+# 多任务分类 2 卡 DDP（示例配置已写 training.find_unused_parameters: true，必须保留）
+torchrun --nproc_per_node=2 tools/train.py \
+  --config configs/examples/dvx_multi_task.yaml \
+  --cfg-options data.spec=./data/my_multi/dvx_dataset.yaml \
+  --work-dir /tmp/dvx_multi_task_ddp
 ```
 
-- `model.num_classes` 必须与 spec 的类别数一致（分割通常含 `__background__`）；
-  不一致会在训练开始前抛 `TaskDataMismatchError`，由契约校验兜底。
+- 单任务训练的 `model.num_classes` 必须与 spec 的类别数一致（分割通常含 `__background__`）；
+  不一致会在训练开始前抛 `TaskDataMismatchError`，由契约校验兜底。多任务分类没有全局
+  `model.num_classes`，类别数由 `model.heads` 自带并与 spec 的 `tasks` 逐任务比对。
+- 多任务分类每个 batch 未必覆盖全部任务，DDP 必须开启
+  `training.find_unused_parameters: true`（示例配置默认已开），否则会因未参与前向的分类头
+  报 DDP 归约错误。完整说明（配置、指标命名、已知限制）见
+  [路由式多任务分类](multi_task.md)。
 - 数据变换由任务的 `build_transforms` 提供，检测/分割的 `collate_fn` 由入口自动使用。
 - `training.device: auto` 按可用设备自动选择；AMP 仍由 `training.amp` 显式控制
   （示例配置均为 `false`）。
-- 三级契约、7 个内置任务契约、自定义任务/模型声明与 `strategy: auto` 的行为见
+- 三级契约、8 个内置任务契约、自定义任务/模型声明与 `strategy: auto` 的行为见
   [训练契约与自适应训练](training_contracts.md)。

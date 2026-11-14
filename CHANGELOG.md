@@ -5,9 +5,10 @@
 
 ## [Unreleased] — v2 开发中
 
-> 本小节记录 v2 重构 P0 / P1 / P2 阶段的变更；版本号尚未变更（仍为 1.1.1）。
-> 接口契约见 [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md) 与
-> [P2 实现契约](docs/design/v2_p2_contract.md)。
+> 本小节记录 v2 重构 P0 / P1 / P2 / P3 阶段的变更；版本号尚未变更（仍为 1.1.1）。
+> 接口契约见 [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)、
+> [P2 实现契约](docs/design/v2_p2_contract.md) 与
+> [P3 实现契约](docs/design/v2_p3_contract.md)。
 
 ### 新增：P0 架构基线
 
@@ -118,15 +119,61 @@
   `docs/dataset_spec.md` / `docs/quick_start.md` / `README.md` / `docs/README.md`
   同步训练接线、契约与示例命令。
 
+### 新增：P3 路由式多任务分类
+
+- **模型** `dvisionix/models/classifiers/multi_task.py`：新增 `MultiTaskClassifier`
+  （注册名 `multi_task_classifier`）。共享骨干**只前向一次**，按每个样本的 `task` 用
+  `index_select` 取特征子集送进对应分类头；`supported_tasks = ("multi_task_classification",)`；
+  只读属性 `task_names`（顺序稳定的 `tuple[str, ...]`）与 `num_classes`
+  （`{任务: 类别数}` 的 dict，不是整数）；空 heads / 任务名为空或含 `.` / 头缺
+  `num_classes` 均在构建期抛 `ConfigError`。
+- **任务** `dvisionix/training/tasks/multi_task_classification.py`：新增
+  `MultiTaskClassificationTask`。`required_batch_fields = ("image", "label", "task")`；
+  每个任务用自己的样本子集算交叉熵，总损失按 `task_loss_weights` 加权求和；
+  `<task>_loss` 记录**未加权** CE、`<task>_acc` 记录该任务 batch 内准确率；
+  验证步把 `preds` / `targets` 补齐为模型**全部任务名**的键（未出现任务用空张量占位），
+  保证 DDP `all_gather` 键一致；指标按任务惰性创建、跨 epoch 复用，epoch 结束返回
+  `<task>_<metric>` 前缀键。
+- **契约扩展**：
+  - `DVXDataset` 新增只读属性 `task_num_classes`（`{任务: 类别数}`，其他 `data_type`
+    返回 `None`；`task=` 过滤样本不影响该表）。
+  - `training.contract.check_task_model` 新增**字典类别数**校验：`task_num_classes`
+    与模型 `num_classes` 都是字典时，逐任务比较任务名集合与类别数，缺失 / 多余 /
+    不一致抛 `TaskDataMismatchError` 并一次列出差异；一边字典一边整数同样报错。
+  - 多任务模型配 `ClassificationTask` 由能力校验抛 `TaskModelMismatchError`。
+- **训练入口接线**：`dvisionix/config/schema.py::TASK_TYPES` 与
+  `tools/train.py::_TASK_MAPPING` 增加 `multi_task_classification`（共 5 个训练任务类型）；
+  多任务**不要求**全局 `model.num_classes`，`build_task_cfg` 也**不注入**任务
+  `num_classes`（类别数由 heads 自带）。
+- **配置模板** `configs/examples/dvx_multi_task.yaml`：`data_type:
+  multi_task_classification`、`multi_task_classifier` + `licence` / `logo` 两个 head，
+  并显式设置 `training.find_unused_parameters: true`。该目录在 E2E 的
+  `NON_TRAINING_DIR_PREFIXES` 中排除，不依赖仓库外数据。
+- **DDP**：每个 batch 未必覆盖全部任务，未参与前向的分类头在 DDP 反向时会被判为
+  未使用参数，因此多卡训练**必须** `training.find_unused_parameters: true`（单卡无影响）。
+  2 卡 torchrun 实测：`strategy: ddp`、每 rank 61/61 train batches、per-task 指标正常
+  跨卡聚合。
+- **测试**：新增 `tests/test_models/test_multi_task.py`、
+  `tests/test_training/test_multi_task_task.py`，扩展 `tests/test_training/test_contracts.py`
+  与 `tests/test_training/test_dvx_config_smoke.py`；全量 `pytest tests -q` 为
+  **963 passed / 1 skipped / 0 failed**。
+- **真实数据验收**（`multicls`，2458 样本，按 `(task, label)` 分层切分 1967 / 491；
+  1 epoch，仅用于确认链路跑通，**不作为模型效果结论**）：单卡 12.1s，
+  `val_licence_accuracy 0.9581`、`val_logo_accuracy 0.7899`；torchrun 2 卡 DDP 冒烟通过。
+- **文档**：新增 [路由式多任务分类](docs/multi_task.md)；`docs/training_contracts.md`
+  的任务契约表扩到 8 个并补充字典类别数分支；`docs/dataset_spec.md` /
+  `docs/quick_start.md` / `README.md` / `docs/README.md` 同步多任务数据、训练命令、
+  特性与文档索引。
+
 ### 尚未接线 / 已知边界
 
 - `DVXDataset` 仍未注册到 `DATASETS`；训练入口通过 `data.dataset: dvx` + `data.spec`
   的专用分支构建，`build_dataset({...})` 不能按名字直接构建。
-- 多任务分类训练（模型 + Task）尚未实现（P3）；数据层可加载
-  `multi_task_classification` 规格，但内置任务没有接受该 `data_type` 的 Task，
-  训练入口会被契约校验拦下。
+- 多任务分类（P3）只支持路由式分类：margin 头（ArcFace/CosFace 等）需要 `labels`，
+  而路由前向不向 head 透传 `labels`，暂不支持（强行配置不会报错，但 margin 会静默失效）；
+  `synthetic` 数据源不支持多任务；跨任务共享标签空间未实现。
 - DDP 已验证范围为单机多卡；多机（多节点）DDP 未验证。
-- P2 范围不含推理与导出链路。
+- P2 范围不含推理与导出链路；P3 也未做多任务推理/导出专项。
 - `seg_mode: query` 只是 schema 保留值，数据层仅实现 `semantic`。
 - 检索（retrieval / re-identification）任务尚未实现。
 - `ignore_index` 目前只做 spec 校验与展示，`DVXDataset` 栅格化背景固定为 0；
