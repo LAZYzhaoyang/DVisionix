@@ -395,7 +395,7 @@ class DVXDataset(BaseDataset):
   - classification：`{"image": path, "label": int}`
   - multi_task：`{"image": path, "label": int, "task": str}`
   - detection：`{"image": path, "boxes": (N,4) float32, "labels": (N,) int64}`
-  - segmentation：`{"image": path, "mask": (H,W) int64}`（构造时按 `image_size` 栅格化）
+  - segmentation：`{"image": path, "mask": (H,W) int64}`（**取样本时**按 `image_size` 栅格化、不缓存，内存 O(1)；不在 `__init__` 预生成整份 split）
   - 之后**必须复用** `BaseDataset` 的加载与变换逻辑：读图（cv2）→ `self._check_sample_keys` → `self.transforms(sample)`。
 - 需要同时修改 `dvisionix/data/sample.py`：把 `"task"` 加入 `Sample.EXTENDED_KEYS`。
 - 需要在 `dvisionix/data/__init__.py` 增加 `DVXDataset`、`DVXDatasetSpec`、`load_spec` 的导出（**只加不改**）。

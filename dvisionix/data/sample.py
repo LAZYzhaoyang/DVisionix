@@ -51,6 +51,7 @@ class Sample(dict):
         "instance_labels",
         "depth",
         "keypoints",
+        "task",
     ]
     #: 兼容 v1.0.0 的私有命名
     _KNOWN_KEYS: List[str] = KNOWN_KEYS

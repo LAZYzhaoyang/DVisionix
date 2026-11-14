@@ -18,7 +18,9 @@ from . import (
 from .base import BaseDataset
 from .collate import detection_collate, segmentation_collate
 from .datasets.custom import CustomDataset
+from .dvx_dataset import DVXDataset
 from .sample import ImageInfo, ImageMode, NormalizationSpec, Sample
+from .spec import DVXDatasetSpec, SplitResult, load_spec
 from .transforms import (  # noqa: E402  预设 pipeline 别名
     # 第三方
     AlbumentationsWrapper,
@@ -58,6 +60,10 @@ __all__ = [
     # 数据集
     "BaseDataset",
     "CustomDataset",
+    "DVXDataset",
+    "DVXDatasetSpec",
+    "SplitResult",
+    "load_spec",
     "transforms",
     "presets",
     # collate
