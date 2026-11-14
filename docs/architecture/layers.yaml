@@ -1,0 +1,51 @@
+version: 1
+description: "DVisionix 分层与 import 规则（R1-R3 的机器可读版本）"
+
+# 层次编号：0 = 最上层（组合），数字越大越底层。
+# - packages 条目按“包本身或其子模块”匹配；
+# - modules 条目同样按“模块本身或其子模块”匹配（dvisionix.utils 实际是包）。
+layers:
+  - level: 0
+    name: assembly            # 组合层
+    packages: [dvisionix.models.detectors, dvisionix.models.classifiers, dvisionix.models.segmenters]
+  - level: 1
+    name: component           # 组件层
+    packages: [dvisionix.models.heads, dvisionix.models.losses, dvisionix.models.backbones, dvisionix.models.necks]
+  - level: 2
+    name: foundation          # 最底层
+    packages: [dvisionix.models.layers]
+    modules: [dvisionix.models.postprocess]
+  - level: 3
+    name: shared              # 共享基类/契约
+    modules: [dvisionix.models.base]
+  - level: 4
+    name: infrastructure
+    modules: [dvisionix.registry, dvisionix.errors, dvisionix.utils]
+
+rules:
+  R1: "只允许 import 同级或更底层（目标 level >= 自身 level）"
+  R2: "同层、不同组件包之间禁止互相 import"
+  R3: "组件包内部，非 __init__.py 的兄弟模块互相 import 必须登记例外"
+
+# 例外必须来自对现有代码的实测，不允许编造。
+exceptions:
+  - from_glob: "dvisionix/models/backbones/*.py"
+    to: "dvisionix/models/backbones/feature.py"
+    rule: R3
+    reason: "共享基类 FeatureBackboneBase（CodePlan R2 例外）"
+  - from: "dvisionix/models/heads/detection/nmsfree_yolo.py"
+    to: "dvisionix/models/heads/detection/yolo.py"
+    rule: R3
+    reason: "NMSFreeYOLOHead 继承 YOLOHead（CodePlan R2 例外）"
+  - from_glob: "dvisionix/models/losses/**/*.py"
+    to_glob: "dvisionix/models/losses/**/*.py"
+    rule: R3
+    reason: "损失子包内共享 base/box_loss/matcher/assigner（CodePlan R2 例外）"
+  # P0 实测补充：按契约的 fnmatch 语义（`**` 先替换为 `*`），上面的
+  # losses/**/*.py 只覆盖“子目录 → 子目录”；顶层 losses 模块（base /
+  # classification / segmentation）与子包之间的 import 需要显式登记。
+  # fnmatch 的 `*` 可跨越 `/`，因此下面这一条即可覆盖实测的 6 处组合。
+  - from_glob: "dvisionix/models/losses/*.py"
+    to_glob: "dvisionix/models/losses/*.py"
+    rule: R3
+    reason: "实测补充：顶层 losses 模块共享 base/classification/segmentation（同上 CodePlan R2 例外）"

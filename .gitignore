@@ -67,6 +67,10 @@ ENV/
 htmlcov/
 .tox/
 
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
