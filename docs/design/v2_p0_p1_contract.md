@@ -478,3 +478,27 @@ $PY -m black --check dvisionix tools tests
 | Lead | 本契约、审查、验收、git 提交 |
 
 任何实现方**不得**修改他人所有权范围内的文件。
+
+---
+
+## 附二：P1 实现裁决记录（Lead 确认，2026-11-14）
+
+以下偏差由实现方在报告中提出，Lead 逐条裁决为**接受**，契约以本节为准：
+
+1. **`parse_labelme_file` 返回值**：按契约字面实现为
+   `(polygons, polygon_labels, box_label_ids, skipped_count)`——第三个返回值是**矩形类别 id**，不返回框坐标；
+   矩形几何统一由 `scan_labelme → SampleRef.boxes` 提供（共用内部解析，无重复读盘）。
+   契约 P1-6 中"注意 boxes 与 segments 分开返回"一句仅指 `SampleRef` 字段，不指该函数返回值。
+2. **`scan_samples(spec, subdir=None)`**：为支持 `multicls` 的 `dir` 切分而新增可选参数。
+   `subdir=None` 且 `layout=folder_per_class` 且 `splits.mode=dir` 时，自动取 `dir_map` 各目录的公共一级子目录
+   （`train_data/train` + `train_data/val` → `train_data`），仅当其在每个 `task.path` 下都存在时才采用，
+   并向 **stderr** 打印一行说明（不污染 `check_dataset --json` 的 stdout）。
+3. **同 stem 多格式冲突**：`folder` 与 `labelme` 两种布局都做检测，冲突抛 `AnnotationError`。
+4. **异常类型划分**：扫描期数据问题（目录缺失/缺 JSON/未知标签/扩展名冲突/重复 rel_path）、
+   rasterize 参数问题 → `AnnotationError`；空类别表、labelme 被用于非 detection/segmentation、
+   `shape_types` 无匹配 → `DatasetSpecError`。
+5. **`recursive=False` 语义**：labelme 只看 `spec.root` 本层；folder 只看 `<base>/<class>/*` 一层。
+6. **`image_size` 兜底**：labelme JSON 缺 `imageWidth/imageHeight` 时用 cv2 读图尺寸并 `UserWarning`。
+7. **空标注语义**：detection 空 shapes → `boxes (0,4) float32` + `labels (0,) int64`；
+   segmentation → `segments == []` + `segment_labels (0,) int64`（不用 None）。
+8. **`SampleRef.meta` 自由字段**：folder 写 `class_name`；labelme 写 `skipped_shapes` / `shape_count` / `image_data_present`。
