@@ -1,6 +1,6 @@
 # 路由式多任务分类
 
-> 适用范围：v2 开发中（P3 已完成，尚未发布）。本页面向使用者，说明如何用
+> 适用范围：v2.0.0（P3 已完成）。本页面向使用者，说明如何用
 > `MultiTaskClassifier` + `MultiTaskClassificationTask` 在
 > `data_type: multi_task_classification` 的 DVX 数据集上训练。
 >

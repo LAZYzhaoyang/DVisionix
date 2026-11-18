@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔬 DVisionix v1.1.1
+# 🔬 DVisionix v2.0.0
 
 **一个模块化、可扩展、配置驱动的 PyTorch 计算机视觉算法库**
 
@@ -279,7 +279,7 @@ conda run -n dvisionix python -m pytest tests/ -q
 ```
 
 测试状态**以 CI 运行结果为准**。当前实测 **1092 passed / 1 skipped / 0 failed**
-（v1.1.0 基线为 447 passed + 2 skipped），`ruff` / `black` 全绿。
+（v1.1.1 基线为 528 passed / 1 skipped），`ruff` / `black` 全绿。
 `test_ddp_cpu.py` 的两条多进程用例需要创建命名管道，在禁止命名管道的受限沙箱中可能失败；
 本机与常规 CI 环境可正常运行。
 完整对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 7.2 节。
@@ -319,7 +319,13 @@ CI 门禁顺序：`ruff` → `black` → `mypy`（信息性）→ 快速测试 �
 
 ## 📝 版本说明
 
-- **v1.1.1（当前）**：正确性与稳定性修复（模型层 / GPU 可用性 / 训练可靠性 / DDP / 工具链），
+- **v2.0.0（当前）**：v2 重构发布 —— DVX 标准数据集层、训练接线与任务/模型/数据契约、
+  路由式多任务分类、推理链路（预处理规格 / Results / Predictor / CLI）、
+  可扩展导出体系（BaseExporter / EXPORTERS / ONNX 一致性校验）。
+  ⚠️ **含接口与行为变更**（`ONNXExporter.export/verify` 返回类型、契约校验拦截错配、
+  `ClsHead` 开始接受 `labels` 等），升级前请读
+  [CHANGELOG.md](CHANGELOG.md) 的 2.0.0 章节。
+- **v1.1.1（上一版）**：正确性与稳定性修复（模型层 / GPU 可用性 / 训练可靠性 / DDP / 工具链），
   ⚠️ **其中包含会改变检测指标口径的修复**（解码索引错位、RetinaNet 损失归一化、
   margin 头开始真正生效等），历史实验指标不可直接比较。
   完整清单见 [CHANGELOG.md](CHANGELOG.md) 的 1.1.1 章节。

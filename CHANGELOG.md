@@ -3,15 +3,35 @@
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 完整的规划与缺陷清单见 [CodePlan.md](CodePlan.md)。
 
-## [Unreleased] — v2 开发中
+## [Unreleased]
 
-> 本小节记录 v2 重构 P0 / P1 / P2 / P3 / P4 / P5 阶段的变更；版本号尚未变更
-> （仍为 1.1.1）。接口契约见
+（暂无 —— 下一版本开发中）
+
+## [2.0.0] — 2026-11-18
+
+> v2 重构发布：P0 架构基线 / P1 DVX 标准数据集层 / P2 训练接线与三方契约 /
+> P3 路由式多任务分类 / P4 推理链路 / P5 可扩展导出体系。
+> 接口契约见
 > [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)、
 > [P2 实现契约](docs/design/v2_p2_contract.md)、
 > [P3 实现契约](docs/design/v2_p3_contract.md)、
 > [P4 实现契约](docs/design/v2_p4_contract.md) 与
 > [P5 实现契约](docs/design/v2_p5_contract.md)。
+
+**升级提示（主要行为变更，升级前请确认）**
+
+- `ONNXExporter.export()` 返回 `ExportResult`（`str()` / `os.fspath()` 仍返回路径）；
+  `verify()` 返回 `VerifyReport`（`__bool__` 保持旧布尔语义）。新增 `tools/export.py`。
+- 训练入口执行任务 / 模型 / 数据三级契约校验：任务与模型能力、`data_type`、`num_classes`
+  错配会在训练开始前报错；未声明能力的自定义任务跳过对应校验（渐进式契约）。
+- `ClsHead` / `MultiLabelHead` 接受 `labels` 参数（修复 `LinearClassifier + cls_head +
+  ClassificationTask` 首个 batch 崩溃；margin 头自此在分类任务中真正生效）。
+- `strategy: auto` 在 torchrun 下自动识别为 DDP；验证指标聚合改为"先转 CPU 再 all_gather"，
+  修复多卡跨设备 `torch.cat` 崩溃。
+- DVX 数据集经 `data.dataset: dvx` + `data.spec` 接入训练；`model.num_classes` 必须与
+  spec 类别数一致（由契约校验兜底）。`configs/examples/` 提供 cls/det/seg/多任务四份模板。
+- 新增推理（`tools/infer.py`、`dvisionix.inference`）与路由式多任务分类
+  （`MultiTaskClassifier` / `MultiTaskClassificationTask`）能力。
 
 ### 新增：P0 架构基线
 

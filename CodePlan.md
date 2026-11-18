@@ -157,6 +157,26 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | 阶段 8 | 训练工程 P2（超参搜索/特征蒸馏）+ P3（性能开关/实验管理）+ DINO-LFT | v0.17.0 |
 | 阶段 9 | **v1.0.0 收尾**：全库审查、注释、文档、README/CodePlan 规范化 | v1.0.0 |
 
+### ✅ v2（2.0.0）已完成：P0–P5
+
+| 阶段 | 内容 | 关键交付 | 验收证据 |
+|---|---|---|---|
+| P0 | 架构基线 | 统一异常族、`layers.yaml` + AST 分层检查器、registry 单源 | 197 文件 0 违规 |
+| P1 | DVX 标准数据集层 | `data/spec`（schema/classes/split/scan）、folder + labelme 解析、三种非破坏切分、`DVXDataset`、`tools/init_dataset.py` / `check_dataset.py` | 四套真实数据 spec：cls 2210 / det 1646 / multicls 2458 / seg 766 |
+| P2 | 训练接线 + 三方契约 + DDP | 三级契约校验、`Task.build_transforms`、`tools/train.py` 接入 DVX、`strategy: auto`、跨卡聚合改 CPU 中转 | cls/det/seg 真实数据各 1 epoch；2 卡 DDP 冒烟与真实训练通过 |
+| P3 | 路由式多任务分类 | `MultiTaskClassifier`、`MultiTaskClassificationTask`、字典类别数契约 | multicls 单卡 / 2 卡 1 epoch，per-task 指标落 `history.csv` |
+| P4 | 推理链路 | `PreprocessSpec/Pipeline`、`Results`、三个 `Predictor`、`tools/infer.py` | 真实图片 cls/det/seg 推理；检测框回原图坐标、分割 mask 回原尺寸 |
+| P5 | 可扩展导出体系 | `BaseExporter` / `EXPORTERS` / `ExportResult` / `VerifyReport`、`tools/export.py`、TensorRT 占位 | 三任务 ONNX 导出 + ORT 一致性 max_diff < 1e-4 |
+
+- **接口契约**：`docs/design/v2_p0_p1_contract.md`、`v2_p2_contract.md`、`v2_p3_contract.md`、
+  `v2_p4_contract.md`、`v2_p5_contract.md`。
+- **使用文档**：`docs/dataset_spec.md`、`training_contracts.md`、`multi_task.md`、`inference.md`、
+  `model_export.md`；示例配置在 `configs/examples/`。
+- **当前基线**：`pytest tests -q` → **1092 passed / 1 skipped / 0 failed**；`ruff` / `black` 全绿；
+  分层检查器 0 违规。
+- **提交**：`deca03b`(P0) / `80d774d`(P1) / `000e9dd`(P2) / `71e38f0`(P3) / `3a282f5`(P4) /
+  `2360442`(P5)；发布提交与 `v2.0.0` tag 见第八章。
+
 ### 📊 实测数据（唯一可比基准）
 
 > 于 `conda env dvisionix`（Python 3.14.6 / torch 2.12.0 / CPU-only）实测，
@@ -175,6 +195,10 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 | 导出契约 | 嵌套输出崩溃、导出改动调用者模型 | ✅ 嵌套输出可导出并数值验证、导出不改变原模型状态 |
 | 发行物 | wheel 缺内置默认配置、混入 `tests/` | ✅ `config/defaults/*.yaml` 全部在包内、无 `tests/`；干净安装后 `Config.from_default()` 可用 |
 | 测试顺序依赖 | 未知（依赖顶层 eager import） | ✅ **56 个测试文件逐个独立运行全部通过** |
+
+> **v2.0.0 基线（2026-11-18）**：`pytest tests -q` → **1092 passed / 1 skipped / 0 failed**
+> （Python 3.11 / torch 2.14.1+cu130 / 7×RTX 5060 Ti，2 卡可见）；`ruff` / `black` 全绿；
+> 分层检查器 0 违规。上表为 v1.0.0 / v1.1 历史基准，保留用于对照。
 
 ### 📈 性能基准（`tools/benchmark.py`，CPU / torch 2.12）
 
@@ -233,6 +257,15 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
 ## 六、未来发展规划（按优先级）
 
 > 以下内容**默认推迟**，仅在第七章阶段 0-4 全部完成（现已达成）后按明确指示实施。
+
+### v2 剩余计划（2.0.0 之后，按优先级）
+
+1. **B. 检索训练**（优先）：`EmbeddingModel` + `SupConLoss` + PK 采样 + `Recall@K` / `mAP@K`；
+   数据侧复用 DVX 分类布局，指标侧新增检索指标族。
+2. **C. 公开数据集 adapter**：COCO / VOC / Cityscapes / ADE20K → DVX 格式 converter，
+   复用 `tools/init_dataset.py` 的体检与切分能力。
+3. **D. ONNX / TensorRT 运行时推理**：ORT Session 封装 + TensorRT 后端（当前仅导出，
+   `TensorRTExporter.export` 为占位）。
 
 ### P1 — 指标 torchmetrics 迁移（low）
 - **背景**：内置指标（mAP / mIoU / PQ）正确性已由测试保障，torchmetrics 作为可选后端。
@@ -565,7 +598,8 @@ EMA 开销 1.44% < 3% ✅、所有优化均有前后基准与数值对拍 ✅、
 
 | 版本 | 里程碑 |
 |---|---|
-| v1.1.1（当前） | 正确性与稳定性修复：模型层（解码索引、AMP 数值、损失语义）、GPU 可用性、训练可靠性、DDP 正确性、工具链与文档收口。**无新增功能**，故按补丁号发布；含会改变检测指标口径的修复（见 7.10 与第八章行为变更登记） |
+| v2.0.0（当前） | **v2 重构发布**：DVX 标准数据集层、训练接线与任务/模型/数据契约、路由式多任务分类、推理链路、可扩展导出体系（含 `ONNXExporter.export/verify` 返回类型变更与契约校验）。测试 1092 passed / 1 skipped / 0 failed |
+| v1.1.1 | 正确性与稳定性修复：模型层（解码索引、AMP 数值、损失语义）、GPU 可用性、训练可靠性、DDP 正确性、工具链与文档收口。**无新增功能**，故按补丁号发布；含会改变检测指标口径的修复（见 7.10 与第八章行为变更登记） |
 | v1.1（已完成） | 稳定性与工程优化：阶段 0-5 全部完成（门禁 + 3 个官方配置 + 20 项缺陷 + 打包/CI + 性能） |
 | v1.0.0 | 功能基线：全库审查/注释/文档规范化，API 冻结 |
 | v0.17.0 | 训练工程 P2+P3、DINO look-forward-twice |
@@ -607,6 +641,11 @@ EMA 开销 1.44% < 3% ✅、所有优化均有前后基准与数值对拍 ✅、
 | v1.1（已实施） | 顶层 import 改为惰性（对应 7.7 的 5-4） | **API 语义变更**：`from dvisionix.config import Config` 不再加载 torch（3~4 s → 0.10 s）；组件注册发生在子模块被导入时，使用注册表前需显式 `import dvisionix.models`（或 training / metrics）。顶层便捷导出仍可用 |
 | v1.1（已实施） | 合成数据改为可复现（对应 7.7 的 5-1/5-4） | **行为变更**：`tools/train.py` 的合成数据由「每次运行随机」改为按 `(split, i)` 派生固定种子，同一划分多次运行结果一致 |
 | v1.1（已实施） | EMA 续训不再重置影子权重（对应 7.7 的 5-1） | **行为变更**：v1.0.0 的 `on_train_begin` 无条件用当前模型权重重建设 shadow，续训等于把 EMA 状态清零；现在会保留恢复出的影子。另外整型 buffer 不再参与滑动平均 |
+| v2.0.0 | `ONNXExporter.export()` 返回 `ExportResult`、`verify()` 返回 `VerifyReport`（P5） | **API 返回类型变更**：`ExportResult` 实现 `__str__`/`__fspath__`、`VerifyReport` 实现 `__bool__`，既有的「拿路径」与「真值判断」用法保持可用；用 `== str` 直接比较返回值或 `verify() is True` 的代码需调整 |
+| v2.0.0 | 训练入口执行任务 / 模型 / 数据三级契约校验（P2/P3） | **行为变更**：任务与模型能力无交集、DVX `data_type` 不匹配、`num_classes` 不一致、batch 缺字段，都会在训练开始前抛领域异常；未声明能力的自定义任务跳过对应校验 |
+| v2.0.0 | `ClsHead` / `MultiLabelHead.forward` 接受 `labels`（P2） | **训练语义变更**：`LinearClassifier + cls_head + ClassificationTask` 此前第一个 batch 即 `TypeError`；修复后 margin 头在分类任务中真正生效，相关超参需重新标定 |
+| v2.0.0 | `strategy: auto` 识别 torchrun；验证指标聚合先转 CPU（P2） | **行为变更**：torchrun 下不再需要手动指定 `--strategy ddp`；多卡验证聚合不再因跨设备 `torch.cat` 崩溃 |
+| v2.0.0 | `BaseModel.task_type` 类属性声明不再被 `BaseModel.__init__` 的 `None` 覆盖（P2） | **行为变更**：`class MyModel(BaseModel): task_type = "detection"` 现在能被 `model_task_types` 正确读取；此前会被实例属性覆盖为空 |
 | v1.1.1 | **检测解码的「类别 / 位置」索引修正**：`yolo_decode` / `fcos_decode` / `retinanet_decode` 由 `//n_loc`、`%n_loc` 改为 `%num_classes`、`//num_classes`（详见 7.10 的 N-1） | **指标口径变更（严重）**：展平索引是 `idx = 位置 * 类别数 + 类别`，旧实现把两者互换，导致**标签与框同时错位**（受控输入应得 `label=1、中心(3,3)`，实得 `label=2、中心(1,3)`）。修复前所有检测器的 `val_mAP` / `val_mAP_50` / `val_mAP_75`、推理输出与 ONNX 导出结果**均不可信**；训练 loss 因损失端语义正确而始终正常，故此前无任何信号。**历史检测指标不可与修复后比较** |
 | v1.1.1 | `RetinaNetLoss` 补上 batch / 层数归一化，与 FCOS / YOLO 口径一致（7.10 的 N-2） | **训练语义变更**：旧实现是逐项均值的累加，loss 与 `batch_size × 层数` 成正比（实测 bs=1/2/4 → 0.971 / 1.942 / 3.884），等效学习率随 batch 漂移。修正后 loss 量级显著下降，**RetinaNet 的既有学习率需重新标定**，且修复前后的 `val_loss` 不可比 |
 | v1.1.1 | ArcFace / CosFace / SphereFace / AdaFace / CurricularFace 的 margin **开始真正生效**：`LinearClassifier` 透传 `**kwargs`，`ClassificationTask.training_step` 传入 `labels`（7.10 的 N-3） | **训练语义变更**：此前 kwargs 被丢弃且任务只传 `images`，5 个 margin 头**从未施加过 margin**，等价于 NormFace。修正后这些头的 logits 分布与最优超参都会变化，需重新训练与标定 |
