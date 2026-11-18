@@ -35,7 +35,7 @@ __version__ = "1.1.1"
 # `from dvisionix.models import build_model` 时才真正导入该子模块。
 # 注意副作用：注册表（MODELS / HEADS / ...）在对应子模块被导入后才填充 ——
 # 需要用到某个注册表时请显式导入对应子模块。
-_SUBMODULES = ("config", "data", "export", "metrics", "models", "training", "utils")
+_SUBMODULES = ("config", "data", "export", "inference", "metrics", "models", "training", "utils")
 
 #: 便捷导出 -> (提供该名字的子模块, 属性名)
 _BUILDERS = {
@@ -99,6 +99,7 @@ __all__ = [
     "utils",
     "config",
     "export",
+    "inference",
     "__version__",
     "Registry",
     "build_from_cfg",

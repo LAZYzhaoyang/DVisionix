@@ -23,6 +23,7 @@ __all__ = [
     "TaskDataMismatchError",
     "ModelOutputMismatchError",
     "CheckpointError",
+    "InferenceError",
     "ExportError",
 ]
 
@@ -85,6 +86,14 @@ class ModelOutputMismatchError(DVisionixError):
 
 class CheckpointError(DVisionixError):
     """检查点缺失、损坏或与当前模型结构不匹配。"""
+
+
+class InferenceError(DVisionixError):
+    """推理链路失败：输入图像不合法、预处理产物异常或结果文件无法读取/解析。
+
+    典型场景：传入不支持的图像类型、图像路径不存在、预处理流水线未产出张量、
+    ``Results`` JSON 损坏。调用方捕获后可回退到自己的图像读取/结果容错逻辑。
+    """
 
 
 class ExportError(DVisionixError):
