@@ -172,6 +172,8 @@ YOLOv9 / DETR / DINO-LFT）+ assigner（Grid / FCOS / MaxIoU / ATSS / TaskAligne
   `v2_p4_contract.md`、`v2_p5_contract.md`。
 - **使用文档**：`docs/dataset_spec.md`、`training_contracts.md`、`multi_task.md`、`inference.md`、
   `model_export.md`；示例配置在 `configs/examples/`。
+- **文档同步（v2.0.0）**：README / CHANGELOG / `docs/quick_start.md` / 上述五篇使用文档 /
+  `docs/README.md` 索引均已更新；17 篇 md 链接检查 0 失效；CodePlan 本表与第八章同步登记。
 - **当前基线**：`pytest tests -q` → **1092 passed / 1 skipped / 0 failed**；`ruff` / `black` 全绿；
   分层检查器 0 违规。
 - **提交**：`deca03b`(P0) / `80d774d`(P1) / `000e9dd`(P2) / `71e38f0`(P3) / `3a282f5`(P4) /
