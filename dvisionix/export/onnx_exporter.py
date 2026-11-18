@@ -10,17 +10,24 @@ ONNX 模型导出器
 - 多输出 verify（onnxruntime 逐输出对比）
 - trace（默认，零额外依赖）与 dynamo（可选，需 onnxscript）两种导出后端
 - 任务感知：写入 transforms 归一化元数据（mean/std/scale）到 ONNX metadata_props
+- P5：继承 :class:`~dvisionix.export.base.BaseExporter`，``export`` 返回
+  :class:`~dvisionix.export.base.ExportResult`，``verify`` 返回
+  :class:`~dvisionix.export.base.VerifyReport`（二者均兼容旧的路径/布尔用法）。
 """
 
 import json
 import os
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
 
 from ..utils import get_logger
+from .base import EXPORTERS, BaseExporter, ExportResult, VerifyReport
+
+if TYPE_CHECKING:  # pragma: no cover - 仅用于类型检查
+    from ..inference.preprocess import PreprocessSpec
 
 _logger = get_logger("dvisionix.export")
 
@@ -67,7 +74,8 @@ def _flatten_outputs(outputs: Any) -> Tuple[List[torch.Tensor], List[str], Dict[
     return tensors, names, paths
 
 
-class ONNXExporter:
+@EXPORTERS.register(name="onnx")
+class ONNXExporter(BaseExporter):
     """ONNX 模型导出器。
 
     Args:
@@ -78,12 +86,15 @@ class ONNXExporter:
         device: 导出设备（'cpu' / 'cuda'）。
         task_type: 任务类型（'classification' / 'detection' / 'segmentation'，可选）。
         normalize: 归一化元数据，如 ``{"mean": [...], "std": [...], "scale": 1/255}``。
+        preprocess: 显式推理预处理规格；缺省时按 ``task_type`` + ``normalize`` 推断。
 
     Examples:
         >>> exporter = ONNXExporter(model, input_shape=(3, 32, 32))
-        >>> exporter.export("model.onnx", dynamic_batch=True)
-        >>> exporter.verify("model.onnx")
+        >>> result = exporter.export("model.onnx", dynamic_batch=True)
+        >>> assert exporter.verify(result)
     """
+
+    format = "onnx"
 
     def __init__(
         self,
@@ -94,14 +105,16 @@ class ONNXExporter:
         device: str = "cpu",
         task_type: Optional[str] = None,
         normalize: Optional[Dict[str, Any]] = None,
+        preprocess: Optional["PreprocessSpec"] = None,
     ) -> None:
         # 不在构造期修改调用者的模型：v1.0.0 的 `model.to(device).eval()` 会让导出
         # 永久改变原模型的设备与 train/eval 状态。改为在 export/verify 内用
         # _temporary_eval() 临时切换并在 finally 中恢复。
-        self.model = model
+        super().__init__(model)
         self.device = torch.device(device)
         self.task_type = task_type
         self.normalize = normalize
+        self.preprocess = preprocess
 
         if dummy_inputs is not None:
             self.dummy_inputs = (
@@ -162,8 +175,8 @@ class ONNXExporter:
         simplify: bool = False,
         backend: str = "trace",
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        """导出模型为 ONNX 格式，返回导出文件路径。
+    ) -> ExportResult:
+        """导出模型为 ONNX 格式，返回导出结果。
 
         Args:
             dynamic_batch: 导出动态 batch。``None``（默认）时按后端取默认值：
@@ -171,6 +184,10 @@ class ONNXExporter:
             dynamic_size: 导出动态高宽，默认 ``False``。
             backend: 'trace'（默认）或 'dynamo'（需安装 onnxscript）。
             metadata: 附加元数据，与 normalize 合并写入 ONNX metadata_props。
+
+        Returns:
+            :class:`~dvisionix.export.base.ExportResult`；``str(result)`` 与
+            ``os.fspath(result)`` 均为导出文件路径，兼容旧的字符串用法。
         """
         if backend not in ("trace", "dynamo"):
             raise ValueError(f"backend 必须是 'trace' 或 'dynamo'，当前: {backend!r}")
@@ -257,13 +274,76 @@ class ONNXExporter:
                     dynamo=False,
                 )
 
-        self._write_metadata(output_path, metadata, extra={"output_path_map": output_paths})
+        dummy_input_shapes = [list(t.shape) for t in self.dummy_inputs]
+        result = ExportResult(
+            path=output_path,
+            format="onnx",
+            input_names=list(input_names),
+            input_shapes=dummy_input_shapes,
+            output_names=list(output_names),
+            opset=opset_version,
+            dynamic_axes=dict(dynamic_axes) if dynamic_axes else None,
+            preprocess=self._resolve_preprocess(dummy_input_shapes),
+            extra={
+                "backend": backend,
+                "simplify": simplify,
+                "output_path_map": output_paths,
+            },
+        )
+
+        # 契约 §2：把完整的 ExportResult 写入 ONNX metadata_props 的
+        # `dvisionix_export` 键；同时保留原有 normalize_* 与 output_path_map 键。
+        self._write_metadata(
+            output_path,
+            metadata,
+            extra={
+                "output_path_map": output_paths,
+                "dvisionix_export": result.to_dict(),
+            },
+        )
         _logger.info(f"[OK] ONNX model exported: {output_path}")
 
         if simplify:
             self._simplify(output_path)
 
-        return output_path
+        return result
+
+    def _resolve_preprocess(self, input_shapes: List[List[int]]) -> Optional["PreprocessSpec"]:
+        """解析本次导出应记录的预处理规格。
+
+        优先级（契约 §2）：显式传入的 ``preprocess`` > 由 ``task_type`` +
+        ``normalize`` 推断 > ``None``。
+
+        Args:
+            input_shapes: dummy 输入的完整形状（含 batch 维）。
+
+        Returns:
+            预处理规格；没有足够信息时为 None。
+
+        Raises:
+            ValueError: 设置了 ``task_type`` 但第一个输入不是图像（不足 2 维）。
+        """
+        if self.preprocess is not None:
+            return self.preprocess
+        if not self.task_type:
+            return None
+
+        from ..inference.preprocess import IMAGENET_MEAN, IMAGENET_STD, PreprocessSpec
+
+        shape = input_shapes[0]
+        if len(shape) < 2:
+            raise ValueError(
+                f"task_type={self.task_type!r} 需要图像输入（至少 2 维），"
+                f"但第一个输入形状为 {shape}"
+            )
+        normalize = self.normalize or {}
+        return PreprocessSpec(
+            task_type=str(self.task_type),
+            image_size=int(shape[-2]),
+            mean=tuple(normalize.get("mean") or IMAGENET_MEAN),
+            std=tuple(normalize.get("std") or IMAGENET_STD),
+            scale=normalize.get("scale", 1.0 / 255.0),
+        )
 
     # ------------------------------------------------------------------
     # 元数据
@@ -323,19 +403,36 @@ class ONNXExporter:
     # ------------------------------------------------------------------
     def verify(
         self,
-        onnx_path: str,
+        result_or_path: Any,
         rtol: float = 1e-3,
         atol: float = 1e-5,
         num_samples: int = 3,
-    ) -> bool:
-        """验证 ONNX 输出与 PyTorch 输出的一致性（多输入/多输出）。"""
+    ) -> VerifyReport:
+        """验证 ONNX 输出与 PyTorch 输出的一致性（多输入/多输出）。
+
+        Args:
+            result_or_path: :class:`~dvisionix.export.base.ExportResult` 或 ONNX 路径；
+                传入 ExportResult 时会把全局最大误差回填到
+                ``result.parity_max_abs_diff``。
+            rtol: 相对容差。
+            atol: 绝对容差。
+            num_samples: 重复校验的样本轮数。
+
+        Returns:
+            :class:`~dvisionix.export.base.VerifyReport`；``bool(report)`` 等价于
+            ``report.passed``，既有 ``assert exporter.verify(path)`` 语义不变。
+            ``outputs`` 为逐输出明细（跨样本汇总），``max_abs_diff`` 为全局最大误差。
+        """
+        result = result_or_path if isinstance(result_or_path, ExportResult) else None
+        onnx_path = result.path if result is not None else os.fspath(result_or_path)
+
         try:
             import onnxruntime as ort
         except ImportError:  # pragma: no cover
             _logger.warning(
                 "[WARN] onnxruntime not installed, skip verify. pip install onnxruntime"
             )
-            return False
+            return VerifyReport(passed=False)
 
         import numpy as np
 
@@ -344,6 +441,9 @@ class ONNXExporter:
         onnx_output_names = [out.name for out in session.get_outputs()]
 
         all_passed = True
+        global_max_diff: Optional[float] = None
+        details: Dict[str, Dict[str, Any]] = {}
+
         with self._temporary_eval():
             for sample_idx in range(num_samples):
                 dummy = tuple(t.clone() for t in self.dummy_inputs)
@@ -367,15 +467,32 @@ class ONNXExporter:
                         else f"#{out_idx}"
                     )
                     torch_array = torch_out.detach().cpu().numpy()
+                    entry = details.setdefault(
+                        onnx_name,
+                        {
+                            "name": onnx_name,
+                            "shape": list(onnx_out.shape),
+                            "max_abs_diff": None,
+                            "passed": True,
+                        },
+                    )
                     if torch_array.shape != onnx_out.shape:
                         _logger.error(
                             f"  [FAIL] Sample {sample_idx + 1} output '{onnx_name}': "
                             f"形状不一致 torch={torch_array.shape} onnx={onnx_out.shape}"
                         )
                         all_passed = False
+                        entry["passed"] = False
                         continue
-                    is_close = np.allclose(torch_array, onnx_out, rtol=rtol, atol=atol)
+                    is_close = bool(np.allclose(torch_array, onnx_out, rtol=rtol, atol=atol))
                     max_diff = float(np.abs(torch_array - onnx_out).max())
+                    previous = entry["max_abs_diff"]
+                    entry["max_abs_diff"] = (
+                        max_diff if previous is None else max(float(previous), max_diff)
+                    )
+                    global_max_diff = (
+                        max_diff if global_max_diff is None else max(global_max_diff, max_diff)
+                    )
                     status = "[OK]" if is_close else "[FAIL]"
                     _logger.info(
                         f"  {status} Sample {sample_idx + 1} output '{onnx_name}': "
@@ -383,12 +500,21 @@ class ONNXExporter:
                     )
                     if not is_close:
                         all_passed = False
+                        entry["passed"] = False
 
         if all_passed:
             _logger.info("[OK] ONNX accuracy verification passed")
         else:
             _logger.error("[FAIL] ONNX accuracy verification failed")
-        return all_passed
+
+        report = VerifyReport(
+            passed=all_passed,
+            max_abs_diff=global_max_diff,
+            outputs=list(details.values()),
+        )
+        if result is not None:
+            result.parity_max_abs_diff = global_max_diff
+        return report
 
 
 __all__ = ["ONNXExporter"]
