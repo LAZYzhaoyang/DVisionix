@@ -266,3 +266,36 @@ torchrun --nproc_per_node=2 tools/train.py \
   （示例配置均为 `false`）。
 - 三级契约、8 个内置任务契约、自定义任务/模型声明与 `strategy: auto` 的行为见
   [训练契约与自适应训练](training_contracts.md)。
+
+---
+
+## 用训练好的模型推理
+
+训练完成后，用 `tools/infer.py` 对单张图片或目录推理。完整 Trainer checkpoint
+（`checkpoints/best.pt`）含非张量状态，需要 `--trusted`：
+
+```bash
+python tools/infer.py --config configs/classification/demo_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt \
+  --input ./samples --output ./outputs/cls --trusted --save-vis
+```
+
+每张图输出 `<stem>.json`，`--save-vis` 时另存 `<stem>_vis.jpg`；检测/分割把
+`--config` 换成对应配置即可。Python 中可以直接构建预测器：
+
+```python
+from dvisionix.config import Config
+from dvisionix.inference import ClassificationPredictor
+from dvisionix.models import build_model
+
+cfg = Config.from_yaml("configs/classification/demo_synthetic.yaml")
+model = build_model(cfg.model.to_dict())
+predictor = ClassificationPredictor.from_checkpoint(
+    model, "/path/to/work_dir/checkpoints/best.pt", "classification",
+    trusted=True, image_size=cfg.data.image_size,
+)
+result = predictor.predict("./samples/a.jpg")
+print(result.topk, result.orig_size)
+```
+
+预处理规格、`Results` 字段、反变换与已知限制见 [推理](inference.md)。

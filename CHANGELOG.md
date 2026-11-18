@@ -5,10 +5,11 @@
 
 ## [Unreleased] — v2 开发中
 
-> 本小节记录 v2 重构 P0 / P1 / P2 / P3 阶段的变更；版本号尚未变更（仍为 1.1.1）。
+> 本小节记录 v2 重构 P0 / P1 / P2 / P3 / P4 阶段的变更；版本号尚未变更（仍为 1.1.1）。
 > 接口契约见 [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)、
-> [P2 实现契约](docs/design/v2_p2_contract.md) 与
-> [P3 实现契约](docs/design/v2_p3_contract.md)。
+> [P2 实现契约](docs/design/v2_p2_contract.md)、
+> [P3 实现契约](docs/design/v2_p3_contract.md) 与
+> [P4 实现契约](docs/design/v2_p4_contract.md)。
 
 ### 新增：P0 架构基线
 
@@ -165,6 +166,42 @@
   `docs/quick_start.md` / `README.md` / `docs/README.md` 同步多任务数据、训练命令、
   特性与文档索引。
 
+### 新增：P4 推理链路
+
+- **预处理规格** `dvisionix/inference/preprocess.py`：新增 `PreprocessSpec`
+  （`task_type` / `image_size` / `mean/std/scale`，支持 `from_pipeline` / `to_dict` /
+  `from_dict`）、`PreprocessMeta`（`original_size` / `processed_size` / `scale` /
+  `image_path`）与 `PreprocessPipeline`。`from_task` 复用 Task 的
+  `build_transforms(train=False, image_size=...)`，不重写 resize / normalize；输入支持
+  路径、uint8 RGB ndarray、PIL，返回 `(1, 3, H, W)` float32 CPU 张量与反变换元信息；
+  同一输入重复调用结果确定，且不修改传入数组。
+- **统一结果** `dvisionix/inference/results.py`：`Results` 覆盖分类 `probs` / `topk`、
+  检测 `boxes` / `scores` / `labels`、分割 `mask`、`orig_size` / `meta`，检测框为原图
+  坐标、mask 为原图尺寸；`to_dict` / `to_json` / `save` / `load` 往返，`visualize`
+  返回 BGR 图像（分类 top-k 文本、检测框 + 分数、分割调色板叠色 0.5）。
+- **三个 Predictor** `dvisionix/inference/predictors.py`：`BasePredictor` 负责设备解析、
+  预处理、`eval()` + `no_grad()` 前向与训练状态恢复（`finally` 中恢复）；
+  `ClassificationPredictor` 做 softmax + top-k；`DetectionPredictor` 复用
+  `model.decode()`，按 `meta["scale"]` 把框反变换回原图并 clip；`SegmentationPredictor`
+  先 argmax 再 nearest 插值回原图，可选 `return_probs`；`build_predictor` 按任务类型
+  返回子类。`from_checkpoint` 兼容纯 state_dict / `model_state_dict` / DDP / compile
+  前缀，默认 `weights_only=True`，完整 Trainer checkpoint 需 `trusted=True`。
+- **CLI** `tools/infer.py`：`--config` / `--checkpoint` / `--input` / `--output` 必填，
+  支持 `--task-type` / `--device` / `--trusted` / `--save-json` / `--no-save-json` /
+  `--save-vis` / `--cfg-options`；目录递归收集并按路径排序，逐图输出 `<stem>.json`
+  （`--save-vis` 时另有 `<stem>_vis.jpg`），stdout 打印汇总，失败非零退出。
+- **错误** `dvisionix/errors.py` 新增 `InferenceError`；`dvisionix/__init__.py`
+  懒加载子模块与 `__all__` 增加 `inference`。
+- **测试**：新增 `tests/test_inference/`（preprocess / results / predictors / CLI）；
+  全量 `pytest tests -q` 为 **1066 passed / 1 skipped / 0 failed**。
+- **真实数据验收**（1 epoch checkpoint，仅用于确认链路跑通，**不作为模型效果结论**）：
+  cls 原图 870×870、5 类概率和为 1.0、top-1 类别为 2 且概率 0.903；det 原图 439×439、
+  检出 4 个框且全部落在原图界内；seg 原图 1024×1024、mask 为 `(1024, 1024) int64`、
+  取值样例 `[0, 3, 5, 10]`。反例：不加 `--trusted` 加载完整 checkpoint 会抛
+  `CheckpointError` 并提示需要 `trusted=True`。
+- **文档**：新增 [推理链路](docs/inference.md)；`docs/quick_start.md` / `README.md` /
+  `docs/README.md` 同步推理命令、特性、测试基线与文档索引。
+
 ### 尚未接线 / 已知边界
 
 - `DVXDataset` 仍未注册到 `DATASETS`；训练入口通过 `data.dataset: dvx` + `data.spec`
@@ -173,7 +210,9 @@
   而路由前向不向 head 透传 `labels`，暂不支持（强行配置不会报错，但 margin 会静默失效）；
   `synthetic` 数据源不支持多任务；跨任务共享标签空间未实现。
 - DDP 已验证范围为单机多卡；多机（多节点）DDP 未验证。
-- P2 范围不含推理与导出链路；P3 也未做多任务推理/导出专项。
+- P2 范围不含推理与导出链路（P4 已补单任务推理）；P3 也未做多任务推理/导出专项。
+- P4 只接入单任务推理（classification / detection / segmentation）；多任务分类推理、
+  ONNX / TensorRT 推理与批量吞吐优化仍未实现（P5 计划）。
 - `seg_mode: query` 只是 schema 保留值，数据层仅实现 `semantic`。
 - 检索（retrieval / re-identification）任务尚未实现。
 - `ignore_index` 目前只做 spec 校验与展示，`DVXDataset` 栅格化背景固定为 0；

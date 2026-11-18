@@ -519,6 +519,7 @@ def build_predictor(model, task_type: str, **kwargs: Any) -> BasePredictor:
         raise ConfigError(
             f"不支持的推理任务类型：{task_type!r}（模型 {type(model).__name__}）",
             hint=f"当前支持的任务类型：{supported}；simclr 等自监督任务没有推理语义，"
-            "多任务分类请直接使用对应的预测器子类。",
+            "多任务分类（MultiTaskClassifier）目前没有推理封装，"
+            "如需推理请直接调用模型并用 task=... 取对应任务的 logits。",
         )
     return predictor_cls(model, task_type=key, **kwargs)

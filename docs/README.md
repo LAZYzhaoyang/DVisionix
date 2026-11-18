@@ -12,6 +12,7 @@
 - [v1.1 变更与迁移指南](v1.1_changes.md) - 20 项缺陷修复、行为变更、新配置项、API 变化
 
 ## 核心模块
+- [推理链路](inference.md) - 预处理规格、统一 Results、三任务 Predictor、CLI 与已知限制
 - [数据模块](data.md) - Sample 协议、BaseDataset、原子变换与裁剪契约、公开数据集工具箱
 - [骨干网络](backbones.md) - 12 种内置骨干（CNN/Transformer/timm）与预训练加载
 - [自定义 Layer 与 Model](custom_models.md) - layers 模块、注册表与配置驱动组装
@@ -26,6 +27,7 @@
 
 ## 工具与入口
 - `tools/train.py` - 配置驱动统一训练入口（分类/检测/分割/多任务/自监督，支持 DVX 数据集、resume / DDP / work_dir / ONNX 导出）
+- `tools/infer.py` - 配置驱动推理入口（分类/检测/分割，输出 JSON 与可视化）
 - `tools/hparam_search.py` - 超参搜索（参数网格/随机采样，逐 trial 独立进程）
 - `tools/benchmark.py` - 性能基准（EMA / PQ / mAP / matcher / assigner / 数据加载 / 导入开销）
 

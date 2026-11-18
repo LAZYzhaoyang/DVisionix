@@ -42,6 +42,16 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 - ✅ 实例/全景分割（MaskFormer/Mask2Former + PQ/SQ/RQ）
 - ✅ 自监督对比学习（SimCLR）+ 线性评估闭环
 
+### 🔎 推理链路（v2 P4）
+- **预处理规格**：`PreprocessSpec` / `PreprocessMeta` 记录尺寸与缩放比；
+  复用验证期 `*Transforms(train=False)`，与训练完全一致
+- **统一 Results**：分类 `probs/topk`、检测 `boxes/scores/labels`、分割 `mask`，
+  几何量已反变换回**原图坐标 / 原尺寸**
+- **三任务 Predictor**：`build_predictor` / `BasePredictor.from_checkpoint`，
+  支持 classification / detection / segmentation
+- **CLI**：`tools/infer.py` 配置驱动，单图/目录批量输出 JSON 与可视化；
+  详见 [推理](docs/inference.md)
+
 ### 📦 标准化数据
 - **DVX 标准数据集**：一个根目录 + 一份 `dvx_dataset.yaml`，覆盖**分类 / labelme 检测与分割 / 多任务分类**；
   单任务共用一张类别表（多任务每任务独立类表），切分非破坏性（ratio / dir / list），
@@ -148,6 +158,19 @@ python tools/train.py --config configs/examples/dvx_classification.yaml \
 [多任务分类](docs/multi_task.md)，三级校验与自适应训练见
 [训练契约与自适应训练](docs/training_contracts.md)。
 
+### 用训练好的模型推理
+
+```bash
+# 完整 Trainer checkpoint 含非张量状态，需要 --trusted
+python tools/infer.py --config configs/classification/demo_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt \
+  --input ./samples --output ./outputs/cls --trusted --save-vis
+```
+
+每张图输出 `<stem>.json`，`--save-vis` 时另存 `<stem>_vis.jpg`；检测/分割把
+`--config` 换成对应配置即可。预处理规格、`Results` 字段、反变换与已知限制见
+[推理链路](docs/inference.md)。
+
 ### 编程式使用
 
 ```python
@@ -184,6 +207,7 @@ dvisionix/
 │   ├── segmenters/      # SegmentationModel / SwinUNet（组合器）
 │   ├── postprocess.py   # NMS / IoU / 共享契约解码器
 │   └── toy/             # 教学模型（SimpleCNN / SimpleSegmentationModel / GridDetectionModel / DetHead）
+├── inference/           # 推理：预处理规格 / 统一 Results / 三任务 Predictor
 ├── training/
 │   ├── trainer.py       # 统一训练引擎（Task 驱动 / DDP / AMP / 梯度累积 / resume / torch.compile）
 │   ├── tasks/           # BaseTask + 8 个内置任务（分类/检测/分割/多标签/多任务/SimCLR/线性评估/MaskFormer）
@@ -195,6 +219,7 @@ dvisionix/
 └── export/              # ONNXExporter（trace/dynamo、dict 多输出、精度验证）
 tools/
 ├── train.py             # 配置驱动统一训练入口
+├── infer.py             # 配置驱动推理入口（分类/检测/分割）
 └── hparam_search.py     # 超参搜索工具
 configs/                 # 各任务合成数据 demo 配置（分类/检测/分割）
 ```
@@ -206,6 +231,7 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 | 文档 | 说明 |
 |------|------|
 | [快速开始](docs/quick_start.md) | 安装、Config 驱动训练、编程式训练、训练工程增强 |
+| [推理链路](docs/inference.md) | 预处理规格、统一 Results、三任务 Predictor、CLI 与已知限制 |
 | [配置系统](docs/config_system.md) | Config 加载 / 继承 / CLI 覆盖 / schema 校验 |
 | [数据模块](docs/data.md) | Sample 协议、BaseDataset、transforms、数据集工具箱 |
 | [DVX 标准数据集](docs/dataset_spec.md) | dvx_dataset.yaml 字段、三种切分、DVXDataset 用法与四套真实数据 |
@@ -230,7 +256,7 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-测试状态**以 CI 运行结果为准**。当前实测 **963 passed / 1 skipped / 0 failed**
+测试状态**以 CI 运行结果为准**。当前实测 **1066 passed / 1 skipped / 0 failed**
 （v1.1.0 基线为 447 passed + 2 skipped），`ruff` / `black` 全绿。
 `test_ddp_cpu.py` 的两条多进程用例需要创建命名管道，在禁止命名管道的受限沙箱中可能失败；
 本机与常规 CI 环境可正常运行。
