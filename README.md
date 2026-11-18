@@ -52,6 +52,15 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 - **CLI**：`tools/infer.py` 配置驱动，单图/目录批量输出 JSON 与可视化；
   详见 [推理](docs/inference.md)
 
+### 📤 模型导出（v2 P5）
+- **可扩展导出体系**：`BaseExporter` / `EXPORTERS` 注册表 / `ExportResult`
+  （含 `PreprocessSpec` 预处理规格），`build_exporter("onnx" | "tensorrt", ...)` 按名构建
+- **ONNX 一致性校验**：`ExportResult` + `VerifyReport`（全局与逐输出 `max_abs_diff`，
+  `bool(report)` 保持旧布尔语义），trace / dynamo 双后端、嵌套输出、动态 batch
+- **CLI**：`tools/export.py` 配置驱动导出 + `--verify`，落盘 `<output>.json` sidecar；
+  TensorRT 仅预留扩展点（`export()` 抛 `NotImplementedError`），详见
+  [模型导出](docs/model_export.md)
+
 ### 📦 标准化数据
 - **DVX 标准数据集**：一个根目录 + 一份 `dvx_dataset.yaml`，覆盖**分类 / labelme 检测与分割 / 多任务分类**；
   单任务共用一张类别表（多任务每任务独立类表），切分非破坏性（ratio / dir / list），
@@ -62,7 +71,7 @@ DVisionix 面向个人科研与工程实践，目标是做一个「自己的算�
 ### 🛠️ 工具链
 - 超参搜索 `tools/hparam_search.py`（参数网格/随机采样，逐 trial 独立进程）
 - 性能基准 `tools/benchmark.py`（固定输入、可复现、可隔离测峰值内存）
-- ONNX 导出 `ONNXExporter`（trace/dynamo 后端、嵌套输出、精度验证）
+- 模型导出 `tools/export.py`（ONNX 一致性校验，导出体系见「模型导出」）
 - 结构化日志（console + file + JSONL + TensorBoard）
 - 训练增强：warmup 调度器、梯度裁剪、EMA（`training.ema` 配置开启）、
   知识蒸馏（编程式 API：`DistillCallback`）、torch.compile、channels_last
@@ -171,6 +180,18 @@ python tools/infer.py --config configs/classification/demo_synthetic.yaml \
 `--config` 换成对应配置即可。预处理规格、`Results` 字段、反变换与已知限制见
 [推理链路](docs/inference.md)。
 
+### 导出为 ONNX
+
+```bash
+python tools/export.py --config configs/classification/demo_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt \
+  --output ./exports/cls.onnx --verify --trusted
+```
+
+导出同时在 `<output>.json` 写入 sidecar；`--verify` 通过时打印
+「一致性校验: 通过，全局 max_abs_diff=...」，未通过退出码 1。完整参数表、`ExportResult`
+字段与 TensorRT 扩展点见 [模型导出](docs/model_export.md)。
+
 ### 编程式使用
 
 ```python
@@ -216,10 +237,11 @@ dvisionix/
 │   └── workdir.py / builder.py / checkpoint.py / evaluation.py
 ├── metrics/             # 分类/分割/检测(mAP)/全景(PQ) + MetricCollection + 预设
 ├── utils/               # 设备工具 + logging（console/file/JSONL/TensorBoard）
-└── export/              # ONNXExporter（trace/dynamo、dict 多输出、精度验证）
+└── export/              # 导出体系（BaseExporter / EXPORTERS / ExportResult；ONNX + TensorRT 占位）
 tools/
 ├── train.py             # 配置驱动统一训练入口
 ├── infer.py             # 配置驱动推理入口（分类/检测/分割）
+├── export.py            # 配置驱动导出入口（ONNX + 一致性校验）
 └── hparam_search.py     # 超参搜索工具
 configs/                 # 各任务合成数据 demo 配置（分类/检测/分割）
 ```
@@ -244,7 +266,7 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 | [语义分割](docs/segmentation.md) | 分割数据格式与端到端训练 |
 | [指标](docs/metrics.md) | 原子指标、组合容器、预设 |
 | [日志系统](docs/logging.md) | TrainingLogger / JSONL / TensorBoard |
-| [模型导出](docs/model_export.md) | ONNX 导出与验证 |
+| [模型导出](docs/model_export.md) | 可扩展导出体系（BaseExporter/EXPORTERS/ExportResult）、CLI 与 ONNX 一致性校验 |
 
 项目规划与开发约束（model 模块调用规则 R1-R7）见 [CodePlan](CodePlan.md)。
 
@@ -256,7 +278,7 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-测试状态**以 CI 运行结果为准**。当前实测 **1066 passed / 1 skipped / 0 failed**
+测试状态**以 CI 运行结果为准**。当前实测 **1092 passed / 1 skipped / 0 failed**
 （v1.1.0 基线为 447 passed + 2 skipped），`ruff` / `black` 全绿。
 `test_ddp_cpu.py` 的两条多进程用例需要创建命名管道，在禁止命名管道的受限沙箱中可能失败；
 本机与常规 CI 环境可正常运行。

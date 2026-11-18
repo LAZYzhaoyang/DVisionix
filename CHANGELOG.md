@@ -5,11 +5,13 @@
 
 ## [Unreleased] — v2 开发中
 
-> 本小节记录 v2 重构 P0 / P1 / P2 / P3 / P4 阶段的变更；版本号尚未变更（仍为 1.1.1）。
-> 接口契约见 [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)、
+> 本小节记录 v2 重构 P0 / P1 / P2 / P3 / P4 / P5 阶段的变更；版本号尚未变更
+> （仍为 1.1.1）。接口契约见
+> [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)、
 > [P2 实现契约](docs/design/v2_p2_contract.md)、
-> [P3 实现契约](docs/design/v2_p3_contract.md) 与
-> [P4 实现契约](docs/design/v2_p4_contract.md)。
+> [P3 实现契约](docs/design/v2_p3_contract.md)、
+> [P4 实现契约](docs/design/v2_p4_contract.md) 与
+> [P5 实现契约](docs/design/v2_p5_contract.md)。
 
 ### 新增：P0 架构基线
 
@@ -202,6 +204,59 @@
 - **文档**：新增 [推理链路](docs/inference.md)；`docs/quick_start.md` / `README.md` /
   `docs/README.md` 同步推理命令、特性、测试基线与文档索引。
 
+### 新增：P5 导出接口与 ONNX 一致性校验
+
+- **导出契约** `dvisionix/export/base.py`（新增）：`EXPORTERS` 注册表（复用
+  `Registry`）；`ExportResult`（`path` / `format` / `input_names` / `input_shapes` /
+  `output_names` / `opset` / `dynamic_axes` / `preprocess` / `parity_max_abs_diff` /
+  `extra`，支持 `to_dict` / `from_dict` / `save` / `load` 与 JSON sidecar）；
+  `VerifyReport`（`passed` / `max_abs_diff` / `outputs`，`__bool__` 等价 `passed`）；
+  `BaseExporter` 抽象基类；`build_exporter(format, model, **kwargs)` 按注册名构建，
+  未注册格式抛 `ConfigError` 并列出全部已注册格式。
+- **ONNXExporter 重构** `dvisionix/export/onnx_exporter.py`：继承 `BaseExporter`、
+  注册名 `onnx`；`export()` 返回 `ExportResult`（`input_shapes` 为 dummy 完整形状，
+  `dynamic_axes` 为实际生效映射，`extra` 含 `backend` / `simplify` /
+  `output_path_map`）；新增可选构造参数 `preprocess`，缺省时按 `task_type` +
+  `normalize` 与输入形状推断 `PreprocessSpec`（缺省 ImageNet，`scale=1/255`）；
+  `verify()` 返回 `VerifyReport`，汇总全局 `max_abs_diff` 与逐输出明细，并回填
+  `result.parity_max_abs_diff`；ONNX `metadata_props` 新增 `dvisionix_export` 键
+  （完整 `ExportResult.to_dict()`），保留原有 `normalize_*` 与 `output_path_map`。
+- **TensorRT 扩展点** `dvisionix/export/tensorrt.py`（新增）：`TensorRTExporter`
+  注册名 `tensorrt`，可构建；`export()` 恒抛 `NotImplementedError`（明确未实现，
+  不假装支持）。
+- **CLI** `tools/export.py`（新增）：`--config` / `--checkpoint` / `--output` 必填，
+  支持 `--format` / `--dynamic-batch` / `--opset` / `--verify` / `--trusted` /
+  `--device` / `--cfg-options`；导出后落盘 `<output>.json` sidecar（**先校验、后落盘**，
+  保证 `parity_max_abs_diff` 已回填）；`--verify` 未通过以退出码 1 结束；`--trusted`
+  与 `tools/infer.py` 语义一致。
+- **向后兼容（返回类型有变化，请留意）**：
+  - `ONNXExporter.export(...)` 由返回 `str` 改为 `ExportResult`；该类实现 `__str__`
+    与 `__fspath__`，`str(result)` / `os.fspath(result)` / `open(result)` /
+    `os.path.exists(result)` 仍可用；但 `result == "path"` 不再成立。
+  - `ONNXExporter.verify(...)` 由返回 `bool` 改为 `VerifyReport`；`__bool__` 返回
+    `passed`，既有 `assert exporter.verify(path)` 语义不变；`is True` / `== True`
+    不再成立。
+  - 构造函数签名保持兼容，仅**新增可选** `preprocess`；`from dvisionix.export import
+    ONNXExporter` 不变。
+- **导出面** `dvisionix/export/__init__.py`：完整导出 `ONNXExporter` / `BaseExporter` /
+  `ExportResult` / `VerifyReport` / `EXPORTERS` / `build_exporter` /
+  `TensorRTExporter`。
+- **测试**：新增 `tests/test_export/test_export_base.py`（结果序列化 / 路径协议 /
+  注册表 / TensorRT 占位 / metadata / verify 回填）与
+  `tests/test_export/test_export_cli.py`（CLI 端到端 / `--verify` / `--trusted`）；
+  既有 `test_onnx_export.py` / `test_onnx_contract.py` 原样通过；全量
+  `pytest tests -q` 为 **1092 passed / 1 skipped / 0 failed**。
+- **真实 checkpoint 验收**（1 epoch 冒烟 checkpoint，仅链路证据，**不作为效果结论**）：
+  分类 `[1,3,224,224]` → `[1,5]`，`max_abs_diff` 5.96e-06；检测 `[1,3,512,512]` →
+  8 个输出（`cls_0..3` / `reg_0..3`），3.34e-06；分割 `[1,3,256,256]` →
+  `[1,18,256,256]`，4.77e-06；三者均 < 1e-4。sidecar 的 `preprocess` /
+  `input_shapes` 正确，`--verify` 时 `parity_max_abs_diff` 已回填（同一分类
+  checkpoint 复跑 2.19e-05，属正常波动，量级约 1e-5）。
+- **文档**：重写 [模型导出](docs/model_export.md)（导出体系 / `ExportResult` 字段 /
+  CLI 参数与示例 / 向后兼容 / ONNX metadata / ORT 校验 / TensorRT 扩展点 / 已知限制）；
+  `docs/quick_start.md` 新增「导出为 ONNX（新 CLI）」；`README.md` /
+  `docs/README.md` 同步特性、命令、测试基线与文档索引。
+
 ### 尚未接线 / 已知边界
 
 - `DVXDataset` 仍未注册到 `DATASETS`；训练入口通过 `data.dataset: dvx` + `data.spec`
@@ -211,8 +266,11 @@
   `synthetic` 数据源不支持多任务；跨任务共享标签空间未实现。
 - DDP 已验证范围为单机多卡；多机（多节点）DDP 未验证。
 - P2 范围不含推理与导出链路（P4 已补单任务推理）；P3 也未做多任务推理/导出专项。
-- P4 只接入单任务推理（classification / detection / segmentation）；多任务分类推理、
-  ONNX / TensorRT 推理与批量吞吐优化仍未实现（P5 计划）。
+- P4 只接入单任务推理（classification / detection / segmentation）；P5 已交付 ONNX
+  导出与一致性校验，但多任务分类推理、ONNX / TensorRT **运行时推理**与批量吞吐优化
+  仍未实现。
+- TensorRT 导出只是扩展点：`TensorRTExporter.export()` 恒抛 `NotImplementedError`；
+  未做量化 / 裁剪 / FP16 导出，quantization 与引擎构建不在 P5 范围。
 - `seg_mode: query` 只是 schema 保留值，数据层仅实现 `semantic`。
 - 检索（retrieval / re-identification）任务尚未实现。
 - `ignore_index` 目前只做 spec 校验与展示，`DVXDataset` 栅格化背景固定为 0；

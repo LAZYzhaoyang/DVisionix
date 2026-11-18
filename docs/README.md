@@ -18,7 +18,7 @@
 - [自定义 Layer 与 Model](custom_models.md) - layers 模块、注册表与配置驱动组装
 - [指标 (Metrics)](metrics.md) - 原子指标、组合容器、预设与自定义
 - [日志系统](logging.md) - 结构化日志 / JSONL / TensorBoard（TrainingLogger）
-- [模型导出 (ONNX)](model_export.md) - ONNXExporter 导出与精度验证
+- [模型导出 (ONNX)](model_export.md) - BaseExporter/EXPORTERS/ExportResult 导出体系、`tools/export.py` CLI 与 ONNX Runtime 一致性校验（TensorRT 仅扩展点）
 - [语义分割任务](segmentation.md) - 分割数据格式与端到端训练
 - [目标检测任务](detection.md) - 组件化检测器、decode 契约、损失权重与 mAP 评估
 
@@ -28,6 +28,7 @@
 ## 工具与入口
 - `tools/train.py` - 配置驱动统一训练入口（分类/检测/分割/多任务/自监督，支持 DVX 数据集、resume / DDP / work_dir / ONNX 导出）
 - `tools/infer.py` - 配置驱动推理入口（分类/检测/分割，输出 JSON 与可视化）
+- `tools/export.py` - 配置驱动导出入口（ONNX + `<output>.json` sidecar + 一致性校验；TensorRT 仅扩展点）
 - `tools/hparam_search.py` - 超参搜索（参数网格/随机采样，逐 trial 独立进程）
 - `tools/benchmark.py` - 性能基准（EMA / PQ / mAP / matcher / assigner / 数据加载 / 导入开销）
 

@@ -442,7 +442,8 @@ vis = results.visualize(image=None, class_names=None)
    不同原图尺寸的样本也无法直接拼成一个张量。批量吞吐优化不在 P4 范围内。
 3. **未做 ONNX / TensorRT 推理与吞吐优化**。P4 只有 PyTorch 前向；`ONNXExporter`
    （见 [模型导出](model_export.md)）导出的是 `forward` 的原始输出，检测的 decode/NMS
-   仍需要在推理端自行处理。ONNX / TRT 推理与批量吞吐优化是 P5 计划。
+   仍需要在推理端自行处理。ONNX / TensorRT 运行时推理与批量吞吐优化均**尚未实现**：
+   P5 交付的是 ONNX **导出**（`tools/export.py`），不是 ONNX 推理。
 4. **`PreprocessSpec` 从预设 pipeline 反推**。`from_pipeline` 只能提取 `ImageNormalize`
    的 `mean/std/scale`；自定义 mean/std 需自建 pipeline 并传给
    `PreprocessPipeline(spec, pipeline)`。**只改 spec 不会改变实际变换**：不传 `pipeline`

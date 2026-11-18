@@ -299,3 +299,25 @@ print(result.topk, result.orig_size)
 ```
 
 预处理规格、`Results` 字段、反变换与已知限制见 [推理](inference.md)。
+
+---
+
+## 导出为 ONNX（新 CLI）
+
+训练完成后用 `tools/export.py` 一条命令导出 ONNX，并可顺带做 ONNX Runtime 一致性校验：
+
+```bash
+python tools/export.py --config configs/classification/demo_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt \
+  --output ./exports/cls.onnx --verify --trusted
+```
+
+- 默认静态 batch；需要动态 batch 加 `--dynamic-batch`，opset 用 `--opset`（默认 17）。
+- 完整 Trainer checkpoint 含非张量状态，需要 `--trusted`（语义与 `tools/infer.py` 一致）。
+- 导出同时写出 `<output>.json` sidecar（输入输出、opset、预处理规格、校验误差）；
+  `--verify` 通过时打印「一致性校验: 通过，全局 max_abs_diff=...」，未通过退出码 1。
+- 检测 / 分割把 `--config` 换成 `configs/examples/dvx_detection.yaml` /
+  `configs/examples/dvx_segmentation.yaml` 即可。
+
+参数表、`ExportResult` 字段、ONNX metadata 与 TensorRT 扩展点说明见
+[模型导出（ONNX）](model_export.md)。
