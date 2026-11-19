@@ -7,7 +7,6 @@ GridDetectionLoss 内部使用 GridAssigner 做目标分配，再由
 objectness(BCE) / box(L1) / cls(CE) 三支损失组合而成，返回 dict 供 Task 与日志使用。
 """
 
-import warnings
 from typing import Any, Dict, Optional, Tuple
 
 import torch
@@ -25,44 +24,17 @@ from .matcher import HungarianMatcher
 def _resolve_reg_weights(
     giou_weight: Optional[float],
     l1_weight: Optional[float],
-    use_giou: Optional[bool],
-    owner: str,
 ) -> Tuple[float, float]:
-    """解析框回归的 GIoU / L1 权重，并兼容已废弃的 ``use_giou`` 布尔开关。
+    """解析框回归的 GIoU / L1 权重（默认只算 GIoU）。
 
-    v1.0.0 的实现是 ``total_reg += (giou if use_giou else l1) + l1``：
-    默认（``use_giou=True``）时实际为 **GIoU+L1**，``False`` 时是 **2×L1** ——
-    参数名与实际训练信号不符，且两种模式都无法单独关闭某一项
-    （CodePlan 7.1.2 D6）。
-
-    旧开关按其**字面意图**迁移（而不是复刻 bug）：
-
-    - ``use_giou=True``  -> ``giou_weight=1.0, l1_weight=0.0``（只算 GIoU）
-    - ``use_giou=False`` -> ``giou_weight=0.0, l1_weight=1.0``（只算 L1）
-
-    同时给出 ``use_giou`` 与任一显式权重会直接报错，避免「配了没生效」。
-
+    v1.1 起用显式权重替换 v1.0.0 的 ``use_giou`` 布尔开关；该开关已在 v2.0.1 移除
+    （它会把「GIoU / L1 二选一」和额外 L1 混在一起，见 CodePlan 7.1.2 D6）。
     与同文件 ``DETRLoss`` 的 ``bbox_weight`` / ``giou_weight`` 约定保持一致。
     """
-    if use_giou is None:
-        return (
-            1.0 if giou_weight is None else float(giou_weight),
-            0.0 if l1_weight is None else float(l1_weight),
-        )
-    if giou_weight is not None or l1_weight is not None:
-        raise ValueError(
-            f"{owner}: 'use_giou' 已废弃，不能与 giou_weight/l1_weight 同时指定；"
-            f"请只保留 giou_weight / l1_weight。"
-        )
-    warnings.warn(
-        f"{owner}: 'use_giou' 已废弃 —— 它在 v1.0.0 会重复累加 L1"
-        f"（True 时实为 GIoU+L1，False 时实为 2×L1）。"
-        f"按字面意图迁移为 giou_weight={1.0 if use_giou else 0.0}, "
-        f"l1_weight={0.0 if use_giou else 1.0}。",
-        DeprecationWarning,
-        stacklevel=3,
+    return (
+        1.0 if giou_weight is None else float(giou_weight),
+        0.0 if l1_weight is None else float(l1_weight),
     )
-    return (1.0, 0.0) if use_giou else (0.0, 1.0)
 
 
 @LOSSES.register()
@@ -196,7 +168,6 @@ class FCOSDetectionLoss(BaseLoss):
         center_weight: float = 1.0,
         giou_weight: Optional[float] = None,
         l1_weight: Optional[float] = None,
-        use_giou: Optional[bool] = None,
         weight: float = 1.0,
     ):
         super().__init__(weight)
@@ -212,9 +183,7 @@ class FCOSDetectionLoss(BaseLoss):
         self.cls_weight = float(cls_weight)
         self.reg_weight = float(reg_weight)
         self.center_weight = float(center_weight)
-        self.giou_weight, self.l1_weight = _resolve_reg_weights(
-            giou_weight, l1_weight, use_giou, "FCOSDetectionLoss"
-        )
+        self.giou_weight, self.l1_weight = _resolve_reg_weights(giou_weight, l1_weight)
         self.focal = SigmoidFocalLoss()
         self.giou = GIoULoss()
 
@@ -448,7 +417,6 @@ class YOLOLoss(BaseLoss):
         reg_weight: float = 1.0,
         giou_weight: Optional[float] = None,
         l1_weight: Optional[float] = None,
-        use_giou: Optional[bool] = None,
         weight: float = 1.0,
     ):
         super().__init__(weight)
@@ -457,9 +425,7 @@ class YOLOLoss(BaseLoss):
         self.assigner = TaskAlignedAssigner(num_classes, topk=topk)
         self.cls_weight = float(cls_weight)
         self.reg_weight = float(reg_weight)
-        self.giou_weight, self.l1_weight = _resolve_reg_weights(
-            giou_weight, l1_weight, use_giou, "YOLOLoss"
-        )
+        self.giou_weight, self.l1_weight = _resolve_reg_weights(giou_weight, l1_weight)
         self.focal = SigmoidFocalLoss()
         self.giou = GIoULoss()
 

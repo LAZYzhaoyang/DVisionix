@@ -7,6 +7,25 @@
 
 （暂无 —— 下一版本开发中）
 
+## [2.0.1] — 2026-11-20
+
+**修复与清理**
+
+- `training.early_stopping.restore_best_weights` 现在真正转发给 `EarlyStopping`
+  （此前只存在于 schema，配置写了也静默无效，永远用默认 `True`）；新增回归测试。
+- 训练结束自动导出（`training.export_best_onnx`）改为复用 P5 导出体系
+  （`build_exporter`），并额外落盘 `best.onnx.json` sidecar；返回路径不变。
+- 移除已废弃的 `use_giou` 参数（`FCOSDetectionLoss` / `YOLOLoss`），
+  统一使用 `giou_weight` / `l1_weight`（v1.1 起已告警，仓库内零使用）。
+- 清理未跟踪构建产物（`build/`、`.pytest_cache/`、`__pycache__/`）。
+
+**文档**
+
+- 文档结构重组：历史迁移指南与 v2 实现契约归档到 `docs/history/`，
+  用户文档与 CodePlan 同步更新（见同批次文档提交）。
+
+**测试**：1089 passed / 1 skipped / 0 failed。
+
 ## [2.0.0] — 2026-11-18
 
 > v2 重构发布：P0 架构基线 / P1 DVX 标准数据集层 / P2 训练接线与三方契约 /

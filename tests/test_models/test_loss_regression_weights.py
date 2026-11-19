@@ -8,7 +8,7 @@
     total_reg += (giou_loss if use_giou else l1_loss) + l1_loss
 
 - ``use_giou=True``（默认）实际是 **GIoU + L1**，``False`` 时是 **2×L1**；
-  参数名与实际训练信号不符，且两种模式下都无法单独关闭 L1。
+  该布尔开关已在 v2.0.1 移除，统一改用显式 ``giou_weight`` / ``l1_weight``。
 - 各分量按 (图, 层) 求均值后直接累加，不做正样本归一化 →
   loss 量级随 batch size 与特征层数漂移，不同 batch size 的 ``val_loss`` 不可比。
 
@@ -130,29 +130,6 @@ def test_weights_scale_linearly(loss_cls, preds_fn, extra):
     base = reg_loss(giou_weight=1.0, l1_weight=0.0)
     doubled = reg_loss(giou_weight=2.0, l1_weight=0.0)
     assert doubled == pytest.approx(2.0 * base, rel=1e-5)
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("loss_cls,preds_fn,extra", CASES)
-def test_use_giou_legacy_switch_migrates_by_intent(loss_cls, preds_fn, extra):
-    """旧布尔开关按其字面意图迁移，并发出 DeprecationWarning。"""
-    with pytest.warns(DeprecationWarning, match="use_giou"):
-        fn = _make(loss_cls, extra, use_giou=True)
-    assert (fn.giou_weight, fn.l1_weight) == (1.0, 0.0)
-
-    with pytest.warns(DeprecationWarning, match="use_giou"):
-        fn = _make(loss_cls, extra, use_giou=False)
-    assert (fn.giou_weight, fn.l1_weight) == (0.0, 1.0)
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("loss_cls,preds_fn,extra", CASES)
-def test_use_giou_conflicts_with_explicit_weights(loss_cls, preds_fn, extra):
-    """同时给出旧开关与显式权重必须报错，而不是静默忽略其中一个。"""
-    with pytest.raises(ValueError, match="use_giou"):
-        _make(loss_cls, extra, use_giou=True, giou_weight=2.0)
-    with pytest.raises(ValueError, match="use_giou"):
-        _make(loss_cls, extra, use_giou=False, l1_weight=3.0)
 
 
 @pytest.mark.unit

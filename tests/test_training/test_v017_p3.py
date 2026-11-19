@@ -170,6 +170,8 @@ def test_export_best_onnx(tmp_path):
     out = train_tool.export_best_onnx(cfg, str(tmp_path))
     assert out and os.path.exists(out)
     assert out.endswith("best.onnx")
+    # 与新导出体系一致：同时落盘 sidecar 元数据
+    assert os.path.exists(out + ".json")
 
 
 def test_export_best_onnx_missing_ckpt(tmp_path):
@@ -239,3 +241,34 @@ def test_ema_decay_must_be_in_unit_interval():
 def test_ema_config_key_is_known():
     """training.ema 必须是已知配置键，否则合法配置会被打出「未知配置键」告警。"""
     assert _ema_cfg({"enabled": True}).validate_schema("classification") == []
+
+
+def test_early_stopping_restore_best_weights_is_wired(tmp_path):
+    """``training.early_stopping.restore_best_weights`` 必须真正传给 EarlyStopping。
+
+    v2.0.0 及以前该键只存在于 schema，builder 未转发，配置写了也静默无效。
+    """
+    from dvisionix.training import build_callbacks
+    from dvisionix.training.callbacks import EarlyStopping
+
+    cfg = Config(
+        {
+            "task_type": "classification",
+            "experiment_name": "exp_es",
+            "model": {"name": "simple_cnn", "num_classes": 3, "in_channels": 3},
+            "data": {"image_size": 32},
+            "training": {
+                "num_epochs": 1,
+                "early_stopping": {
+                    "enabled": True,
+                    "patience": 2,
+                    "restore_best_weights": False,
+                },
+            },
+            "checkpoint": {"save_dir": "checkpoints"},
+        }
+    )
+    cbs = build_callbacks(cfg, work_dir=str(tmp_path))
+    stoppers = [cb for cb in cbs if isinstance(cb, EarlyStopping)]
+    assert len(stoppers) == 1
+    assert stoppers[0].restore_best_weights is False

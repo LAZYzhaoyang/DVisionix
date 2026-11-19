@@ -291,7 +291,7 @@ def export_best_onnx(cfg, work_dir: str, logger=None):
     try:
         import torch
 
-        from dvisionix.export import ONNXExporter
+        from dvisionix.export import build_exporter
 
         model = build_model(cfg.model.to_dict())
         state = torch.load(best_pt, map_location="cpu", weights_only=False)
@@ -299,17 +299,19 @@ def export_best_onnx(cfg, work_dir: str, logger=None):
             model.load_state_dict(state["model_state_dict"])
         in_channels = cfg.model.get("in_channels", 3)
         image_size = cfg.data.get("image_size", 32)
-        exporter = ONNXExporter(
+        exporter = build_exporter(
+            "onnx",
             model,
             input_shape=(in_channels, image_size, image_size),
             device="cpu",
             task_type=cfg.get("task_type"),
         )
         out_path = os.path.join(work_dir, "best.onnx")
-        exporter.export(out_path, dynamic_batch=True)
+        result = exporter.export(out_path, dynamic_batch=True)
+        result.save(f"{out_path}.json")
         if logger:
-            logger.info(f"Best model exported to ONNX: {out_path}")
-        return out_path
+            logger.info(f"Best model exported to ONNX: {result.path}")
+        return result.path
     except Exception as exc:  # pragma: no cover - 依赖具体模型可 trace 性
         if logger:
             logger.warning(f"导出 best.onnx 失败（已忽略）：{exc}")

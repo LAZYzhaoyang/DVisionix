@@ -39,6 +39,7 @@ def build_callbacks(cfg, work_dir: Optional[str] = None) -> List[Callback]:
                 mode=es.get("mode", "min"),
                 patience=es.get("patience", 10),
                 min_delta=es.get("min_delta", 0.0),
+                restore_best_weights=es.get("restore_best_weights", True),
             )
         )
 

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔬 DVisionix v2.0.0
+# 🔬 DVisionix v2.0.1
 
 **一个模块化、可扩展、配置驱动的 PyTorch 计算机视觉算法库**
 
