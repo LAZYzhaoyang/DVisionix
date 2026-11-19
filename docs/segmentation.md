@@ -49,8 +49,35 @@ conda run -n dvisionix python tools/train.py --config configs/segmentation/demo_
 - 优化器 / 调度器通过配置 `training.optimizer` / `training.scheduler` 调整。
 
 ## 真实数据
-把配置里的 `data.dataset` 换成 `cityscapes` / `ade20k` 并提供真实 mask 路径即可；
-注意训练时同一 batch 内图像/掩码尺寸需一致（用分割变换统一 resize）。
+- **DVX 标准数据集（推荐）**：配置写 `data.dataset: dvx` + `data.spec`，指向
+  `data_type: segmentation` 的 `dvx_dataset.yaml`；labelme polygon 会按需栅格化成 mask
+  （`seg_mode` / `ignore_index` 可配）。规格、切分与四套真实数据见
+  [DVX 标准数据集](dataset_spec.md)。
+- **公开数据集**：把 `data.dataset` 换成 `cityscapes` / `ade20k` 并提供真实 mask 路径即可。
+- 训练时同一 batch 内图像/掩码尺寸需一致（用分割变换统一 resize）。
+- 数据集 `data_type` 必须落在任务的 `accepted_data_types` 内（`SegmentationTask` 只接受
+  `segmentation`；`MaskFormerTask` 另接受实例 / 全景分割语义），错配会在训练开始前被
+  契约校验拦下，见 [训练契约与自适应训练](training_contracts.md)。
+
+## 推理与导出
+
+- **推理**：`tools/infer.py` 输出分割 mask，经 `PreprocessSpec` 反变换回**原图尺寸**；
+  编程式入口为 `dvisionix.inference.build_predictor(..., task="segmentation")`。
+  字段与已知限制见 [推理链路](inference.md)。
+- **导出**：`tools/export.py --verify` 导出 ONNX 并与 PyTorch 输出做数值一致性校验；
+  体系与参数见 [模型导出](model_export.md)。
+
+```bash
+# 分割推理（输出 mask 与可选可视化）
+python tools/infer.py --config configs/segmentation/demo_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt --input ./samples \
+  --output ./outputs/seg --trusted --save-vis
+
+# 导出 ONNX + 一致性校验
+python tools/export.py --config configs/segmentation/demo_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt \
+  --output ./exports/seg.onnx --verify --trusted
+```
 
 ---
 

@@ -3,7 +3,7 @@
 > 适用范围：v2.0.0（P4 推理链路）。本页面向使用者，说明如何用训练好的
 > checkpoint 做分类 / 检测 / 分割推理，以及预处理、统一结果对象与反变换的约定。
 >
-> 接口定义以实现契约 [P4 推理链路契约](design/v2_p4_contract.md) 为准，本页只描述实际行为。
+> 接口定义以实现契约 [P4 推理链路契约](history/design/v2_p4_contract.md) 为准，本页只描述实际行为。
 > 相关文档：[快速开始](quick_start.md)、[训练契约与自适应训练](training_contracts.md)、
 > [目标检测](detection.md)、[语义分割](segmentation.md)、[模型导出](model_export.md)。
 
@@ -497,5 +497,5 @@ $PY -m pytest tests -q
 - [目标检测](detection.md)：检测器与 `decode()` 契约；
 - [语义分割](segmentation.md)：分割数据格式与训练；
 - [模型导出](model_export.md)：ONNX 导出（不含推理运行时）；
-- [P4 推理链路契约](design/v2_p4_contract.md)：字段与行为的实现契约；
+- [P4 推理链路契约](history/design/v2_p4_contract.md)：字段与行为的实现契约；
 - [CHANGELOG](../CHANGELOG.md)：P4 变更记录。

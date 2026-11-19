@@ -3,7 +3,7 @@
 # 用途: P4-A2 预测器测试（toy 三模型端到端 + checkpoint 加载 + 状态恢复）。
 """P4-A2 预测器测试。
 
-覆盖契约 ``docs/design/v2_p4_contract.md`` §3 与 §6 中 A2 的验收项：
+覆盖契约 ``docs/history/design/v2_p4_contract.md`` §3 与 §6 中 A2 的验收项：
 
 - toy 三模型（``SimpleCNN`` / ``GridDetectionModel`` / ``SimpleSegmentationModel``）
   端到端跑通 ``predict``，不依赖任何真实数据集；

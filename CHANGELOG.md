@@ -21,8 +21,18 @@
 
 **文档**
 
-- 文档结构重组：历史迁移指南与 v2 实现契约归档到 `docs/history/`，
-  用户文档与 CodePlan 同步更新（见同批次文档提交）。
+- 文档结构重组：历史记录归档到 `docs/history/`，并新增
+  [历史归档说明](docs/history/README.md)：
+  - `docs/v1.1_changes.md` → `docs/history/v1.1_changes.md`（v1.1 迁移指南）；
+  - `CodePlan.md` 第七章（v1.1 计划）→ `docs/history/v1.1_plan.md`，原位保留摘要 + 链接；
+  - `docs/design/v2_p*_contract.md`（5 份）→ `docs/history/design/`。
+- [文档索引](docs/README.md) 重写为 v2.0.1 分区结构（快速开始 / 数据与任务 / 模块参考 /
+  工程工具 / 架构与约束 / 历史归档），历史归档区明确标注「历史记录，非当前使用文档」。
+- `docs/config_system.md` / `custom_models.md` / `data.md` / `detection.md` /
+  `segmentation.md` / `architecture.md` 补充 v2 内容（配置要点、模型能力声明、DVX 数据集、
+  推理/导出交叉链接、分层检查范围）；`metrics.md` / `logging.md` 同步链接，
+  `docs/model_export.md` 同步测试基线（`backbones.md` 复核后无需改动）。
+- 全库 md 链接检查 0 失效。
 
 **测试**：1089 passed / 1 skipped / 0 failed。
 
@@ -31,11 +41,11 @@
 > v2 重构发布：P0 架构基线 / P1 DVX 标准数据集层 / P2 训练接线与三方契约 /
 > P3 路由式多任务分类 / P4 推理链路 / P5 可扩展导出体系。
 > 接口契约见
-> [P0/P1 实现契约](docs/design/v2_p0_p1_contract.md)、
-> [P2 实现契约](docs/design/v2_p2_contract.md)、
-> [P3 实现契约](docs/design/v2_p3_contract.md)、
-> [P4 实现契约](docs/design/v2_p4_contract.md) 与
-> [P5 实现契约](docs/design/v2_p5_contract.md)。
+> [P0/P1 实现契约](docs/history/design/v2_p0_p1_contract.md)、
+> [P2 实现契约](docs/history/design/v2_p2_contract.md)、
+> [P3 实现契约](docs/history/design/v2_p3_contract.md)、
+> [P4 实现契约](docs/history/design/v2_p4_contract.md) 与
+> [P5 实现契约](docs/history/design/v2_p5_contract.md)。
 
 **升级提示（主要行为变更，升级前请确认）**
 
@@ -461,7 +471,7 @@
 20 项已核实缺陷 D1-D20 全部修复并附回归测试；官方配置由 14/17 可跑提升到 **17/17**。
 
 > 会改变训练结果、输出格式或 API 行为的变更，见
-> [docs/v1.1_changes.md](docs/v1.1_changes.md)（迁移指南）。
+> [docs/history/v1.1_changes.md](docs/history/v1.1_changes.md)（迁移指南）。
 
 ### 新增
 

@@ -4,7 +4,7 @@
 > `MultiTaskClassifier` + `MultiTaskClassificationTask` 在
 > `data_type: multi_task_classification` 的 DVX 数据集上训练。
 >
-> 接口定义以实现契约 [P3 实现契约](design/v2_p3_contract.md) 为准，本页只描述实际行为。
+> 接口定义以实现契约 [P3 实现契约](history/design/v2_p3_contract.md) 为准，本页只描述实际行为。
 > 相关文档：[DVX 标准数据集](dataset_spec.md)、[训练契约与自适应训练](training_contracts.md)、
 > [快速开始](quick_start.md)、[指标](metrics.md)、[配置系统](config_system.md)。
 

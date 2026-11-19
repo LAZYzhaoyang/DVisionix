@@ -5,8 +5,8 @@
 > 8 个内置任务分别接受什么、如何为自定义任务与模型声明能力，以及
 > `strategy: auto` / `device: auto` / AMP 的当前行为。
 >
-> 接口定义以 [P2 实现契约](design/v2_p2_contract.md) 与
-> [P3 实现契约](design/v2_p3_contract.md) 为准，本页只描述实际行为。
+> 接口定义以 [P2 实现契约](history/design/v2_p2_contract.md) 与
+> [P3 实现契约](history/design/v2_p3_contract.md) 为准，本页只描述实际行为。
 > 相关文档：[DVX 标准数据集](dataset_spec.md)、[快速开始](quick_start.md)、
 > [配置系统](config_system.md)、[自定义模型](custom_models.md)、
 > [路由式多任务分类](multi_task.md)。

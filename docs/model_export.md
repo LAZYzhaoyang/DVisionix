@@ -3,7 +3,7 @@
 > 适用范围：v2.0.0（P5 导出体系）。本页说明如何把训练好的 checkpoint
 > 导出为 ONNX、如何做数值一致性校验，以及导出体系的扩展方式。
 >
-> 接口定义以实现契约 [P5 导出接口契约](design/v2_p5_contract.md) 为准。相关文档：
+> 接口定义以实现契约 [P5 导出接口契约](history/design/v2_p5_contract.md) 为准。相关文档：
 > [快速开始](quick_start.md)、[推理链路](inference.md)、[目标检测](detection.md)、
 > [语义分割](segmentation.md)。
 
@@ -560,7 +560,7 @@ $PY -m pytest tests/test_export -q
 # P5：test_export_base.py / test_export_cli.py
 ```
 
-全量测试基线：**1092 passed / 1 skipped / 0 failed**。
+全量测试基线：**1089 passed / 1 skipped / 0 failed**（v2.0.1）。
 
 真实 checkpoint 验收（1 epoch 冒烟 checkpoint，**仅链路证据，不作为效果结论**）：
 
@@ -596,5 +596,5 @@ $PY -m pytest tests/test_export -q
 - [快速开始](quick_start.md) —— 安装、训练、推理与一条导出命令
 - [推理链路](inference.md) —— `PreprocessSpec` / `PreprocessPipeline` 与 `Results`
 - [目标检测](detection.md) / [语义分割](segmentation.md) —— 检测输出、分割数据格式
-- [P5 导出接口契约](design/v2_p5_contract.md) —— 实现契约（权威）
+- [P5 导出接口契约](history/design/v2_p5_contract.md) —— 实现契约（权威）
 - [变更日志](../CHANGELOG.md) —— 版本历史

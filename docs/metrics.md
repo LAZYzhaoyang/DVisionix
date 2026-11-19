@@ -143,12 +143,16 @@ metrics = MetricCollection(["accuracy", {"type": "error_rate"}])
   `task.on_validation_epoch_end()` 得到该轮指标并以 `val_` 前缀并入 `history.csv`。
   各内置 Task 的默认指标由 `get_preset_metrics(...)` 给出，也可在配置里用
   `metrics:` 列表覆盖。
+- **多任务分类的指标前缀**：`MultiTaskClassificationTask` 为每个任务各建一套独立的
+  `MetricCollection`（类别数取该任务分类头的输出维度），epoch 末以 `<task>_<metric>`
+  为键归并，例如 `val_licence_accuracy`、`val_logo_f1`。指标名本身不带任务信息，
+  因此跨任务的同名指标不会互相覆盖。
 - **检测后端**：`MeanAveragePrecision(use_torchmetrics=True)` 可切换到 `torchmetrics` 后端（需 `pip install torchmetrics[detection]`），内置实现仅用于快速验证。
 ---
 
 ## v1.1 变更要点
 
-> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+> 完整清单见 [v1.1 变更与迁移指南](history/v1.1_changes.md)。
 
 **`PanopticQuality` 不再实体化超大中间张量。**
 v1.0.0 用 `p_flat[:, None, :] & g_flat[None, :, :]` 计算逐类实例交集，

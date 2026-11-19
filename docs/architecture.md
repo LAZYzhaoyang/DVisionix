@@ -25,7 +25,7 @@ v2 把 CodePlan 里的模块调用约束收口成一份**机器可读的分层�
 | 4 | `infrastructure` | `registry`、`errors`、`utils` | 注册表、异常族、通用工具 |
 
 只有**能映射到清单层级**的模块才参与规则判定；`data/`、`training/`、`config/`、
-`metrics/`、`export/` 等不在清单里，检查器会跳过（见 §7）。
+`metrics/`、`export/`、`inference/` 等不在清单里，检查器会跳过（见 §7）。
 
 ---
 
@@ -304,7 +304,15 @@ python tools/check_layering.py && python -m pytest tests/test_architecture -q
 
 - 只扫描 `dvisionix/**/*.py`；`tools/`、`tests/` 不参与分层判定。
 - 只检查**能映射到 `layers.yaml`** 的模块。`data/`、`training/`、`config/`、`metrics/`、
-  `export/`、`models/__init__.py` 等当前不在清单中，因此完全跳过。
+  `export/`、`inference/`、`models/__init__.py` 等当前不在清单中，因此**完全跳过**。
+  这些目录不是「忘了登记」：它们要么是模型层之外的支撑模块（`data/`、`training/`、
+  `config/`），要么是独立能力包（`metrics/`、`export/`），当前由各自的测试与
+  import 约定约束。
+- **`inference/` 是消费端，允许 import `training.tasks`**：推理需要复用训练期的预设变换
+  才能保证预处理一致（见 `dvisionix/inference/preprocess.py` 的 `_TASK_PRESETS`，
+  通过模块名字符串**延迟导入**具体 Task 类，避免循环依赖）。这属于**有意设计**，
+  不是遗漏或漏登记的例外；若将来把 `inference/` 纳入 `layers.yaml`，需要同时为这条
+  依赖关系登记例外，或改为通过注册表注入。
 - 只做 AST 静态解析：`importlib` / `__import__` 等动态导入、条件导入不会被发现。
 - 相对导入会先解析为绝对模块名再判定；无法解析的越界相对导入会被跳过（Python 本身也会报错）。
 - 源文件读取失败或语法错误只打印警告并跳过，不会让检查失败——语法错误应由

@@ -54,9 +54,75 @@ cfg.dump("configs/_generated/effective.yaml")
 ```
 ---
 
+## v2 配置要点
+
+> 完整使用说明见 [训练契约与自适应训练](training_contracts.md) 与
+> [DVX 标准数据集](dataset_spec.md)。
+
+**5 个训练任务类型**（`task_type` / `task.type`；权威来源
+`dvisionix/config/schema.py::TASK_TYPES`，训练入口与 schema 校验共用）：
+
+| 训练任务类型 | 数据来源 | 说明 |
+|---|---|---|
+| `classification` | DVX `classification` / `CustomDataset` / 公开数据集预设 | 单标签分类（含度量学习头） |
+| `detection` | DVX `detection` / 公开数据集预设 | 目标检测 |
+| `segmentation` | DVX `segmentation` / 公开数据集预设 | 语义 / 实例分割 |
+| `multi_task_classification` | DVX `multi_task_classification` | 路由式多任务分类 |
+| `simclr` | `CustomDataset` / 合成数据 | 自监督对比学习（无 `data_type`，数据契约跳过） |
+
+> 注意 `dvisionix/models/base.py::TASK_TYPES` 是**模型任务**类型
+> （`classification` / `detection` / `segmentation`，不含 `simclr`），
+> 与上面的训练任务类型是两个概念。
+
+**DVX 数据集接线**：`data.dataset: dvx` + `data.spec`（指向 `dvx_dataset.yaml`）：
+
+```yaml
+data:
+  dataset: "dvx"
+  spec: "./data/cls/dvx_dataset.yaml"   # 必填；缺失时训练入口直接抛 ConfigError
+  image_size: 224
+```
+
+**多任务分类没有全局 `model.num_classes`**：每个任务一个分类头，类别数写在
+`model.heads` 内，且任务名集合、各任务类别数必须与 spec 的 `tasks` 一致：
+
+```yaml
+task_type: "multi_task_classification"
+model:
+  type: "multi_task_classifier"
+  backbone: {type: "mobilenetv3_backbone", features_only: false}
+  heads:
+    licence: {type: "cls_head", num_classes: 3}
+    logo:    {type: "cls_head", num_classes: 2}
+```
+
+**v2 新增 / 变更的 `training` 配置键**：
+
+```yaml
+training:
+  find_unused_parameters: true    # DDP 下允许部分 head 参数未参与本 batch（多任务建议开启）
+  early_stopping:
+    restore_best_weights: true    # 2.0.1 起真正生效；false = 早停后保留最后一轮权重
+  export_best_onnx: false         # 训练结束导出 work_dir/best.onnx 与 best.onnx.json（2.0.1 起）
+```
+
+- `find_unused_parameters` 默认 `false`，直接转发给 DDP 包装；路由式多任务下
+  一个 batch 未必覆盖全部 head，开启后避免「未使用参数」报错。
+- `restore_best_weights` 此前只在 schema 白名单里、并未传给 `EarlyStopping`，
+  写了也静默按默认 `true` 执行；2.0.1 起真正生效。
+- `export_best_onnx` 2.0.1 起复用 P5 导出体系（`build_exporter("onnx", ...)`），
+  除 `best.onnx` 外还落盘 `best.onnx.json` sidecar；导出失败只告警，不影响训练。
+
+**契约校验时机**：训练入口在构建数据 / 模型 / 任务之后、训练循环开始前校验
+**任务↔模型能力**与**任务↔数据 `data_type`**；`batch` 必需字段在**第一个训练 batch、
+首次前向之前**校验一次。错配会在训练开始前给出「发生了什么 + 如何修复」的领域异常。
+详见 [训练契约与自适应训练](training_contracts.md)。
+
+---
+
 ## v1.1 变更要点
 
-> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+> 完整清单见 [v1.1 变更与迁移指南](history/v1.1_changes.md)。
 
 **新增 / 补登记的 `training` 配置键**（v1.0.0 里写了也不生效，或会打出
 「未知 training 配置键」的误导性告警）：

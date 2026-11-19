@@ -267,6 +267,7 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 | [指标](docs/metrics.md) | 原子指标、组合容器、预设 |
 | [日志系统](docs/logging.md) | TrainingLogger / JSONL / TensorBoard |
 | [模型导出](docs/model_export.md) | 可扩展导出体系（BaseExporter/EXPORTERS/ExportResult）、CLI 与 ONNX 一致性校验 |
+| [历史归档](docs/history/README.md) | v1.1 迁移指南、v1.1 计划与 v2 实现契约（历史记录，非当前使用文档） |
 
 项目规划与开发约束（model 模块调用规则 R1-R7）见 [CodePlan](CodePlan.md)。
 
@@ -278,11 +279,11 @@ configs/                 # 各任务合成数据 demo 配置（分类/检测/分
 conda run -n dvisionix python -m pytest tests/ -q
 ```
 
-测试状态**以 CI 运行结果为准**。当前实测 **1092 passed / 1 skipped / 0 failed**
-（v1.1.1 基线为 528 passed / 1 skipped），`ruff` / `black` 全绿。
+测试状态**以 CI 运行结果为准**。当前实测 **1089 passed / 1 skipped / 0 failed**
+（v2.0.0 为 1092；v1.1.1 基线为 528 passed / 1 skipped），`ruff` / `black` 全绿。
 `test_ddp_cpu.py` 的两条多进程用例需要创建命名管道，在禁止命名管道的受限沙箱中可能失败；
 本机与常规 CI 环境可正常运行。
-完整对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 7.2 节。
+完整对照基准与门禁定义见 [CodePlan](CodePlan.md) 第五章与 [v1.1 计划归档](docs/history/v1.1_plan.md) 的 7.2 节。
 
 除常规测试外，另有几道装配层门禁：
 
@@ -319,19 +320,24 @@ CI 门禁顺序：`ruff` → `black` → `mypy`（信息性）→ 快速测试 �
 
 ## 📝 版本说明
 
-- **v2.0.0（当前）**：v2 重构发布 —— DVX 标准数据集层、训练接线与任务/模型/数据契约、
+- **v2.0.1（当前）**：清理与修复 —— 移除废弃的 `use_giou`（统一用
+  `giou_weight` / `l1_weight`）；`training.early_stopping.restore_best_weights`
+  真正生效（此前写了也静默无效）；`training.export_best_onnx` 复用导出体系并额外落盘
+  `best.onnx.json`；历史文档归档到 `docs/history/`。详见
+  [CHANGELOG.md](CHANGELOG.md) 的 2.0.1 章节。
+- **v2.0.0（上一版）**：v2 重构发布 —— DVX 标准数据集层、训练接线与任务/模型/数据契约、
   路由式多任务分类、推理链路（预处理规格 / Results / Predictor / CLI）、
   可扩展导出体系（BaseExporter / EXPORTERS / ONNX 一致性校验）。
   ⚠️ **含接口与行为变更**（`ONNXExporter.export/verify` 返回类型、契约校验拦截错配、
   `ClsHead` 开始接受 `labels` 等），升级前请读
   [CHANGELOG.md](CHANGELOG.md) 的 2.0.0 章节。
-- **v1.1.1（上一版）**：正确性与稳定性修复（模型层 / GPU 可用性 / 训练可靠性 / DDP / 工具链），
+- **v1.1.1**：正确性与稳定性修复（模型层 / GPU 可用性 / 训练可靠性 / DDP / 工具链），
   ⚠️ **其中包含会改变检测指标口径的修复**（解码索引错位、RetinaNet 损失归一化、
   margin 头开始真正生效等），历史实验指标不可直接比较。
   完整清单见 [CHANGELOG.md](CHANGELOG.md) 的 1.1.1 章节。
 - **v1.1.0**：稳定性与工程优化。修复 20 项已核实缺陷，官方配置由 14/17 可跑
   提升到 17/17；新增装配层门禁与性能基准；打包与 CI 收口。
-  **升级前请先读 [v1.1 变更与迁移指南](docs/v1.1_changes.md)** ——
+  **升级前请先读 [v1.1 变更与迁移指南](docs/history/v1.1_changes.md)** ——
   其中有会改变训练结果与输出格式的变更。
 - **v1.0.0**：功能基线（配置驱动 + 组件化模型库 + 训练工程 + 工具链）确定，API 冻结进入稳定期。
 - 完整版本历史见 [CHANGELOG.md](CHANGELOG.md)；规划与开发约束（R1-R7）见 [CodePlan](CodePlan.md)。

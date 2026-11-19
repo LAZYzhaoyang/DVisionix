@@ -151,11 +151,32 @@ print(metrics)   # {"mAP": ..., "mAP_50": ..., "mAP_75": ...}
 - 教学级 `GridDetectionModel`（`models.toy`，骨干下采样 8 倍 + 网格单元单框预测）保留用于演示与快速验证，
   生产场景请使用上述组件化检测器。
 
+## 推理与导出
+
+- **推理**：`tools/infer.py` 对单图 / 目录输出检测 JSON 与可视化，检测框会按
+  `PreprocessSpec` 反变换回**原图坐标**；编程式入口为 `dvisionix.inference.build_predictor`。
+  字段、阈值与已知限制见 [推理链路](inference.md)。
+- **导出**：`tools/export.py` 把检测模型导出为 ONNX（多尺度输出按 `cls_i` / `reg_i` 命名），
+  `--verify` 逐输出与 PyTorch 对比；体系、参数与 TensorRT 扩展点见
+  [模型导出](model_export.md)。
+
+```bash
+# 检测推理（输出 <stem>.json，--save-vis 另存可视化）
+python tools/infer.py --config configs/detection/fcos_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt --input ./samples \
+  --output ./outputs/det --trusted --save-vis
+
+# 导出 ONNX + 一致性校验
+python tools/export.py --config configs/detection/fcos_synthetic.yaml \
+  --checkpoint /path/to/work_dir/checkpoints/best.pt \
+  --output ./exports/fcos.onnx --verify --trusted
+```
+
 ---
 
 ## v1.1 变更要点
 
-> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+> 完整清单见 [v1.1 变更与迁移指南](history/v1.1_changes.md)。
 
 ### 回归损失改为显式权重（默认只算 GIoU）
 
@@ -171,6 +192,11 @@ v1.0.0 的行为是 `total_reg += (giou if use_giou else l1) + l1`：
 `use_giou: true`（默认）实际是 **GIoU + L1**，`false` 是 **2 × L1**，
 参数名与真实训练信号不符且无法单独关闭某一项。旧开关仍可用（按字面意图迁移
 并发 `DeprecationWarning`），与显式权重同时给出会报错。
+
+> ⚠️ **2.0.1 起 `use_giou` 已彻底移除**：两个损失类只接受 `giou_weight` / `l1_weight`，
+> 配置里再写 `use_giou` 会在构建损失时报 `TypeError`。迁移方式：
+> `use_giou: true` → 保持默认（GIoU only）；`use_giou: false` →
+> `giou_weight: 0.0, l1_weight: 1.0`。
 
 同时修正正样本归一化：回归项不再随 batch size 与特征层数漂移。
 

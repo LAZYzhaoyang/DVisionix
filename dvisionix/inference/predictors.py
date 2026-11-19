@@ -3,7 +3,7 @@
 # 用途: 推理预测器（P4-A2）：加载 checkpoint、前向、后处理与反变换。
 """推理预测器：把训练好的模型包装成「图片 -> :class:`~dvisionix.inference.results.Results`」。
 
-本模块是 P4 推理链路的 A2 部分，契约见 ``docs/design/v2_p4_contract.md`` §3：
+本模块是 P4 推理链路的 A2 部分，契约见 ``docs/history/design/v2_p4_contract.md`` §3：
 
 - :class:`BasePredictor`：设备解析、预处理、``eval`` + ``no_grad`` 前向、状态恢复；
 - :class:`ClassificationPredictor`：softmax + top-k；

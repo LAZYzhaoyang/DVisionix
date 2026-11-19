@@ -124,7 +124,7 @@ training:
 
 ## v1.1 变更要点
 
-> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+> 完整清单见 [v1.1 变更与迁移指南](history/v1.1_changes.md)。
 
 **安装方式**：依赖的唯一来源是 `pyproject.toml`（`setup.py` 已删除），
 按需选择 extras：

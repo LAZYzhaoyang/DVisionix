@@ -285,6 +285,74 @@ logits = model(images)                   # 推理/验证路径：等价于纯余
 > v1.1.1 变更：`LinearClassifier` 此前**丢弃 `**kwargs`**，且 `ClassificationTask`
 > 只传 `images`，导致上述 5 个 margin 头的 margin **从未生效过**（静默等价于 NormFace）。
 
+### 2.6 v2：模型能力声明与训练契约
+
+训练开始前，`training.contract.check_task_model` 会读取模型声明的**任务能力**，
+与任务的 `accepted_model_tasks` 求交集；能力错配会在训练开始前报
+`TaskModelMismatchError`，而不是等前向或损失阶段失败。完整规则见
+[训练契约与自适应训练](training_contracts.md)。
+
+**两种声明方式**（读取逻辑在 `dvisionix/models/base.py::model_task_types`）：
+
+| 声明 | 写法 | 语义 |
+| --- | --- | --- |
+| `task_type` | `task_type = "classification"` 类属性，或 `super().__init__(task_type=...)` | 单一能力；传参时必须是 `classification` / `detection` / `segmentation` 之一 |
+| `supported_tasks` | `supported_tasks = ("classification", "segmentation")` 类属性 | 多能力集合；**非空时优先于 `task_type`** |
+
+```python
+from dvisionix.models import BaseModel
+
+
+class MyDetector(BaseModel):
+    task_type = "detection"             # 类属性声明，构造时无需再传
+    def __init__(self, num_classes=80):
+        super().__init__()              # 不传 task_type，类属性生效
+        self.num_classes = num_classes
+
+
+class MyMultiTaskModel(BaseModel):
+    # 多任务模型可声明训练任务名（不限于 model 的三种基础任务类型）
+    supported_tasks = ("multi_task_classification",)
+```
+
+> ⚠️ **类属性写法注意**：`BaseModel.__init__` 只在**显式传参**时写
+> `self.task_type`；不传参时**不写实例属性**，因此不会用 `None` 覆盖子类的类属性。
+> v2 之前无论是否传参都会赋值，`class MyModel(BaseModel): task_type = "detection"`
+> 会被实例属性盖成空，导致契约校验读不到能力。若自定义模型在 `__init__` 里传了
+> `task_type`，以传入值为准。
+
+**任务侧如何接受**：任务用类属性 `accepted_model_tasks` 声明它能接受的模型能力：
+
+```python
+from dvisionix.training import BaseTask
+
+
+class MyClassificationTask(BaseTask):
+    accepted_model_tasks = ("classification",)
+```
+
+- 两侧都有声明时，交集为空 → `TaskModelMismatchError`（消息含模型能力、任务要求与修复提示）。
+- 任务未声明（默认空元组）→ 按「渐进式契约」**跳过能力校验**；内置 8 个任务均已
+  显式声明，因此「分类模型配检测任务」仍会被拦下。
+- `model_task_types()` 只要求对象是 `nn.Module`，自定义模型不继承 `BaseModel` 也能被读取。
+
+**`num_classes` 可以是 dict（多任务）**：多任务模型的 `num_classes` 是
+`{任务: 类别数}`，契约会与数据集的 `task_num_classes` 逐任务比对，要求任务名集合与
+每个任务的类别数都一致：
+
+```python
+class MyMultiTaskClassifier(BaseModel):
+    supported_tasks = ("multi_task_classification",)
+
+    @property
+    def num_classes(self) -> dict[str, int]:   # 只读属性，不要写成实例属性
+        return {name: head.num_classes for name, head in self.heads.items()}
+```
+
+缺任务、多任务或某任务类别数不一致都会抛 `TaskDataMismatchError`；一边是 dict、
+另一边是标量同样报错（标签空间结构不一致，无法逐项比对）。单任务模型仍用整数
+`num_classes`，与数据集（DVX 的类别表长度）相等即可。
+
 ---
 
 ## 三、注册表一览

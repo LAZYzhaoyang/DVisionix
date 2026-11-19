@@ -54,7 +54,7 @@ work_dir/
 
 ## v1.1 变更要点
 
-> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+> 完整清单见 [v1.1 变更与迁移指南](history/v1.1_changes.md)。
 
 **TensorBoard 标量现在真正会写入。** v1.0.0 会创建 `work_dir/tb` 目录，
 但 Trainer 从不调用 `logger.log_metrics(...)`，因此 TensorBoard 里始终是空的。

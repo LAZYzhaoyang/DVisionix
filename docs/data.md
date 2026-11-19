@@ -314,6 +314,54 @@ pipeline = TransformPipeline([
 ds = DepthEstimationDataset("./data/depth", transforms=pipeline)
 ```
 
+## DVX 标准数据集（v2）
+
+v2 新增标准化数据层：**一个根目录 + 一份 `dvx_dataset.yaml`**。规格描述目录布局、
+类别表与切分方式，`DVXDataset` 按规格直接产出 `Sample`，不必为每份数据手写 Dataset 类。
+规格字段、layout、三种切分、工具链与四套真实数据见
+[DVX 标准数据集](dataset_spec.md)。
+
+**四种 `data_type`**（决定布局、样本字段与可用的训练任务）：
+
+| `data_type` | 样本字段 | 对应训练任务 |
+|---|---|---|
+| `classification` | `image` + `label` | `ClassificationTask` / 线性评估 |
+| `multi_task_classification` | `image` + `label` + `task` | `MultiTaskClassificationTask` |
+| `detection` | `image` + `boxes` + `labels` | `DetectionTask` |
+| `segmentation` | `image` + `mask` | `SegmentationTask` / `MaskFormerTask` |
+
+**接入训练**：配置写 `data.dataset: dvx` + `data.spec`（指向 `dvx_dataset.yaml`）：
+
+```yaml
+data:
+  dataset: "dvx"
+  spec: "./data/cls/dvx_dataset.yaml"
+  image_size: 224
+```
+
+单任务要求 `model.num_classes` 与 spec 类别数一致（由契约校验兜底）；多任务由
+`model.heads` 为每个任务声明类别数，没有全局 `model.num_classes`。
+详见 [训练契约与自适应训练](training_contracts.md)。
+
+**`DVXDataset` 的只读属性**：
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `data_type` | `str` | 四种之一，供任务↔数据契约校验 |
+| `classes` | `list[str] \| None` | 单任务类别表（顺序即 label id）；多任务为 `None` |
+| `task_names` | `list[str] \| None` | 仅多任务：任务名列表（顺序稳定）；其它类型为 `None` |
+| `num_classes` | `int \| None` | 单任务类别数；**多任务恒为 `None`** |
+| `task_num_classes` | `dict[str, int] \| None` | 仅多任务：`{任务: 类别数}`，供契约逐任务比对 |
+| `refs` / `split_result` | — | 样本引用与实际切分结果（排查切分用） |
+
+**与 `CustomDataset` 的取舍**：
+
+- 数据已经在磁盘上，且希望复用类别表 / 非破坏切分 / 只读体检工具 → 用 DVX
+  （`tools/init_dataset.py` 生成草稿，`tools/check_dataset.py` 体检）。
+- 样本在内存中、需要动态生成（如合成数据），或只有几条临时样本 → 用 `CustomDataset`。
+- `CustomDataset` 没有 `data_type` 属性，因此**跳过任务↔数据契约校验**；
+  DVX 数据集会校验 `data_type` 是否在任务的 `accepted_data_types` 内。
+
 ## 验证
 
 - `pytest tests/test_data/` - 数据模块单元测试
@@ -322,7 +370,7 @@ ds = DepthEstimationDataset("./data/depth", transforms=pipeline)
 
 ## v1.1 变更要点
 
-> 完整清单见 [v1.1 变更与迁移指南](v1.1_changes.md)。
+> 完整清单见 [v1.1 变更与迁移指南](history/v1.1_changes.md)。
 
 **裁剪契约**：尺寸不足时默认**直接报错**，不再静默返回错误尺寸。
 
